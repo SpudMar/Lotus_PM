@@ -16,6 +16,7 @@ export const config = {
     '/claims/:path*',
     '/banking/:path*',
     '/reports/:path*',
+    '/documents/:path*',
     '/settings/:path*',
   ],
 }
