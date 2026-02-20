@@ -504,3 +504,69 @@ model DocDocument {
   @@index([participantId])
   @@map("doc_documents")
 }
+
+// ─────────────────────────────────────────────
+// AUTOMATION MODULE — Rules, Triggers, Actions
+// ─────────────────────────────────────────────
+
+model AutoRule {
+  id              String          @id @default(cuid())
+  name            String
+  description     String?
+  isActive        Boolean         @default(true)
+
+  // What kicks this off
+  triggerType     AutoTriggerType
+  triggerEvent    String?         // e.g. "lotus-pm.invoices.approved" (EVENT type)
+  cronExpression  String?         // e.g. "0 9 * * *" (SCHEDULE type)
+
+  // Conditions and actions stored as JSON arrays
+  // See src/lib/modules/automation/types.ts for shapes
+  conditions      Json            // AutoCondition[]
+  actions         Json            // AutoAction[]
+
+  // Stats
+  lastTriggeredAt DateTime?
+  executionCount  Int             @default(0)
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?       // Soft delete
+
+  executions      AutoExecutionLog[]
+
+  @@index([triggerType])
+  @@index([isActive])
+  @@map("auto_rules")
+}
+
+enum AutoTriggerType {
+  EVENT    // Triggered by an EventBridge event
+  SCHEDULE // Triggered on a cron schedule
+}
+
+model AutoExecutionLog {
+  id           String              @id @default(cuid())
+  ruleId       String
+  rule         AutoRule            @relation(fields: [ruleId], references: [id])
+
+  triggeredBy  String              // event name, "schedule", or "manual"
+  context      Json                // The trigger payload
+
+  result       AutoExecutionResult
+  actionsRun   Int                 @default(0)
+  errorMessage String?
+  durationMs   Int?
+
+  executedAt   DateTime            @default(now())
+
+  @@index([ruleId])
+  @@index([executedAt])
+  @@map("auto_execution_logs")
+}
+
+enum AutoExecutionResult {
+  SUCCESS  // All conditions met, all actions completed
+  SKIPPED  // Conditions not met — rule did not fire
+  FAILED   // Error during condition evaluation or action execution
+}

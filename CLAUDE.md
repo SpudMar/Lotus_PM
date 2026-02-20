@@ -11,7 +11,7 @@ This file contains all locked decisions, requirements, and conventions for the L
 **Name:** Lotus PM
 **Type:** NDIS Plan Management System
 **Business:** Family-owned Plan Management business (Australia)
-**Status:** Phase 0 — AI Development Infrastructure Setup
+**Status:** Phase 2 — Claims & Payments
 **Repository:** `lotus-pm` (private GitHub)
 **Branch Convention:** `claude/<session-id>` for agent branches, `feat/<module>` for feature branches
 **Production URL:** `https://planmanager.lotusassist.com.au`
@@ -95,11 +95,11 @@ Every decision below is locked. Do not suggest alternatives without a clear reas
 
 ## MODULE PRIORITY ORDER
 
-### Priority 1 (MVP — Phase 1)
-1. **Core Platform** — auth, users, RBAC, audit logging
-2. **CRM** — participants, providers, communication log
-3. **Plan Management** — plans, budgets, categories, spending tracking
-4. **Invoice Processing** — upload, extraction, validation, approval workflow
+### Priority 1 (MVP — Phase 1) ✅ COMPLETE
+1. ✅ **Core Platform** — auth, users, RBAC, audit logging
+2. ✅ **CRM** — participants, providers, communication log
+3. ✅ **Plan Management** — plans, budgets, categories, spending tracking
+4. ✅ **Invoice Processing** — upload, extraction, validation, approval workflow
 
 ### Priority 2 (Phase 2)
 5. **Claims & Payments** — PRODA integration, bulk claiming, status tracking
@@ -246,20 +246,100 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 
 ## CURRENT PHASE STATUS
 
-**Active Phase:** Phase 0 — AI Development Infrastructure
+**Active Phase:** Phase 2 — Claims & Payments
 
-**Phase 0 Checklist:**
+---
+
+### Phase 0 — AI Development Infrastructure ✅ COMPLETE
+
 - [x] Prerequisites (AWS, GitHub, Node, Docker, AWS CLI)
 - [x] Step 1: GitHub repository setup (branch protection, labels, main branch)
-- [ ] Step 2: CLAUDE.md (this file — in progress)
-- [ ] Step 3: Claude Code configuration + MCP servers
-- [ ] Step 4: Next.js project scaffolding
-- [x] Step 5: Local Docker environment (Postgres 16, Redis 7, MailHog — docker compose up -d)
-- [ ] Step 6: CI/CD pipeline (GitHub Actions)
-- [ ] Step 7: AWS CDK infrastructure (staging)
-- [ ] Step 8: Smoke test — health check endpoint end-to-end
+- [x] Step 2: CLAUDE.md
+- [x] Step 3: Claude Code configuration + MCP servers
+- [x] Step 4: Next.js project scaffolding (App Router, TypeScript strict, shadcn/ui, Tailwind)
+- [x] Step 5: Local Docker environment (Postgres 16, Redis 7, MailHog)
+- [x] Step 6: CI/CD pipeline (GitHub Actions — lint, type-check, test, build all green)
+- [x] Step 7: AWS CDK infrastructure — 6 stacks committed (VPC, RDS, S3/SQS/EventBridge, Redis/ElastiCache, ECS Fargate, CloudWatch/Monitoring)
+- [x] Step 8: Smoke test — `GET /api/health` returns `{"status":"ok","service":"lotus-pm"}`
 
-See `docs/PHASE_0_EXECUTION_PLAN.md` for full step-by-step instructions.
+Branch protection updated: Required check name is `Lint, Type Check & Test` (matches `name:` field in ci.yml, not the job ID). `strict: true` — branch must be up-to-date with main. No review required (solo dev). `enforce_admins: false`.
+
+---
+
+### Phase 1 — MVP ✅ COMPLETE (merged to main @ 2ed4f22)
+
+All routes smoke-tested locally. CI green on every PR.
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| Core Platform | ✅ | NextAuth.js credentials provider, JWT sessions, RBAC middleware (`src/middleware.ts`). Roles: Director, Plan Manager, Assistant. |
+| CRM | ✅ | Participant + Provider CRUD APIs with search. Seeded: 3 participants, 3 providers. |
+| Plan Management | ✅ | Plan + budget line management with spending tracking. Seeded: 2 plans with budget lines. |
+| Invoice Processing | ✅ | Full CRUD with approve/reject workflow, status tabs (All / Received / Pending Review / Approved / Rejected). Seeded: 4 invoices. |
+
+**Phase 1 UI smoke test results:**
+
+| Route | Result |
+|-------|--------|
+| `/login` | Login form renders, accepts credentials |
+| `/dashboard` | Redirects after login, shows "Welcome back, Sarah Mitchell". Stat cards show dashes — not yet wired to DB counts. |
+| `/participants` | 3 rows: Michael Thompson, Jessica Nguyen, David O'Brien |
+| `/providers` | 3 rows: Blue Mountains Allied Health, Metro Transport, Sunrise Support |
+| `/plans` | Budget lines with dollar amounts and spent tracking |
+| `/invoices` | Status tabs + 4 invoices |
+| Auth middleware | Unauthenticated API calls → `{"error":"Unauthorized","code":"UNAUTHORIZED"}` |
+
+**Seed data:** 3 users (Director: sarah@lotus.com, PM: james@lotus.com, Assistant: emily@lotus.com), 3 participants, 3 providers, 2 plans (with budget lines), 4 invoices. Seed script is **not idempotent** — running it multiple times creates duplicates. Add upsert or DELETE at top before next use.
+
+---
+
+### Phase 2 — Claims & Payments (ACTIVE)
+
+Priority order for this phase:
+
+1. **Claims & Payments** — PRODA integration (blocked on B2B API access — application sent 20 Feb, awaiting response), bulk claiming, status tracking
+2. **Banking** — ABA file generation (CBA format), bank reconciliation
+3. **Reporting** — dashboards, financial reports, NDIS compliance reports
+4. **Notifications** — email (SES), in-app, SMS (SNS)
+
+**Phase 2 blockers:**
+
+| Blocker | Owner | Status |
+|---------|-------|--------|
+| PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response. Blocks Claims module. |
+| CBA CommBiz API | TBD | Not started. Blocks Banking module. |
+| Xero API credentials | TBD | Existing dev account — retrieve Client ID/Secret from desktop. Blocks accounting sync. |
+
+---
+
+## KEY FILES — QUICK REFERENCE
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Project memory — read first every session |
+| `prisma/schema.prisma` | Full DB schema, all module tables |
+| `src/lib/auth/config.ts` | NextAuth config with RBAC |
+| `src/middleware.ts` | Route protection |
+| `src/lib/db/client.ts` | Prisma client singleton |
+| `src/lib/shared/currency.ts` | Financial amount utilities (cents, never floats) |
+| `src/lib/events/` | EventBridge event definitions |
+| `infrastructure/lib/config.ts` | Environment configs (staging/production) |
+| `scripts/seed.ts` | Dev seed data (not idempotent — see Phase 1 notes) |
+| `docker-compose.yml` | Local Postgres 16, Redis 7, MailHog |
+| `.github/workflows/ci.yml` | CI pipeline (lint, type-check, test, build) |
+
+---
+
+## KNOWN ISSUES & TECHNICAL DEBT
+
+These are non-blocking observations recorded at end of Phase 1. Address opportunistically.
+
+| ID | Issue | Priority | Notes |
+|----|-------|----------|-------|
+| TD-001 | Dashboard stat cards show dashes | Low | `/dashboard` uses placeholder data — not wired to actual DB counts |
+| TD-002 | Seed script not idempotent | Medium | Running `npm run db:seed` multiple times creates duplicate data. Add upsert or `DELETE` at top before next use. |
+| TD-003 | Plans page shows budget lines as rows | Low | Consider grouping by plan for plan-level summary view |
+| TD-004 | 37 npm audit vulnerabilities | Medium | 3 low, 1 moderate, 33 high — mostly transitive dependencies. Run `npm audit` to review before staging deployment. |
 
 ---
 
@@ -316,5 +396,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 21 February 2026*
+*Last updated: 20 February 2026 — Phase 0 + Phase 1 complete handover*
 *All decisions in this file were made deliberately. Update with care.*
