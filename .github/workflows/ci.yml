@@ -7,7 +7,7 @@ on:
     branches: [develop]
 
 jobs:
-  test:
+  ci:
     name: Lint, Type Check & Test
     runs-on: ubuntu-latest
 
