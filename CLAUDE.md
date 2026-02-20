@@ -215,7 +215,7 @@ See `.env.example` for the full list. Required for development:
 - `DATABASE_URL` — local PostgreSQL
 - `NEXTAUTH_URL` — `http://localhost:3000`
 - `NEXTAUTH_SECRET` — generate with `openssl rand -base64 32`
-- AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`)
+- AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=ap-southeast-2`)
 
 ---
 
@@ -225,7 +225,7 @@ See `.env.example` for the full list. Required for development:
 |-----------|-------|--------|--------|
 | AWS Account | Done | ✅ Account created 20 Feb 2026 | Nothing — unblocked |
 | Sentry Account | Done | ✅ Account created 20 Feb 2026 (US region — see DEC-001) | Nothing — unblocked |
-| GitHub setup | TBD | Pending — complete on desktop (branch protection, labels) | Phase 0 CI/CD |
+| GitHub setup | Done | ✅ Complete 21 Feb 2026 — main branch, protection rules, 6 labels | Phase 0 CI/CD |
 | PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | Phase 2 claims module only |
 | CBA CommBiz API | TBD | Not started | Phase 2 banking module |
 | Xero API credentials | TBD | Existing developer account — retrieve Client ID/Secret from desktop | Phase 2 banking/accounting module |
@@ -249,12 +249,12 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 **Active Phase:** Phase 0 — AI Development Infrastructure
 
 **Phase 0 Checklist:**
-- [ ] Prerequisites (AWS, GitHub, Node, Docker, AWS CLI)
-- [ ] Step 1: GitHub repository setup
+- [x] Prerequisites (AWS, GitHub, Node, Docker, AWS CLI)
+- [x] Step 1: GitHub repository setup (branch protection, labels, main branch)
 - [ ] Step 2: CLAUDE.md (this file — in progress)
 - [ ] Step 3: Claude Code configuration + MCP servers
 - [ ] Step 4: Next.js project scaffolding
-- [ ] Step 5: Local Docker environment
+- [x] Step 5: Local Docker environment (Postgres 16, Redis 7, MailHog — docker compose up -d)
 - [ ] Step 6: CI/CD pipeline (GitHub Actions)
 - [ ] Step 7: AWS CDK infrastructure (staging)
 - [ ] Step 8: Smoke test — health check endpoint end-to-end
@@ -281,6 +281,13 @@ See `docs/PHASE_0_EXECUTION_PLAN.md` for full step-by-step instructions.
 ## USEFUL COMMANDS
 
 ```bash
+# Node.js (keg-only — must use full path or source ~/.zshrc first)
+# Binary: /opt/homebrew/opt/node@20/bin/node
+# PATH fix: export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
+
+# If `npm ls typescript` shows (empty), wipe and reinstall:
+# rm -rf node_modules package-lock.json && npm install
+
 # Start local development
 docker-compose up -d && npm run dev
 
