@@ -281,15 +281,15 @@ See `docs/PHASE_0_EXECUTION_PLAN.md` for full step-by-step instructions.
 ## USEFUL COMMANDS
 
 ```bash
-# Node.js (keg-only — must use full path or source ~/.zshrc first)
-# Binary: /opt/homebrew/opt/node@20/bin/node
-# PATH fix: export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-
-# If `npm ls typescript` shows (empty), wipe and reinstall:
-# rm -rf node_modules package-lock.json && npm install
+# CRITICAL: nvm Node 24 is the default on this machine but sets omit=dev globally,
+# which silently skips devDependencies (TypeScript, jest, eslint, etc.).
+# ALWAYS prefix npm commands with the Node 20 PATH:
+export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
+# Or use: npm install --include=dev
+# A project .npmrc with include=dev is also in place as a safety net.
 
 # Start local development
-docker-compose up -d && npm run dev
+docker compose up -d && npm run dev
 
 # Database operations
 npm run db:migrate      # Run new migrations
@@ -316,5 +316,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 20 February 2026*
+*Last updated: 21 February 2026*
 *All decisions in this file were made deliberately. Update with care.*
