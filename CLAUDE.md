@@ -72,7 +72,7 @@ Every decision below is locked. Do not suggest alternatives without a clear reas
 | Cache | **Redis (AWS ElastiCache)** | Sessions, rate limiting, frequently accessed data. |
 | Accounting | **Xero API** | Two-way sync. Invoices, payments, reconciliation. |
 | CDN | **AWS CloudFront** | Fast page loads. SSL termination. |
-| Monitoring | **AWS CloudWatch + Sentry** | CloudWatch for AWS metrics. Sentry for app errors. |
+| Monitoring | **AWS CloudWatch + Sentry** | CloudWatch for AWS metrics. Sentry for app errors. Sentry US region OK for dev/staging (no real client data). See OPEN DECISION POINTS for production/sandpit action. |
 | IaC | **AWS CDK (TypeScript)** | All infrastructure defined as code. Never manual console changes. |
 | CI/CD | **GitHub Actions** | Run on every PR. Block merge if any check fails. |
 | UI Components | **shadcn/ui + Tailwind CSS** | Accessible, customisable components. |
@@ -229,6 +229,16 @@ See `.env.example` for the full list. Required for development:
 
 ---
 
+## OPEN DECISION POINTS
+
+Decisions deferred until a specific trigger event. Do not resolve these unilaterally — review with the team at the trigger point.
+
+| ID | Decision | Trigger | Options | Notes |
+|----|----------|---------|---------|-------|
+| DEC-001 | Sentry data residency for production | Before first real participant data enters staging OR before compliance sandpit testing | (A) Keep Sentry US + implement strict PII scrubbing via `beforeSend` hook — grey area under Privacy Act; (B) Self-host Sentry on ECS Fargate in ap-southeast-2 — fully compliant, higher ops overhead; (C) Drop Sentry, use CloudWatch only — simplest, fully compliant | Dev/coding uses Sentry US freely (no client data). Decision only needed when real data is in play. REQ-011. |
+
+---
+
 ## CURRENT PHASE STATUS
 
 **Active Phase:** Phase 0 — AI Development Infrastructure
@@ -294,5 +304,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: February 2026*
+*Last updated: 20 February 2026*
 *All decisions in this file were made deliberately. Update with care.*
