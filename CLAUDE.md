@@ -221,9 +221,12 @@ See `.env.example` for the full list. Required for development:
 
 | Dependency | Owner | Status | Blocks |
 |-----------|-------|--------|--------|
+| AWS Account | Done | ✅ Account created 20 Feb 2026 | Nothing — unblocked |
+| Sentry Account | Done | ✅ Account created 20 Feb 2026 (US region — see DEC-001) | Nothing — unblocked |
+| GitHub setup | TBD | Pending — complete on desktop (branch protection, labels) | Phase 0 CI/CD |
 | PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | Phase 2 claims module only |
 | CBA CommBiz API | TBD | Not started | Phase 2 banking module |
-| Xero API credentials | TBD | Not started | Phase 2 banking/accounting module |
+| Xero API credentials | TBD | Existing developer account — retrieve Client ID/Secret from desktop | Phase 2 banking/accounting module |
 | Domain name | TBD | Not decided | Staging deployment |
 | Entiprius data export | TBD | Not started | Phase 3 migration |
 
