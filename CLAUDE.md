@@ -14,6 +14,8 @@ This file contains all locked decisions, requirements, and conventions for the L
 **Status:** Phase 0 — AI Development Infrastructure Setup
 **Repository:** `lotus-pm` (private GitHub)
 **Branch Convention:** `claude/<session-id>` for agent branches, `feat/<module>` for feature branches
+**Production URL:** `https://planmanager.lotusassist.com.au`
+**Staging URL:** `https://staging.planmanager.lotusassist.com.au`
 
 ---
 
@@ -227,7 +229,7 @@ See `.env.example` for the full list. Required for development:
 | PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | Phase 2 claims module only |
 | CBA CommBiz API | TBD | Not started | Phase 2 banking module |
 | Xero API credentials | TBD | Existing developer account — retrieve Client ID/Secret from desktop | Phase 2 banking/accounting module |
-| Domain name | TBD | Not decided | Staging deployment |
+| Domain name | Done | ✅ `planmanager.lotusassist.com.au` — subdomain on existing domain | Staging deployment |
 | Entiprius data export | TBD | Not started | Phase 3 migration |
 
 ---
