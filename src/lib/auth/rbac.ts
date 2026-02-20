@@ -57,6 +57,10 @@ const PERMISSIONS = {
   // Comms logging (all internal staff)
   'comms:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'comms:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
+
+  // Automation rules (Director manages, Plan Manager views)
+  'automation:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  'automation:write': [ROLES.DIRECTOR],
 } as const
 
 export type Permission = keyof typeof PERMISSIONS

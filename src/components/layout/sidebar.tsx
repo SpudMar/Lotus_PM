@@ -13,6 +13,7 @@ import {
   BarChart3,
   Settings,
   MessageSquare,
+  Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { title: 'Banking', href: '/banking', icon: Landmark, permission: 'banking:read' },
   { title: 'Reports', href: '/reports', icon: BarChart3, permission: 'reports:read' },
   { title: 'Comms', href: '/comms', icon: MessageSquare, permission: 'comms:read' },
+  { title: 'Automation', href: '/automation', icon: Zap, permission: 'automation:read' },
   { title: 'Settings', href: '/settings', icon: Settings, permission: 'settings:read' },
 ]
 
