@@ -1,7 +1,8 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  // Standalone output for Docker/ECS Fargate deployment
+  output: 'standalone',
+}
 
-export default nextConfig;
+export default nextConfig
