@@ -1,0 +1,506 @@
+// Lotus PM - Prisma Schema
+// All table names are module-prefixed per coding conventions.
+// All financial amounts stored as Int (cents) — never Float.
+// Soft deletes only — never hard delete financial or participant records.
+// REQ-016: Encryption at rest handled by AWS RDS + application layer.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// CORE MODULE — Authentication, Users, Audit
+// ─────────────────────────────────────────────
+
+model CoreUser {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  role          CoreRole  @default(ASSISTANT)
+  isActive      Boolean   @default(true)
+  mfaEnabled    Boolean   @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime? // Soft delete
+
+  // Auth relations (NextAuth)
+  accounts      CoreAccount[]
+  sessions      CoreSession[]
+
+  // Audit trail — every action this user takes
+  auditLogs     CoreAuditLog[]
+
+  // Business relations
+  assignedParticipants CrmParticipant[] @relation("AssignedPlanManager")
+  approvedInvoices     InvInvoice[]     @relation("ApprovedBy")
+  rejectedInvoices     InvInvoice[]     @relation("RejectedBy")
+  commLogs             CrmCommLog[]
+
+  @@map("core_users")
+}
+
+enum CoreRole {
+  DIRECTOR
+  PLAN_MANAGER
+  ASSISTANT
+  PARTICIPANT
+}
+
+model CoreAccount {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user CoreUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("core_accounts")
+}
+
+model CoreSession {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user CoreUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("core_sessions")
+}
+
+model CoreVerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("core_verification_tokens")
+}
+
+model CoreAuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String   // e.g. "invoice.approved", "participant.created"
+  resource   String   // e.g. "invoice", "participant"
+  resourceId String
+  before     Json?    // State before change (no PII in logs — REQ-017)
+  after      Json?    // State after change
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user CoreUser @relation(fields: [userId], references: [id])
+
+  @@index([resource, resourceId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("core_audit_logs")
+}
+
+// ─────────────────────────────────────────────
+// CRM MODULE — Participants, Providers, Comms
+// ─────────────────────────────────────────────
+
+model CrmParticipant {
+  id                String    @id @default(cuid())
+  ndisNumber        String    @unique
+  firstName         String
+  lastName          String
+  dateOfBirth       DateTime
+  email             String?
+  phone             String?
+  address           String?
+  suburb            String?
+  state             String?
+  postcode          String?
+
+  // Plan manager assignment
+  assignedToId      String?
+  assignedTo        CoreUser? @relation("AssignedPlanManager", fields: [assignedToId], references: [id])
+
+  // Emergency contact
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyContactRel   String?
+
+  // Metadata
+  isActive          Boolean   @default(true)
+  onboardedAt       DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime? // Soft delete — REQ-010
+
+  // Relations
+  plans             PlanPlan[]
+  invoices          InvInvoice[]
+  commLogs          CrmCommLog[]
+  documents         DocDocument[]
+
+  @@index([ndisNumber])
+  @@index([assignedToId])
+  @@map("crm_participants")
+}
+
+model CrmProvider {
+  id              String    @id @default(cuid())
+  name            String
+  abn             String    @unique
+  email           String?
+  phone           String?
+  address         String?
+
+  // NDIS provider registration
+  ndisRegistered  Boolean   @default(true)
+  registrationNo  String?
+
+  // Bank details for ABA payment files
+  bankBsb         String?
+  bankAccount     String?
+  bankAccountName String?
+
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  // Relations
+  invoices        InvInvoice[]
+  commLogs        CrmCommLog[]
+
+  @@index([abn])
+  @@map("crm_providers")
+}
+
+model CrmCommLog {
+  id            String           @id @default(cuid())
+  type          CommType
+  direction     CommDirection    @default(OUTBOUND)
+  subject       String?
+  body          String           @db.Text
+  participantId String?
+  providerId    String?
+  userId        String           // Staff member who logged this
+
+  participant   CrmParticipant?  @relation(fields: [participantId], references: [id])
+  provider      CrmProvider?     @relation(fields: [providerId], references: [id])
+  user          CoreUser         @relation(fields: [userId], references: [id])
+
+  occurredAt    DateTime         @default(now())
+  createdAt     DateTime         @default(now())
+
+  @@index([participantId])
+  @@index([providerId])
+  @@map("crm_comm_logs")
+}
+
+enum CommType {
+  EMAIL
+  PHONE
+  SMS
+  IN_PERSON
+  PORTAL_MESSAGE
+  NOTE
+}
+
+enum CommDirection {
+  INBOUND
+  OUTBOUND
+  INTERNAL
+}
+
+// ─────────────────────────────────────────────
+// PLAN MODULE — Plans, Budgets, Spending
+// ─────────────────────────────────────────────
+
+model PlanPlan {
+  id              String     @id @default(cuid())
+  participantId   String
+  participant     CrmParticipant @relation(fields: [participantId], references: [id])
+
+  // Plan dates
+  startDate       DateTime
+  endDate         DateTime
+  reviewDate      DateTime?
+
+  // PRODA reference
+  prodaPlanId     String?    @unique
+
+  status          PlanStatus @default(ACTIVE)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  budgetLines     PlanBudgetLine[]
+  invoices        InvInvoice[]
+
+  @@index([participantId])
+  @@index([status])
+  @@map("plan_plans")
+}
+
+enum PlanStatus {
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+  UNDER_REVIEW
+  INACTIVE
+}
+
+model PlanBudgetLine {
+  id              String   @id @default(cuid())
+  planId          String
+  plan            PlanPlan @relation(fields: [planId], references: [id])
+
+  // NDIS support category (01-15)
+  categoryCode    String
+  categoryName    String
+
+  // All amounts in cents (Int) — REQ: never floats for money
+  allocatedCents  Int
+  spentCents      Int      @default(0)
+  reservedCents   Int      @default(0) // Claimed but not yet paid
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  invoiceLines    InvInvoiceLine[]
+
+  @@unique([planId, categoryCode])
+  @@index([planId])
+  @@map("plan_budget_lines")
+}
+
+// ─────────────────────────────────────────────
+// INVOICE MODULE — Processing Pipeline
+// ─────────────────────────────────────────────
+
+model InvInvoice {
+  id              String        @id @default(cuid())
+  participantId   String
+  providerId      String
+  planId          String?
+
+  participant     CrmParticipant @relation(fields: [participantId], references: [id])
+  provider        CrmProvider   @relation(fields: [providerId], references: [id])
+  plan            PlanPlan?     @relation(fields: [planId], references: [id])
+
+  // Invoice details
+  invoiceNumber   String
+  invoiceDate     DateTime
+  receivedAt      DateTime      @default(now())
+
+  // Amounts in cents
+  subtotalCents   Int
+  gstCents        Int           @default(0)
+  totalCents      Int
+
+  // AI extraction
+  aiConfidence    Float?        // 0.0–1.0
+  aiExtractedAt   DateTime?
+  aiRawData       Json?         // Full Textract response
+
+  // S3 storage — REQ-011: stored in ap-southeast-2
+  s3Key           String?       // Key in S3 bucket
+  s3Bucket        String?
+
+  // Processing state
+  status          InvStatus     @default(RECEIVED)
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  approvedBy      CoreUser?     @relation("ApprovedBy", fields: [approvedById], references: [id])
+  rejectedBy      CoreUser?     @relation("RejectedBy", fields: [rejectedById], references: [id])
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?     // Soft delete — REQ-010
+
+  lines           InvInvoiceLine[]
+  claims          ClmClaim[]
+
+  @@index([participantId])
+  @@index([providerId])
+  @@index([status])
+  @@index([receivedAt])
+  @@map("inv_invoices")
+}
+
+enum InvStatus {
+  RECEIVED
+  PROCESSING
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  CLAIMED
+  PAID
+}
+
+model InvInvoiceLine {
+  id              String          @id @default(cuid())
+  invoiceId       String
+  invoice         InvInvoice      @relation(fields: [invoiceId], references: [id])
+
+  budgetLineId    String?
+  budgetLine      PlanBudgetLine? @relation(fields: [budgetLineId], references: [id])
+
+  // NDIS support item details
+  supportItemCode String          // e.g. "15_042_0128_1_3"
+  supportItemName String
+  categoryCode    String
+  serviceDate     DateTime
+  quantity        Float
+  unitPriceCents  Int
+  totalCents      Int
+  gstCents        Int             @default(0)
+
+  // Validation
+  isPriceGuideCompliant Boolean   @default(true)
+  priceGuideMaxCents    Int?      // Max allowed per price guide
+
+  @@index([invoiceId])
+  @@map("inv_invoice_lines")
+}
+
+// ─────────────────────────────────────────────
+// CLAIMS MODULE — PRODA Integration
+// ─────────────────────────────────────────────
+
+model ClmClaim {
+  id              String      @id @default(cuid())
+  invoiceId       String
+  invoice         InvInvoice  @relation(fields: [invoiceId], references: [id])
+
+  // PRODA reference
+  prodaClaimId    String?     @unique
+  prodaReference  String?
+
+  // Amounts in cents
+  claimedCents    Int
+  approvedCents   Int         @default(0)
+
+  status          ClmStatus   @default(PENDING)
+  submittedAt     DateTime?
+  outcomeAt       DateTime?
+  outcomeNotes    String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  payments        BnkPayment[]
+
+  @@index([status])
+  @@index([invoiceId])
+  @@map("clm_claims")
+}
+
+enum ClmStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PARTIAL
+  PAID
+}
+
+// ─────────────────────────────────────────────
+// BANKING MODULE — ABA Files, Reconciliation
+// ─────────────────────────────────────────────
+
+model BnkPayment {
+  id            String     @id @default(cuid())
+  claimId       String
+  claim         ClmClaim   @relation(fields: [claimId], references: [id])
+
+  // CBA ABA file details
+  abaFileId     String?
+  abaFile       BnkAbaFile? @relation(fields: [abaFileId], references: [id])
+
+  amountCents   Int
+  bsb           String
+  accountNumber String
+  accountName   String
+  reference     String?
+
+  status        BnkPaymentStatus @default(PENDING)
+  processedAt   DateTime?
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([status])
+  @@map("bnk_payments")
+}
+
+enum BnkPaymentStatus {
+  PENDING
+  IN_ABA_FILE
+  SUBMITTED_TO_BANK
+  CLEARED
+  FAILED
+  REVERSED
+}
+
+model BnkAbaFile {
+  id            String     @id @default(cuid())
+  filename      String
+  s3Key         String
+
+  // Batch totals
+  totalCents    Int
+  paymentCount  Int
+
+  // CBA CommBiz reference
+  bankReference String?
+  submittedAt   DateTime?
+  clearedAt     DateTime?
+
+  createdAt     DateTime   @default(now())
+
+  payments      BnkPayment[]
+
+  @@map("bnk_aba_files")
+}
+
+// ─────────────────────────────────────────────
+// DOCUMENTS MODULE — File Storage
+// ─────────────────────────────────────────────
+
+model DocDocument {
+  id            String      @id @default(cuid())
+  participantId String?
+  participant   CrmParticipant? @relation(fields: [participantId], references: [id])
+
+  name          String
+  description   String?
+  mimeType      String
+  sizeBytes     Int
+  s3Key         String
+  s3Bucket      String
+
+  // Versioning
+  version       Int         @default(1)
+  previousId    String?     // Points to prior version
+
+  uploadedById  String
+  createdAt     DateTime    @default(now())
+
+  @@index([participantId])
+  @@map("doc_documents")
+}
