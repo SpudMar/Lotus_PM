@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lotus PM — Business Case | February 2026</title>
+  <style>
+    /* ─── PRINT & PDF SETTINGS ─── */
+    @page {
+      margin: 20mm 18mm 20mm 18mm;
+      size: A4;
+    }
+    @media print {
+      .no-print { display: none !important; }
+      .page-break { page-break-before: always; }
+      section { page-break-inside: avoid; }
+      h2 { page-break-after: avoid; }
+      table { page-break-inside: avoid; }
+    }
+
+    /* ─── BASE STYLES ─── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.6;
+      color: #1a1a2e;
+      background: #fff;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* ─── HEADER / COVER ─── */
+    .cover {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
+      color: white;
+      padding: 48px 40px 40px;
+      border-radius: 8px;
+      margin-bottom: 32px;
+    }
+    .cover .logo {
+      font-size: 28pt;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: #e94560;
+      margin-bottom: 4px;
+    }
+    .cover .tagline {
+      font-size: 11pt;
+      color: #a8b2d8;
+      margin-bottom: 32px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .cover h1 {
+      font-size: 20pt;
+      font-weight: 300;
+      color: white;
+      margin-bottom: 8px;
+    }
+    .cover .meta {
+      font-size: 9.5pt;
+      color: #a8b2d8;
+      margin-top: 24px;
+    }
+    .cover .meta span { margin-right: 24px; }
+
+    /* ─── EXECUTIVE SUMMARY BOX ─── */
+    .exec-summary {
+      background: #f0f4ff;
+      border-left: 4px solid #e94560;
+      padding: 20px 24px;
+      margin-bottom: 32px;
+      border-radius: 0 6px 6px 0;
+    }
+    .exec-summary p {
+      font-size: 11.5pt;
+      line-height: 1.7;
+      color: #1a1a2e;
+    }
+    .exec-summary strong { color: #e94560; }
+
+    /* ─── SECTION HEADINGS ─── */
+    section { margin-bottom: 32px; }
+
+    h2 {
+      font-size: 14pt;
+      font-weight: 700;
+      color: #0f3460;
+      border-bottom: 2px solid #e94560;
+      padding-bottom: 6px;
+      margin-bottom: 16px;
+      margin-top: 0;
+    }
+
+    h3 {
+      font-size: 11pt;
+      font-weight: 600;
+      color: #16213e;
+      margin: 16px 0 8px;
+    }
+
+    p { margin-bottom: 10px; }
+
+    /* ─── TABLES ─── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 20px;
+      font-size: 9.5pt;
+    }
+    thead tr { background: #0f3460; color: white; }
+    thead th {
+      padding: 9px 12px;
+      text-align: left;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    tbody tr:nth-child(even) { background: #f8f9fc; }
+    tbody tr:nth-child(odd) { background: #fff; }
+    tbody td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #e8ecf4;
+      vertical-align: top;
+    }
+    tbody tr:hover { background: #eef2ff; }
+
+    /* ─── METRIC CARDS ─── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 16px 0 24px;
+    }
+    .metric-card {
+      background: #0f3460;
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .metric-card .value {
+      font-size: 22pt;
+      font-weight: 700;
+      color: #e94560;
+      line-height: 1.1;
+    }
+    .metric-card .label {
+      font-size: 8.5pt;
+      color: #a8b2d8;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ─── ROI BOX ─── */
+    .roi-box {
+      background: #0f3460;
+      color: white;
+      padding: 24px 28px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .roi-box .roi-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      font-size: 10pt;
+    }
+    .roi-box .roi-row:last-child { border-bottom: none; }
+    .roi-box .roi-row.total {
+      margin-top: 8px;
+      padding-top: 12px;
+      border-top: 2px solid #e94560;
+      border-bottom: none;
+      font-weight: 700;
+      font-size: 12pt;
+      color: #e94560;
+    }
+    .roi-box .roi-label { color: #a8b2d8; }
+    .roi-box .roi-value { font-weight: 600; }
+
+    /* ─── WORKFLOW BOXES ─── */
+    .workflow {
+      background: #f8f9fc;
+      border: 1px solid #e0e7ff;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 12px 0;
+      font-size: 9.5pt;
+    }
+    .workflow.current { border-left: 4px solid #dc2626; }
+    .workflow.future { border-left: 4px solid #16a34a; }
+    .workflow .wf-label {
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .workflow.current .wf-label { color: #dc2626; }
+    .workflow.future .wf-label { color: #16a34a; }
+    .workflow .wf-steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+    }
+    .workflow .wf-step {
+      background: white;
+      border: 1px solid #c7d2fe;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 8.5pt;
+    }
+    .workflow.current .wf-step { border-color: #fca5a5; color: #7f1d1d; }
+    .workflow.future .wf-step { border-color: #86efac; color: #14532d; }
+    .workflow .wf-arrow { color: #94a3b8; font-size: 10pt; font-weight: 700; }
+    .workflow .wf-time {
+      margin-top: 10px;
+      font-weight: 700;
+      font-size: 9pt;
+    }
+    .workflow.current .wf-time { color: #dc2626; }
+    .workflow.future .wf-time { color: #16a34a; }
+
+    /* ─── UI MOCKUP ─── */
+    .ui-mockup {
+      background: #1e293b;
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 12px 0 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 8pt;
+    }
+    .ui-mockup .ui-bar {
+      background: #0f172a;
+      padding: 8px 16px;
+      color: #64748b;
+      font-size: 7.5pt;
+      display: flex;
+      gap: 16px;
+    }
+    .ui-mockup .ui-bar .ui-title { color: #e94560; font-weight: 700; font-size: 9pt; }
+    .ui-mockup .ui-content {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+    }
+    .ui-mockup .ui-sidebar {
+      background: #0f172a;
+      padding: 16px;
+      color: #64748b;
+      font-size: 8pt;
+    }
+    .ui-mockup .ui-sidebar .nav-item {
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-bottom: 2px;
+      cursor: pointer;
+    }
+    .ui-mockup .ui-sidebar .nav-item.active {
+      background: #1e3a5f;
+      color: #93c5fd;
+    }
+    .ui-mockup .ui-main {
+      padding: 16px;
+      color: #cbd5e1;
+    }
+    .ui-mockup .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .ui-mockup .stat-card {
+      background: #0f172a;
+      border-radius: 6px;
+      padding: 10px;
+      text-align: center;
+    }
+    .ui-mockup .stat-card .s-num { font-size: 18pt; font-weight: 700; color: #e94560; }
+    .ui-mockup .stat-card .s-lbl { font-size: 7pt; color: #64748b; text-transform: uppercase; }
+    .progress-bar {
+      background: #1e293b;
+      border-radius: 3px;
+      height: 8px;
+      margin: 2px 0;
+      overflow: hidden;
+    }
+    .progress-fill { height: 100%; border-radius: 3px; }
+    .progress-fill.green { background: #16a34a; }
+    .progress-fill.yellow { background: #ca8a04; }
+    .progress-fill.red { background: #dc2626; }
+
+    /* ─── MOBILE MOCKUPS ─── */
+    .mobile-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 12px 0;
+    }
+    .mobile-frame {
+      background: #0f172a;
+      border-radius: 16px;
+      border: 2px solid #1e293b;
+      overflow: hidden;
+      font-size: 8pt;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .mobile-header {
+      background: #1a1a2e;
+      color: #a8b2d8;
+      padding: 10px 14px 8px;
+      font-size: 9pt;
+      font-weight: 600;
+    }
+    .mobile-header .app-name { color: #e94560; font-weight: 700; }
+    .mobile-body { padding: 14px; color: #cbd5e1; }
+    .budget-bar-wrap { margin: 6px 0 12px; }
+    .budget-bar-label { display: flex; justify-content: space-between; font-size: 7.5pt; color: #94a3b8; margin-bottom: 3px; }
+    .budget-bar { background: #1e293b; border-radius: 3px; height: 10px; overflow: hidden; margin-bottom: 2px; }
+    .budget-bar-fill { height: 100%; border-radius: 3px; }
+    .b-green { background: #16a34a; }
+    .b-blue { background: #3b82f6; }
+    .b-orange { background: #f59e0b; }
+    .b-red { background: #dc2626; }
+    .mobile-footer {
+      background: #0a0f1e;
+      padding: 8px;
+      display: flex;
+      justify-content: space-around;
+      font-size: 7pt;
+      color: #64748b;
+    }
+    .mobile-footer span { text-align: center; }
+    .mobile-footer span.active { color: #e94560; }
+
+    /* ─── TIMELINE ─── */
+    .timeline {
+      position: relative;
+      padding-left: 24px;
+      margin: 12px 0;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #e0e7ff;
+    }
+    .tl-item {
+      position: relative;
+      margin-bottom: 16px;
+    }
+    .tl-item::before {
+      content: '';
+      position: absolute;
+      left: -20px;
+      top: 4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #e94560;
+      border: 2px solid white;
+      box-shadow: 0 0 0 2px #e94560;
+    }
+    .tl-item .tl-phase {
+      font-size: 8pt;
+      font-weight: 700;
+      color: #e94560;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .tl-item .tl-title { font-weight: 600; color: #0f3460; margin: 2px 0; }
+    .tl-item .tl-desc { font-size: 9pt; color: #64748b; }
+
+    /* ─── RISK TABLE ─── */
+    .risk-low { color: #16a34a; font-weight: 600; }
+    .risk-medium { color: #ca8a04; font-weight: 600; }
+    .risk-high { color: #dc2626; font-weight: 600; }
+
+    /* ─── FOOTER ─── */
+    .doc-footer {
+      border-top: 1px solid #e0e7ff;
+      padding-top: 16px;
+      margin-top: 40px;
+      font-size: 8pt;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* ─── PRINT BUTTON ─── */
+    .print-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #e94560;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 10pt;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(233,69,96,0.4);
+      z-index: 1000;
+    }
+    .print-btn:hover { background: #c73652; }
+
+    /* ─── COMPETITOR HIGHLIGHT ─── */
+    .highlight-row td:last-child { font-weight: 600; color: #0f3460; }
+    .check { color: #16a34a; font-weight: 700; }
+    .cross { color: #dc2626; }
+    .star { color: #e94560; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">Save as PDF</button>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="logo">Lotus PM</div>
+  <div class="tagline">NDIS Plan Management System</div>
+  <h1>Business Case &amp; Investment Proposal</h1>
+  <p style="color:#a8b2d8; font-size:10pt; margin-top:8px;">Building our own platform to replace Entiprius 3G</p>
+  <div class="meta">
+    <span>Prepared by: [Your Name]</span>
+    <span>Date: February 2026</span>
+    <span>Status: For Review &amp; Approval</span>
+  </div>
+</div>
+
+<!-- EXECUTIVE SUMMARY -->
+<div class="exec-summary">
+  <p>
+    We currently pay <strong>$5,000/month ($60,000/year)</strong> for Entiprius 3G — dated software that
+    slows our staff down every day. We can build a purpose-built replacement that does more,
+    runs faster, and serves our participants better — for <strong>~$400/month in infrastructure costs</strong>.
+    That's a saving of <strong>~$55,000/year from Day 1</strong> of full migration, plus the potential to
+    turn the platform into a revenue-generating product we license to other plan managers.
+    This document outlines the case, the cost, the plan, and what we're asking from everyone.
+  </p>
+</div>
+
+<!-- SECTION 1: THE PROBLEM -->
+<section>
+  <h2>1. The Problem with Entiprius 3G</h2>
+  <p>Entiprius is the industry default. It works. But it has real limitations that cost us time and money every day:</p>
+  <table>
+    <thead><tr><th>Issue</th><th>Business Impact</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Slow, dated servers</strong></td><td>Staff wait for pages to load. Minutes per task, hours per day, weeks per year — lost.</td></tr>
+      <tr><td><strong>Legacy pattern recognition</strong></td><td>Old-style text matching, not true AI. High error rate on invoice extraction. Manual correction is constant.</td></tr>
+      <tr><td><strong>No true AI</strong></td><td>Competitors are using modern AI for invoice processing. Entiprius cannot catch up — its architecture prevents it.</td></tr>
+      <tr><td><strong>No participant app</strong></td><td>Participants call us for information we could surface automatically. No self-service, no budget visibility, no notifications.</td></tr>
+      <tr><td><strong>Limited automation</strong></td><td>Reminders, reconciliation, routing — still manual. Every manual step is staff time. Staff time is money.</td></tr>
+      <tr><td><strong>Vendor lock-in</strong></td><td>We pay their price. We follow their roadmap. We work around their limitations. That changes when we own the software.</td></tr>
+      <tr><td><strong>$5,000/month</strong></td><td>For a system that actively limits our productivity and our service quality.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="metrics">
+    <div class="metric-card">
+      <div class="value">$60K</div>
+      <div class="label">Annual Entiprius cost</div>
+    </div>
+    <div class="metric-card">
+      <div class="value">10K</div>
+      <div class="label">Invoices per month (peak)</div>
+    </div>
+    <div class="metric-card">
+      <div class="value">2K+</div>
+      <div class="label">Active participants</div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 2: THE OPPORTUNITY -->
+<section>
+  <h2>2. The Opportunity — Lotus PM</h2>
+  <p>Build our own system — <strong>Lotus PM</strong> — purpose-built for exactly what we do as NDIS Plan Managers.</p>
+
+  <table>
+    <thead><tr><th>What Lotus PM Does</th><th>What This Means for Us</th></tr></thead>
+    <tbody>
+      <tr><td><strong>True AI invoice processing</strong></td><td>85%+ of invoices processed automatically with no manual data entry. Staff handle exceptions, not routine work.</td></tr>
+      <tr><td><strong>Fast, modern infrastructure</strong></td><td>AWS Sydney data centres. Pages load instantly. No server timeouts. Same infrastructure used by the Australian Government.</td></tr>
+      <tr><td><strong>Purpose-built participant app</strong></td><td>Mobile app with real budget visibility, invoice tracking, messaging. Accessible for participants with disability. No competitor does this well.</td></tr>
+      <tr><td><strong>Full automation engine</strong></td><td>Invoice routing, plan review reminders, budget alerts, payment notifications — automatic. Staff focus on relationships.</td></tr>
+      <tr><td><strong>We own it</strong></td><td>No subscription creep. No vendor dependency. We update it when NDIS rules change. On our timeline.</td></tr>
+      <tr><td><strong>Future SaaS potential</strong></td><td>License the platform to 5 other PM organisations = $300,000+/year potential additional revenue.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- SECTION 3: THE NUMBERS -->
+<section>
+  <h2>3. The Numbers</h2>
+
+  <h3>Direct Cost Comparison</h3>
+  <div class="roi-box">
+    <div class="roi-row">
+      <span class="roi-label">Current cost (Entiprius)</span>
+      <span class="roi-value">$5,000/month &nbsp;($60,000/year)</span>
+    </div>
+    <div class="roi-row">
+      <span class="roi-label">Lotus PM — AWS infrastructure</span>
+      <span class="roi-value">~$400/month &nbsp;(~$4,800/year)</span>
+    </div>
+    <div class="roi-row total">
+      <span>Monthly saving</span>
+      <span>~$4,600/month = ~$55,200/year</span>
+    </div>
+  </div>
+
+  <p style="font-size:9.5pt; color:#64748b;">
+    The system pays for itself from Month 1 of full migration. Even during parallel running (both systems active),
+    Lotus PM costs only ~$400/month — a rounding error against our current bill.
+  </p>
+
+  <h3>AWS Cost Breakdown — What We're Paying For</h3>
+  <table>
+    <thead><tr><th>Service</th><th>Monthly Cost</th><th>What It Does</th></tr></thead>
+    <tbody>
+      <tr><td>PostgreSQL database (AWS RDS)</td><td>$65–80</td><td>Secure managed database — auto-backups, encrypted</td></tr>
+      <tr><td>App hosting (ECS Fargate)</td><td>$50–70</td><td>Managed containers — no servers to maintain</td></tr>
+      <tr><td>File storage (S3)</td><td>$5–10</td><td>Invoice PDFs, documents — encrypted at rest</td></tr>
+      <tr><td>AI invoice scanning (Textract)</td><td>$8–15</td><td>5,000–10,000 invoice pages per month</td></tr>
+      <tr><td>Email processing (SES)</td><td>$2–5</td><td>Send notifications, receive invoices</td></tr>
+      <tr><td>Session cache (Redis)</td><td>$15–25</td><td>Fast page loads, session management</td></tr>
+      <tr><td>Monitoring &amp; alerts (CloudWatch)</td><td>$10–20</td><td>Know immediately if anything breaks</td></tr>
+      <tr><td>Authentication (Cognito)</td><td>$5–10</td><td>Login, MFA, staff access control</td></tr>
+      <tr><td>Networking, CDN, other</td><td>$10–25</td><td>Fast delivery across Australia, DNS, encryption</td></tr>
+      <tr style="font-weight:700; background:#f0f4ff"><td><strong>Estimated Total</strong></td><td><strong>$170–260/month</strong></td><td>Budget with headroom: <strong>~$400/month</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Staff Time Saving (Conservative Estimate at 5,000 invoices/month)</h3>
+  <table>
+    <thead><tr><th>Scenario</th><th>Hours/Month</th></tr></thead>
+    <tbody>
+      <tr><td>Current — Entiprius (~15 min avg, majority manual)</td><td>~1,250–1,500 hours</td></tr>
+      <tr><td>Lotus PM — 85% auto at 30 sec, 15% review at 4 min</td><td>~150–200 hours</td></tr>
+      <tr style="font-weight:700; color:#16a34a; background:#f0fdf4"><td>Monthly time saving</td><td>~1,100–1,300 hours</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- SECTION 4: WHAT IT LOOKS LIKE -->
+<section class="page-break">
+  <h2>4. What the System Looks Like</h2>
+
+  <h3>Main Dashboard — Plan Manager View</h3>
+  <div class="ui-mockup">
+    <div class="ui-bar">
+      <span class="ui-title">Lotus PM</span>
+      <span>Search participants, providers...</span>
+      <span style="margin-left:auto; color:#e94560">⚠ 3 alerts</span>
+      <span style="color:#64748b">JD ▾</span>
+    </div>
+    <div class="ui-content">
+      <div class="ui-sidebar">
+        <div class="nav-item active">Dashboard</div>
+        <div class="nav-item">Participants</div>
+        <div class="nav-item">Providers</div>
+        <div class="nav-item">Plans</div>
+        <div class="nav-item">Invoices</div>
+        <div class="nav-item">Claims</div>
+        <div class="nav-item">Banking</div>
+        <div class="nav-item">Reports</div>
+        <div class="nav-item">Settings</div>
+      </div>
+      <div class="ui-main">
+        <div style="color:#94a3b8; font-size:8pt; margin-bottom:10px;">TODAY — February 2026</div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="s-num">47</div>
+            <div class="s-lbl">Invoices pending</div>
+          </div>
+          <div class="stat-card">
+            <div class="s-num">23</div>
+            <div class="s-lbl">Claims submitted</div>
+          </div>
+          <div class="stat-card">
+            <div class="s-num">$34K</div>
+            <div class="s-lbl">Payments due</div>
+          </div>
+        </div>
+        <div style="color:#94a3b8; font-size:7.5pt; margin-bottom:6px;">INVOICE PROCESSING QUEUE</div>
+        <div style="margin-bottom:4px;">
+          <div style="display:flex; justify-content:space-between; font-size:7.5pt; color:#94a3b8; margin-bottom:2px;">
+            <span style="color:#16a34a">✓ Auto-processed (AI)</span><span>82%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill green" style="width:82%"></div></div>
+        </div>
+        <div style="margin-bottom:4px;">
+          <div style="display:flex; justify-content:space-between; font-size:7.5pt; color:#94a3b8; margin-bottom:2px;">
+            <span style="color:#ca8a04">⚠ Needs review</span><span>13%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill yellow" style="width:13%"></div></div>
+        </div>
+        <div>
+          <div style="display:flex; justify-content:space-between; font-size:7.5pt; color:#94a3b8; margin-bottom:2px;">
+            <span style="color:#dc2626">✗ Manual required</span><span>5%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill red" style="width:5%"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Participant Mobile App — Budget View</h3>
+  <div class="mobile-grid">
+    <div class="mobile-frame">
+      <div class="mobile-header"><span class="app-name">Lotus PM</span> &nbsp;·&nbsp; Easy Read</div>
+      <div class="mobile-body">
+        <p style="color:#94a3b8; font-size:8pt; margin-bottom:8px;">Hi Jane!</p>
+        <div style="background:#0f172a; border-radius:8px; padding:12px; margin-bottom:12px; text-align:center;">
+          <div style="color:#e94560; font-size:18pt; font-weight:700;">$42,500</div>
+          <div style="color:#64748b; font-size:7.5pt;">remaining of $68,000 total</div>
+        </div>
+        <div style="background:#0f172a; border-radius:8px; padding:12px;">
+          <div style="color:#94a3b8; font-size:7.5pt; margin-bottom:6px;">Recent activity</div>
+          <div style="color:#16a34a; margin-bottom:4px;">✓ OT Session — paid $193.99</div>
+          <div style="color:#ca8a04;">⏳ Physio — processing $165.00</div>
+        </div>
+        <div style="margin-top:12px; background:#e94560; border-radius:6px; padding:8px; text-align:center; color:white; font-size:8.5pt; font-weight:600;">
+          💬 Message my Plan Manager
+        </div>
+      </div>
+      <div class="mobile-footer">
+        <span class="active">Budget</span>
+        <span>Activity</span>
+        <span>Messages</span>
+        <span>Docs</span>
+      </div>
+    </div>
+    <div class="mobile-frame">
+      <div class="mobile-header"><span class="app-name">Your Budget</span></div>
+      <div class="mobile-body">
+        <div class="budget-bar-wrap">
+          <div style="font-size:8.5pt; font-weight:600; color:#cbd5e1; margin-bottom:4px;">Core Supports</div>
+          <div class="budget-bar-label"><span>$18,200 used</span><span>73%</span></div>
+          <div class="budget-bar"><div class="budget-bar-fill b-blue" style="width:73%"></div></div>
+          <div style="font-size:7pt; color:#64748b;">$6,800 remaining of $25,000</div>
+        </div>
+        <div class="budget-bar-wrap">
+          <div style="font-size:8.5pt; font-weight:600; color:#cbd5e1; margin-bottom:4px;">Capacity Building</div>
+          <div class="budget-bar-label"><span>$8,200 used</span><span>41%</span></div>
+          <div class="budget-bar"><div class="budget-bar-fill b-green" style="width:41%"></div></div>
+          <div style="font-size:7pt; color:#64748b;">$11,800 remaining of $20,000</div>
+        </div>
+        <div class="budget-bar-wrap">
+          <div style="font-size:8.5pt; font-weight:600; color:#ca8a04; margin-bottom:4px;">Transport ⚠</div>
+          <div class="budget-bar-label"><span>$4,800 used</span><span>87%</span></div>
+          <div class="budget-bar"><div class="budget-bar-fill b-orange" style="width:87%"></div></div>
+          <div style="font-size:7pt; color:#ca8a04;">Only $700 remaining — alert sent</div>
+        </div>
+        <div style="margin-top:12px; background:#0f172a; border-radius:6px; padding:8px; font-size:7.5pt; color:#64748b;">
+          Plan ends: 30 Jun 2026 &nbsp;·&nbsp; Review: 15 May 2026
+        </div>
+      </div>
+      <div class="mobile-footer">
+        <span>Home</span>
+        <span class="active">Budget</span>
+        <span>Activity</span>
+        <span>Messages</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 5: HOW INVOICES GET PROCESSED -->
+<section>
+  <h2>5. Invoice Processing — Current vs Future</h2>
+
+  <div class="workflow current">
+    <div class="wf-label">Current Process — Entiprius 3G</div>
+    <div class="wf-steps">
+      <span class="wf-step">Invoice emailed</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Open Entiprius (slow)</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Find participant manually</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Upload PDF</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Pattern recognition attempts extraction</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Staff manually corrects errors</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Check Price Guide manually</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Submit to PRODA</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Log in comms</span>
+    </div>
+    <div class="wf-time">⏱ ~15–20 minutes per invoice · Mostly manual</div>
+  </div>
+
+  <div class="workflow future">
+    <div class="wf-label">Lotus PM — Target Process</div>
+    <div class="wf-steps">
+      <span class="wf-step">Invoice emailed</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">AI reads &amp; extracts all fields (&lt;5 sec)</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Auto-validates vs Price Guide</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Auto-checks budget</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Appears as "Ready to Approve"</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">PM clicks Approve</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Auto-submits to PRODA + logs to CRM</span>
+    </div>
+    <div class="wf-time">⏱ ~30 seconds (85% of invoices) · 3–5 min for the 15% needing review</div>
+  </div>
+</section>
+
+<!-- SECTION 6: COMPETITIVE LANDSCAPE -->
+<section>
+  <h2>6. Competitive Landscape</h2>
+  <p>Every competitor has the same problems. That's the opportunity.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Feature</th>
+        <th>Entiprius (ours)</th>
+        <th>Brevity</th>
+        <th>Lumary</th>
+        <th>Lotus PM</th>
+      </tr>
+    </thead>
+    <tbody class="highlight-row">
+      <tr><td>Invoice AI</td><td class="cross">Legacy patterns</td><td class="cross">Basic OCR</td><td class="cross">Manual</td><td class="star">AWS AI — 85%+ auto</td></tr>
+      <tr><td>Server speed</td><td class="cross">Slow, dated</td><td>Moderate</td><td class="cross">Slow</td><td class="star">Modern cloud — fast</td></tr>
+      <tr><td>PRODA/PACE</td><td>~40 APIs</td><td>Full API</td><td>API</td><td class="star">Full API + real-time</td></tr>
+      <tr><td>Participant app</td><td class="cross">Basic portal</td><td class="cross">None</td><td class="cross">Basic portal</td><td class="star">Dedicated mobile app</td></tr>
+      <tr><td>Accessibility</td><td class="cross">Limited</td><td class="cross">Limited</td><td class="cross">Limited</td><td class="star">WCAG 2.1 AA + easy-read</td></tr>
+      <tr><td>Automation</td><td class="cross">Limited</td><td>Some</td><td>Rules-based</td><td class="star">AI-powered</td></tr>
+      <tr><td>Bank reconciliation</td><td class="cross">Manual</td><td>Semi-auto</td><td class="cross">Manual</td><td class="star">AI-assisted auto</td></tr>
+      <tr><td>Monthly cost</td><td class="cross">$5,000+</td><td class="cross">$3,000+</td><td class="cross">$4,000+</td><td class="star">~$400</td></tr>
+      <tr><td>We own it</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td></tr>
+    </tbody>
+  </table>
+
+  <p style="font-size:9pt; color:#64748b; font-style:italic;">
+    Common complaints from PM operators across ALL these platforms: slow systems, invoice errors,
+    payment delays, poor communication tools, no participant self-service, expensive for the value delivered.
+    Lotus PM addresses every single one.
+  </p>
+</section>
+
+<!-- SECTION 7: WHAT WE'RE ASKING -->
+<section class="page-break">
+  <h2>7. What We're Asking — Honest Assessment</h2>
+
+  <h3>What I Need from Everyone</h3>
+  <table>
+    <thead><tr><th>Commitment</th><th>What It Actually Means</th></tr></thead>
+    <tbody>
+      <tr><td><strong>My time</strong></td><td>10–15 hours/week outside my 60-hour job. I'm directing AI agents — they build the code, I make decisions and review output.</td></tr>
+      <tr><td><strong>Staff testing</strong></td><td>2–4 hours/week from 2–3 plan managers during pilot phase. Click through the system, tell us what's wrong. That's it.</td></tr>
+      <tr><td><strong>Tolerance for early bugs</strong></td><td>The first version won't be as polished as Entiprius. Bugs will happen. We fix them fast. That's the deal with every new system.</td></tr>
+      <tr><td><strong>Parallel running period</strong></td><td>We run both Entiprius and Lotus PM during transition (~1–3 months for pilot clients). Some double-handling during that time.</td></tr>
+      <tr><td><strong>AWS costs</strong></td><td>~$400/month while we build — this runs alongside the existing Entiprius cost. Small in context.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>What We All Get Back</h3>
+  <table>
+    <thead><tr><th>Benefit</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Cancel Entiprius</strong></td><td style="color:#16a34a; font-weight:600;">$5,000/month, $60,000/year eliminated</td></tr>
+      <tr><td><strong>Staff time saved</strong></td><td>1,000+ hours/month freed from invoice processing admin</td></tr>
+      <tr><td><strong>Faster payments to providers</strong></td><td>AI accuracy → fewer rejected claims → providers paid faster → better relationships</td></tr>
+      <tr><td><strong>Better participant service</strong></td><td>Real-time budget visibility, invoice tracking, messaging — without calling us</td></tr>
+      <tr><td><strong>Competitive edge</strong></td><td>No other PM business in our market has what this will be</td></tr>
+      <tr><td><strong>We own the platform</strong></td><td>Improve it on our timeline, for our needs, without asking a vendor's permission</td></tr>
+      <tr><td><strong>Future revenue</strong></td><td>License to 5 similar PM businesses = $300,000+/year potential</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- SECTION 8: RISKS -->
+<section>
+  <h2>8. Risks and How We Manage Them</h2>
+
+  <table>
+    <thead><tr><th>Risk</th><th>Likelihood</th><th>How We Manage It</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Development takes longer than planned</strong></td>
+        <td><span class="risk-medium">Medium</span></td>
+        <td>Phased approach. Each phase delivers usable value independently. Not all-or-nothing.</td>
+      </tr>
+      <tr>
+        <td><strong>Hit a technical wall</strong></td>
+        <td><span class="risk-low">Low</span></td>
+        <td>Modular design. We can swap components without rewriting everything. No bad decisions are permanent.</td>
+      </tr>
+      <tr>
+        <td><strong>Learning as I build</strong></td>
+        <td>Reality</td>
+        <td>AI-assisted development with Claude Code changes what one person can build. The tools are the mitigation.</td>
+      </tr>
+      <tr>
+        <td><strong>NDIS rules change</strong></td>
+        <td><span class="risk-medium">Medium</span></td>
+        <td>Modular design. Rule changes are isolated updates, not system rewrites. Same as any compliant software.</td>
+      </tr>
+      <tr>
+        <td><strong>Staff resist the change</strong></td>
+        <td><span class="risk-low">Low</span></td>
+        <td>Staff are involved in testing from Day 1. Their feedback shapes the product. They see it being built for them.</td>
+      </tr>
+      <tr>
+        <td><strong>Entiprius improves significantly</strong></td>
+        <td><span class="risk-low">Low</span></td>
+        <td>Their legacy architecture has fundamental limits. They can patch, not rebuild. We're building from scratch.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>What We Are Not Doing</h3>
+  <ul style="padding-left:20px; line-height:2;">
+    <li>We are <strong>not</strong> going all-in overnight — the pilot runs alongside Entiprius</li>
+    <li>We are <strong>not</strong> skipping testing — every module is tested before it touches real data</li>
+    <li>We are <strong>not</strong> rushing the migration — clients move over when the system is solid, not before</li>
+    <li>We are <strong>not</strong> building something fragile — modular, well-tested, professionally structured</li>
+  </ul>
+</section>
+
+<!-- SECTION 9: TIMELINE -->
+<section>
+  <h2>9. Timeline</h2>
+  <p style="margin-bottom:16px;">
+    This is faster than you'd expect. Multiple AI agents build different modules in parallel.
+    They test their own work. They only stop when a decision is needed. The pipeline is the investment in Week 1;
+    after that, modules ship fast.
+  </p>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-phase">Week 1 — Phase 0</div>
+      <div class="tl-title">AI Development Infrastructure</div>
+      <div class="tl-desc">GitHub repository, CI/CD pipeline, AWS environment, persistent AI memory file. Agents can build and deploy from Day 2 onwards.</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-phase">Weeks 2–4 — Phase 1</div>
+      <div class="tl-title">Working System — Core Modules</div>
+      <div class="tl-desc">Participant management, plan management, invoice upload and approval (manual), basic dashboard and reporting. Staff can use it.</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-phase">Weeks 5–8 — Phase 2</div>
+      <div class="tl-title">AI + Integrations</div>
+      <div class="tl-desc">AI invoice processing (85%+ automatic), PRODA claims integration, CBA banking (ABA files), Xero accounting sync, email notifications.</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-phase">Weeks 9–12 — Phase 3</div>
+      <div class="tl-title">Automation + Pilot Migration</div>
+      <div class="tl-desc">Automation engine (reminders, routing, alerts), full testing, first pilot clients migrated from Entiprius. System validated in production.</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-phase">Weeks 13–16+ — Phase 4</div>
+      <div class="tl-title">Participant App + Full Migration</div>
+      <div class="tl-desc">Participant mobile app (iOS and Android), full migration of all clients, Entiprius subscription cancelled.</div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 10: BOTTOM LINE -->
+<section>
+  <h2>10. The Bottom Line</h2>
+
+  <div class="exec-summary" style="margin-bottom:24px;">
+    <p>
+      We're not building a spaceship. We're building a better version of what we use every day —
+      one that we own, that does the routine work automatically, and that serves our participants properly.
+      The cost comparison alone makes this worth doing. The efficiency gains make it urgent.
+      The participant app makes it a competitive differentiator.
+    </p>
+    <p style="margin-top:12px;">
+      The question isn't whether we can build it.
+      <strong>The question is: are we willing to commit to the transition period and the early bumps to get there?</strong>
+    </p>
+  </div>
+
+  <h3>Open Actions (As of February 2026)</h3>
+  <table>
+    <thead><tr><th>Action</th><th>Owner</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>PRODA/PACE B2B API access application</td><td>Nicole</td><td style="color:#ca8a04">Emailed — awaiting response</td></tr>
+      <tr><td>Family decision on proceeding</td><td>This meeting</td><td style="color:#3b82f6">Pending approval</td></tr>
+      <tr><td>Domain name and branding</td><td>TBD</td><td style="color:#64748b">Open</td></tr>
+      <tr><td>Staff availability for pilot testing</td><td>Director</td><td style="color:#64748b">Open</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="doc-footer">
+  <span>Lotus PM Business Case — Version 1.0</span>
+  <span>February 2026</span>
+  <span>Confidential — Family Business Use Only</span>
+</div>
+
+</body>
+</html>
