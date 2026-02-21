@@ -8,6 +8,7 @@
 export type LotusEvent =
   | InvoiceReceivedEvent
   | InvoiceEmailReceivedEvent
+  | InvoiceExtractionCompleteEvent
   | InvoiceApprovedEvent
   | InvoiceRejectedEvent
   | ClaimSubmittedEvent
@@ -43,6 +44,19 @@ export interface InvoiceEmailReceivedEvent extends BaseEvent {
     invoiceId: string
     ingestSource: 'EMAIL'
     receivedAt: string
+  }
+}
+
+/** Emitted when Textract extraction completes and invoice moves to PENDING_REVIEW */
+export interface InvoiceExtractionCompleteEvent extends BaseEvent {
+  source: 'lotus-pm.invoices'
+  detailType: 'lotus-pm.invoices.extraction-complete'
+  detail: {
+    invoiceId: string
+    confidence: number
+    lineItemCount: number
+    status: 'PENDING_REVIEW'
+    extractedAt: string
   }
 }
 
