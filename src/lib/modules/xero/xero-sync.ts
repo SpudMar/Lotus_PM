@@ -101,6 +101,13 @@ export async function syncInvoiceToXero(
     )
   }
 
+  // Email-ingested drafts have no provider until reviewed — guard before Xero sync
+  if (!invoice.provider) {
+    throw new Error(
+      `Invoice ${invoiceId} has no provider linked — assign a provider before syncing to Xero`
+    )
+  }
+
   // Find or create the Xero Contact for this provider
   const contactId = await findOrCreateXeroContact(
     invoice.provider.name,

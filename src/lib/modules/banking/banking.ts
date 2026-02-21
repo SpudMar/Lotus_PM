@@ -112,7 +112,8 @@ export async function createPaymentsFromClaims(
   for (const claim of claims) {
     const provider = claim.invoice.provider
 
-    if (!provider.bankBsb || !provider.bankAccount || !provider.bankAccountName) {
+    // Email-ingested drafts may have no provider linked yet — skip until reviewed
+    if (!provider || !provider.bankBsb || !provider.bankAccount || !provider.bankAccountName) {
       continue // Skip claims where provider has no bank details
     }
 
@@ -355,7 +356,7 @@ function buildAbaDetail(payment: {
   accountName: string
   amountCents: number
   reference?: string | null
-  claim: { claimReference: string; invoice: { provider: { name: string } } }
+  claim: { claimReference: string; invoice: { provider: { name: string } | null } }
 }): string {
   const bsbFormatted = payment.bsb.slice(0, 3) + '-' + payment.bsb.slice(3, 6)
 

@@ -112,6 +112,42 @@ export class LotusPmStorageStack extends cdk.Stack {
       eventBusName: 'lotus-pm-events',
     })
 
+    // ── SES: Email Invoice Ingestion ─────────────────────────────────
+    // REQ-024: Invoices arrive via shared email inbox.
+    //
+    // IMPORTANT — prerequisites before this rule set will receive email:
+    //   1. Verify SES_INBOUND_EMAIL_DOMAIN in SES (domain verification + DKIM).
+    //   2. Add MX record: <domain> MX 10 inbound-smtp.ap-southeast-2.amazonaws.com
+    //   3. After `cdk deploy`, set this rule set as the ACTIVE rule set in SES.
+    //      (Only one rule set can be active at a time in a region.)
+    //
+    // Action 1 — S3Action: saves the raw .eml to invoiceBucket under prefix inbound/
+    // Action 2 — SqsAction: notifies invoiceQueue with the S3 object location
+    //   The SQS worker calls POST /api/email-ingest with { bucket, key }
+    const inboundDomain = process.env.SES_INBOUND_EMAIL_DOMAIN ?? ''
+
+    const emailIngestRuleSet = new ses.ReceiptRuleSet(this, 'EmailIngestRuleSet', {
+      receiptRuleSetName: `lotus-pm-email-ingest-${env}`,
+    })
+
+    new ses.ReceiptRule(this, 'InvoiceEmailRule', {
+      ruleSet: emailIngestRuleSet,
+      // Match emails sent to invoices@<domain> — domain must be verified in SES
+      recipients: inboundDomain ? [`invoices@${inboundDomain}`] : [],
+      scanEnabled: true,  // Enable SES spam/virus scanning
+      actions: [
+        // Action 1: Save raw .eml to S3 under inbound/ prefix
+        new sesActions.S3({
+          bucket: this.invoiceBucket,
+          objectKeyPrefix: 'inbound/',
+        }),
+        // Action 2: Notify invoice queue so the worker can process the email
+        new sesActions.Sqs({
+          queue: this.invoiceQueue,
+        }),
+      ],
+    })
+
     // ── Outputs ─────────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'InvoiceBucketName', {
       value: this.invoiceBucket.bucketName,

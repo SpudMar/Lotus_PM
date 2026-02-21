@@ -7,6 +7,7 @@
 
 export type LotusEvent =
   | InvoiceReceivedEvent
+  | InvoiceEmailReceivedEvent
   | InvoiceApprovedEvent
   | InvoiceRejectedEvent
   | ClaimSubmittedEvent
@@ -30,6 +31,17 @@ export interface InvoiceReceivedEvent extends BaseEvent {
     providerId: string
     participantId: string
     amountCents: number
+    receivedAt: string
+  }
+}
+
+/** Emitted when an invoice arrives via SES inbound email — REQ-024 */
+export interface InvoiceEmailReceivedEvent extends BaseEvent {
+  source: 'lotus-pm.invoices'
+  detailType: 'lotus-pm.invoices.email-received'
+  detail: {
+    invoiceId: string
+    ingestSource: 'EMAIL'
     receivedAt: string
   }
 }
