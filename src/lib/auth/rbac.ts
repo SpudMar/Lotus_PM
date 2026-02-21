@@ -61,6 +61,11 @@ const PERMISSIONS = {
   // Automation rules (Director manages, Plan Manager views)
   'automation:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
   'automation:write': [ROLES.DIRECTOR],
+
+  // Documents (all staff can read/write; Director can delete)
+  'documents:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
+  'documents:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
+  'documents:delete': [ROLES.DIRECTOR],
 } as const
 
 export type Permission = keyof typeof PERMISSIONS

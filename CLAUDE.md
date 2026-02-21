@@ -101,14 +101,14 @@ Every decision below is locked. Do not suggest alternatives without a clear reas
 3. ✅ **Plan Management** — plans, budgets, categories, spending tracking
 4. ✅ **Invoice Processing** — upload, extraction, validation, approval workflow
 
-### Priority 2 (Phase 2)
-5. **Claims & Payments** — PRODA integration, bulk claiming, status tracking
-6. **Banking** — ABA file generation (CBA format), bank reconciliation
-7. **Reporting** — dashboards, financial reports, NDIS compliance reports
-8. **Notifications** — email (SES), in-app, SMS (SNS)
+### Priority 2 (Phase 2) — ACTIVE (partial blockers)
+5. **Claims & Payments** — PRODA integration, bulk claiming, status tracking ⛔ blocked on PACE B2B API
+6. **Banking** — ABA file generation (CBA format), bank reconciliation ⛔ blocked on CBA CommBiz API
+7. **Reporting** — dashboards, financial reports, NDIS compliance reports ✅ unblocked — can build
+8. **Notifications** — email (SES), in-app, SMS (SNS) ✅ unblocked — can build
 
 ### Priority 3 (Phase 3–4)
-9. **Automation Engine** — rules, triggers, scheduled tasks
+9. ✅ **Automation Engine** — rules, triggers, scheduled tasks — **COMPLETE (built ahead of schedule)**
 10. **Documents** — templates, forms, file management
 11. **Participant App** — React Native, WCAG 2.1 AA, accessible design
 
@@ -293,22 +293,44 @@ All routes smoke-tested locally. CI green on every PR.
 
 ---
 
-### Phase 2 — Claims & Payments (ACTIVE)
+### Phase 2 — Claims & Payments (ACTIVE — partial blockers)
 
 Priority order for this phase:
 
-1. **Claims & Payments** — PRODA integration (blocked on B2B API access — application sent 20 Feb, awaiting response), bulk claiming, status tracking
-2. **Banking** — ABA file generation (CBA format), bank reconciliation
-3. **Reporting** — dashboards, financial reports, NDIS compliance reports
-4. **Notifications** — email (SES), in-app, SMS (SNS)
+1. **Claims & Payments** — ⛔ blocked on PRODA/PACE B2B API access (application sent 20 Feb, awaiting response). Can scaffold module, cannot integrate.
+2. **Banking** — ⛔ blocked on CBA CommBiz API (not started). Can scaffold ABA file generation logic, cannot submit.
+3. **Reporting** — ✅ unblocked — dashboards, financial reports, NDIS compliance reports
+4. **Notifications** — ✅ unblocked — email (SES), in-app, SMS (SNS)
 
 **Phase 2 blockers:**
 
 | Blocker | Owner | Status |
 |---------|-------|--------|
-| PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response. Blocks Claims module. |
-| CBA CommBiz API | TBD | Not started. Blocks Banking module. |
+| PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response. Blocks Claims module live integration. |
+| CBA CommBiz API | TBD | Not started. Blocks Banking module live submission. |
 | Xero API credentials | TBD | Existing dev account — retrieve Client ID/Secret from desktop. Blocks accounting sync. |
+
+---
+
+### Phase 3 — Automation Engine ✅ COMPLETE (merged to main @ 82fa06d, built ahead of Phase 2)
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| DB schema | ✅ | `AutoRule` + `AutoExecutionLog` models. Migration: `20260220200000_automation_engine`. |
+| Module: types | ✅ | `AutoCondition`, `AutoAction`, `TriggerContext`, `RuleExecutionResult` (`src/lib/modules/automation/types.ts`) |
+| Module: validation | ✅ | Zod schemas for create/update rules and all sub-types (`validation.ts`) |
+| Module: rules | ✅ | `listRules`, `getRuleById`, `createRule`, `updateRule`, `deleteRule`, `findRulesForEvent`, `findScheduledRules` (`rules.ts`) |
+| Module: engine | ✅ | `evaluateCondition`, `evaluateConditions`, `interpolateTemplate`, `executeAction`, `triggerRule`, `processEvent` (`engine.ts`) |
+| Actions implemented | ✅ | `LOG_COMM` (creates CrmCommLog with template interpolation), `NOTIFY_STAFF` (stubbed — wires to Phase 2 Notifications) |
+| API routes | ✅ | `GET/POST /api/automation/rules`, `GET/PUT/DELETE /api/automation/rules/[id]`, `POST /api/automation/rules/[id]/trigger` |
+| RBAC | ✅ | `automation:read` → Director, Plan Manager. `automation:write` → Director only. |
+| UI | ✅ | Table with toggle/test/delete, create dialog with trigger type, event, conditions, message template (`src/app/(automation)/automation/page.tsx`) |
+| Tests | ✅ | 27 passing (20 engine unit tests + 7 existing). All operators, template interpolation, multi-condition evaluation. |
+
+**Notes for next session:**
+- `NOTIFY_STAFF` action is stubbed — when Notifications module is built in Phase 2, wire it in.
+- Events are not yet emitted from invoice/plan modules — `processEvent` needs to be called from `approveInvoice`, `rejectInvoice`, etc. to trigger automation rules automatically.
+- Scheduled rules (`triggerType: SCHEDULE`, cronExpression) need a cron runner — not yet wired to any scheduler.
 
 ---
 
@@ -322,7 +344,10 @@ Priority order for this phase:
 | `src/middleware.ts` | Route protection |
 | `src/lib/db/client.ts` | Prisma client singleton |
 | `src/lib/shared/currency.ts` | Financial amount utilities (cents, never floats) |
-| `src/lib/events/` | EventBridge event definitions |
+| `src/lib/events/types.ts` | EventBridge event type definitions (9 event types) |
+| `src/lib/modules/automation/engine.ts` | Automation rule evaluator and executor |
+| `src/lib/modules/automation/rules.ts` | Automation CRUD and event lookup |
+| `src/app/(automation)/automation/page.tsx` | Automation UI — rule list, create, test, toggle |
 | `infrastructure/lib/config.ts` | Environment configs (staging/production) |
 | `scripts/seed.ts` | Dev seed data (not idempotent — see Phase 1 notes) |
 | `docker-compose.yml` | Local Postgres 16, Redis 7, MailHog |
@@ -396,5 +421,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 20 February 2026 — Phase 0 + Phase 1 complete handover*
+*Last updated: 20 February 2026 — Phase 3 Automation Engine complete; Phase 2 active (partial blockers)*
 *All decisions in this file were made deliberately. Update with care.*
