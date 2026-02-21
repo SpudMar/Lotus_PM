@@ -2,7 +2,7 @@
  * DELETE /api/xero/disconnect
  *
  * Disconnects the active Xero integration.
- * - Requires xero:write permission (Director only)
+ * - Requires xero:write permission (PM+ (Plan Manager or Global Admin))
  * - Marks the connection as inactive in DB
  * - Audit logs the disconnection
  *

@@ -169,10 +169,10 @@ describe('sendSmsToStaffByRole', () => {
     mockSendSms.mockResolvedValue({ success: true, messageId: 'msg-x', clickSendStatus: 'SUCCESS' })
     ;(mockPrisma.notifNotification.update as jest.Mock).mockResolvedValue(makeNotification())
 
-    await sendSmsToStaffByRole('DIRECTOR', 'Budget alert!')
+    await sendSmsToStaffByRole('GLOBAL_ADMIN', 'Budget alert!')
 
     expect(mockPrisma.coreUser.findMany).toHaveBeenCalledWith({
-      where: { role: 'DIRECTOR', isActive: true, deletedAt: null, phone: { not: null } },
+      where: { role: 'GLOBAL_ADMIN', isActive: true, deletedAt: null, phone: { not: null } },
       select: { id: true, phone: true },
     })
 

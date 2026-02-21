@@ -57,7 +57,7 @@ export async function sendSms(
  * Used by the automation engine's NOTIFY_STAFF action.
  */
 export async function sendSmsToStaffByRole(
-  role: 'DIRECTOR' | 'PLAN_MANAGER' | 'ASSISTANT',
+  role: 'GLOBAL_ADMIN' | 'PLAN_MANAGER' | 'ASSISTANT',
   message: string
 ): Promise<void> {
   const staffWithPhones = await prisma.coreUser.findMany({

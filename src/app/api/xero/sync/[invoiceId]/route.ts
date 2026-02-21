@@ -2,7 +2,7 @@
  * POST /api/xero/sync/[invoiceId]
  *
  * Syncs a single invoice to Xero.
- * - Requires xero:sync permission (Director or Plan Manager)
+ * - Requires xero:sync permission (Plan Manager or Global Admin)
  * - Invoice must be in APPROVED status
  *
  * REQ-019/REQ-023: Xero integration.

@@ -2,7 +2,7 @@
  * GET /api/xero/status
  *
  * Returns the current Xero connection status.
- * - Requires xero:read permission (Director or Plan Manager)
+ * - Requires xero:read permission (Plan Manager or Global Admin)
  *
  * Response: XeroConnectionStatus
  */

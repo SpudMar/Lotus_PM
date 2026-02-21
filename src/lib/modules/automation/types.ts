@@ -39,7 +39,7 @@ export interface NotifyStaffAction {
   type: 'NOTIFY_STAFF'
   params: {
     message: string
-    notifyRole: 'DIRECTOR' | 'PLAN_MANAGER' | 'ASSISTANT'
+    notifyRole: 'GLOBAL_ADMIN' | 'PLAN_MANAGER' | 'ASSISTANT'
   }
 }
 

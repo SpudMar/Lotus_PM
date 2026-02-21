@@ -1,13 +1,36 @@
 import { ROLES, hasPermission, hasAllPermissions, getPermissionsForRole } from './rbac'
 
 describe('RBAC permissions', () => {
-  describe('Director (Global Admin)', () => {
-    const role = ROLES.DIRECTOR
+  describe('Global Admin', () => {
+    const role = ROLES.GLOBAL_ADMIN
 
-    test('has full system access', () => {
+    test('has every single permission in the system', () => {
       const allPerms = getPermissionsForRole(role)
-      // Director should have every permission in the system
+      // Global Admin should have every permission in the system
       expect(allPerms.length).toBeGreaterThan(0)
+
+      // Verify against a known exhaustive list of all permissions
+      const expectedPerms = [
+        'participants:read', 'participants:write', 'participants:delete',
+        'providers:read', 'providers:write',
+        'plans:read', 'plans:write',
+        'invoices:read', 'invoices:write', 'invoices:approve', 'invoices:reject',
+        'claims:read', 'claims:write', 'claims:submit', 'claims:outcome',
+        'banking:read', 'banking:write', 'banking:generate',
+        'flags:read', 'flags:comment', 'flags:approve',
+        'reports:read', 'reports:financial',
+        'staff:read', 'staff:write',
+        'settings:read', 'settings:write',
+        'comms:read', 'comms:write',
+        'automation:read', 'automation:write',
+        'notifications:read', 'notifications:write', 'notifications:send',
+        'documents:read', 'documents:write', 'documents:delete',
+        'xero:read', 'xero:write', 'xero:sync',
+      ]
+      for (const perm of expectedPerms) {
+        expect(hasPermission(role, perm as any)).toBe(true)
+      }
+      expect(allPerms.length).toBe(expectedPerms.length)
     })
 
     test('can manage staff and settings', () => {
@@ -54,6 +77,7 @@ describe('RBAC permissions', () => {
     test('can manage participants and providers', () => {
       expect(hasPermission(role, 'participants:read')).toBe(true)
       expect(hasPermission(role, 'participants:write')).toBe(true)
+      expect(hasPermission(role, 'participants:delete')).toBe(true)
       expect(hasPermission(role, 'providers:read')).toBe(true)
       expect(hasPermission(role, 'providers:write')).toBe(true)
     })
@@ -62,15 +86,18 @@ describe('RBAC permissions', () => {
       expect(hasPermission(role, 'flags:approve')).toBe(true)
     })
 
-    test('cannot manage staff or settings', () => {
-      expect(hasPermission(role, 'staff:read')).toBe(false)
-      expect(hasPermission(role, 'staff:write')).toBe(false)
-      expect(hasPermission(role, 'settings:read')).toBe(false)
-      expect(hasPermission(role, 'settings:write')).toBe(false)
+    test('can access reports, settings, automation, documents, and xero', () => {
+      expect(hasPermission(role, 'reports:financial')).toBe(true)
+      expect(hasPermission(role, 'settings:read')).toBe(true)
+      expect(hasPermission(role, 'settings:write')).toBe(true)
+      expect(hasPermission(role, 'automation:write')).toBe(true)
+      expect(hasPermission(role, 'documents:delete')).toBe(true)
+      expect(hasPermission(role, 'xero:write')).toBe(true)
     })
 
-    test('cannot delete participants', () => {
-      expect(hasPermission(role, 'participants:delete')).toBe(false)
+    test('cannot manage staff', () => {
+      expect(hasPermission(role, 'staff:read')).toBe(false)
+      expect(hasPermission(role, 'staff:write')).toBe(false)
     })
   })
 
@@ -159,10 +186,11 @@ describe('RBAC permissions', () => {
       expect(assistantPerms.length).toBeLessThan(pmPerms.length)
     })
 
-    test('Plan Manager has fewer permissions than Director', () => {
+    test('Plan Manager has fewer permissions than Global Admin (by exactly 2)', () => {
       const pmPerms = getPermissionsForRole(ROLES.PLAN_MANAGER)
-      const directorPerms = getPermissionsForRole(ROLES.DIRECTOR)
-      expect(pmPerms.length).toBeLessThan(directorPerms.length)
+      const globalAdminPerms = getPermissionsForRole(ROLES.GLOBAL_ADMIN)
+      expect(pmPerms.length).toBeLessThan(globalAdminPerms.length)
+      expect(globalAdminPerms.length - pmPerms.length).toBe(2)
     })
   })
 })
