@@ -32,7 +32,7 @@ async function main(): Promise<void> {
     create: {
       email: 'director@lotusassist.com.au',
       name: 'Sarah Mitchell',
-      role: 'DIRECTOR',
+      role: 'GLOBAL_ADMIN',
       isActive: true,
     },
   })

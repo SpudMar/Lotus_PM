@@ -2,7 +2,7 @@
  * POST /api/xero/sync
  *
  * Syncs all approved, unsynced invoices to Xero.
- * - Requires xero:sync permission (Director or Plan Manager)
+ * - Requires xero:sync permission (Plan Manager or Global Admin)
  * - Processes up to 100 invoices per call (batched internally)
  * - Returns count of synced and failed invoices
  *

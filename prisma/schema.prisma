@@ -52,7 +52,7 @@ model CoreUser {
 }
 
 enum CoreRole {
-  DIRECTOR
+  GLOBAL_ADMIN
   PLAN_MANAGER
   ASSISTANT
   PARTICIPANT

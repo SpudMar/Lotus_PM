@@ -2,7 +2,7 @@
  * GET /api/xero/auth
  *
  * Initiates the Xero OAuth2 flow.
- * - Requires Director role (xero:write permission)
+ * - Requires PM+ role (xero:write permission)
  * - Generates a CSRF state token, stores it in a short-lived cookie
  * - Redirects the browser to Xero's authorization page
  *

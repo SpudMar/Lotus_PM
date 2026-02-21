@@ -3,7 +3,7 @@
  *
  * Manually trigger a rule with a provided context payload.
  * Useful for testing rules before deploying them to production.
- * Director-only.
+ * PM+ (Plan Manager or Global Admin).
  */
 
 import { NextResponse, type NextRequest } from 'next/server'

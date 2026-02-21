@@ -540,7 +540,7 @@ export default function ReportsPage(): React.JSX.Element {
         {!loading && activeTab === 'financial' && !financial && (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              Financial reports are restricted to Directors.
+              Financial reports require Plan Manager or Admin access.
             </CardContent>
           </Card>
         )}

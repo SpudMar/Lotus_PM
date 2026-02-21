@@ -24,7 +24,7 @@ export const notifyStaffActionSchema = z.object({
   type: z.literal('NOTIFY_STAFF'),
   params: z.object({
     message: z.string().min(1, 'Message is required').max(1000),
-    notifyRole: z.enum(['DIRECTOR', 'PLAN_MANAGER', 'ASSISTANT']),
+    notifyRole: z.enum(['GLOBAL_ADMIN', 'PLAN_MANAGER', 'ASSISTANT']),
   }),
 })
 

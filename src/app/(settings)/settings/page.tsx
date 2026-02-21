@@ -3,7 +3,7 @@
 /**
  * Settings Page — Integrations (Xero OAuth2)
  * REQ-019/REQ-023: Xero two-way sync.
- * Access: Director only (xero:write) for connect/disconnect; PM can view status.
+ * Access: PM+ (Plan Manager and Global Admin) for connect/disconnect.
  */
 
 import { useEffect, useState, useCallback, Suspense } from 'react'
@@ -53,8 +53,8 @@ function SettingsContent(): React.JSX.Element {
   const [syncResult, setSyncResult] = useState<XeroSyncApiResponse | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const isDirector = session?.user?.role === 'DIRECTOR'
-  const canSync = session?.user?.role === 'DIRECTOR' || session?.user?.role === 'PLAN_MANAGER'
+  const isPMOrAdmin = session?.user?.role === 'PLAN_MANAGER' || session?.user?.role === 'GLOBAL_ADMIN'
+  const canSync = session?.user?.role === 'GLOBAL_ADMIN' || session?.user?.role === 'PLAN_MANAGER'
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -218,7 +218,7 @@ function SettingsContent(): React.JSX.Element {
                       )}
                     </Button>
                   )}
-                  {isDirector && (
+                  {isPMOrAdmin && (
                     <Button
                       variant="outline"
                       onClick={handleDisconnect}
@@ -259,14 +259,14 @@ function SettingsContent(): React.JSX.Element {
                   Connect your Xero organisation to automatically sync approved invoices as bills.
                   You will be redirected to Xero to authorise access.
                 </p>
-                {isDirector ? (
+                {isPMOrAdmin ? (
                   <Button onClick={handleConnect} size="sm">
                     <Link2 className="mr-2 h-4 w-4" />
                     Connect Xero
                   </Button>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">
-                    Only a Director can connect Xero. Contact your system administrator.
+                    Only a Plan Manager or Admin can connect Xero. Contact your system administrator.
                   </p>
                 )}
               </>
