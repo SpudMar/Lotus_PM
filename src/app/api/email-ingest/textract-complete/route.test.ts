@@ -60,6 +60,7 @@ const emptyExtracted: ExtractedInvoiceData = {
   gstCents: null,
   totalCents: null,
   providerAbn: null,
+  participantNdisNumber: null,
   lineItems: [],
   confidence: 0.85,
 }

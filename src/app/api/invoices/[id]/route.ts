@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requirePermission } from '@/lib/auth/session'
 import { getInvoice, approveInvoice, rejectInvoice, updateInvoice } from '@/lib/modules/invoices/invoices'
+import { recordProviderEmailMatch } from '@/lib/modules/invoices/auto-match'
 import { approveInvoiceSchema, rejectInvoiceSchema, updateInvoiceSchema } from '@/lib/modules/invoices/validation'
 import { z } from 'zod'
 
@@ -39,6 +40,15 @@ export async function PUT(
     const body = await request.json()
     const input = updateInvoiceSchema.parse(body)
     const invoice = await updateInvoice(id, input, session.user.id)
+
+    // Learning loop: if a provider was set and the invoice has a sender email,
+    // teach the system about this email→provider association (fire-and-forget).
+    if (input.providerId && invoice.sourceEmail) {
+      void recordProviderEmailMatch(input.providerId, invoice.sourceEmail).catch(() => {
+        // Non-blocking: learning loop failure must not affect the save response
+      })
+    }
+
     return NextResponse.json({ data: invoice })
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {

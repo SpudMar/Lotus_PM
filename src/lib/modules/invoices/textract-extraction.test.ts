@@ -357,6 +357,61 @@ describe('extractInvoiceData — graceful handling of missing/empty input', () =
   })
 })
 
+// ── extractInvoiceData — NDIS number extraction ───────────────────────────────
+
+describe('extractInvoiceData — NDIS participant number', () => {
+  test('extracts NDIS number from "NDIS Number: 430111222"', () => {
+    const blocks = [line('NDIS Number: 430111222')]
+    const result = extractInvoiceData(blocks)
+    expect(result.participantNdisNumber).toBe('430111222')
+  })
+
+  test('normalizes NDIS number with spaces: "430 111 222" → "430111222"', () => {
+    const blocks = [line('NDIS Number: 430 111 222')]
+    const result = extractInvoiceData(blocks)
+    expect(result.participantNdisNumber).toBe('430111222')
+  })
+
+  test('extracts from "Participant Number: 4301112223" (10 digits)', () => {
+    const blocks = [line('Participant Number: 4301112223')]
+    const result = extractInvoiceData(blocks)
+    expect(result.participantNdisNumber).toBe('4301112223')
+  })
+
+  test('extracts from "NDIS No: 430111222"', () => {
+    const blocks = [line('NDIS No: 430111222')]
+    const result = extractInvoiceData(blocks)
+    expect(result.participantNdisNumber).toBe('430111222')
+  })
+
+  test('extracts from "NDIS: 430111222" (no keyword after NDIS)', () => {
+    const blocks = [line('NDIS: 430111222')]
+    const result = extractInvoiceData(blocks)
+    expect(result.participantNdisNumber).toBe('430111222')
+  })
+
+  test('returns null when no NDIS number present in document', () => {
+    const blocks = [
+      line('Invoice No: INV-001'),
+      line('Total Due: $100.00'),
+      line('ABN: 11 111 111 111'),
+    ]
+    const result = extractInvoiceData(blocks)
+    expect(result.participantNdisNumber).toBeNull()
+  })
+
+  test('returns null for empty block array', () => {
+    const result = extractInvoiceData([])
+    expect(result.participantNdisNumber).toBeNull()
+  })
+
+  test('full sample invoice includes NDIS number in result', () => {
+    // buildSampleBlocks has line('NDIS Number: 430111222')
+    const result = extractInvoiceData(buildSampleBlocks())
+    expect(result.participantNdisNumber).toBe('430111222')
+  })
+})
+
 // ── extractInvoiceData — confidence ──────────────────────────────────────────
 
 describe('extractInvoiceData — confidence score', () => {

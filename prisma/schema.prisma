@@ -192,9 +192,27 @@ model CrmProvider {
   invoices        InvInvoice[]
   commLogs        CrmCommLog[]
   correspondence  CrmCorrespondence[]
+  emails          CrmProviderEmail[]
 
   @@index([abn])
   @@map("crm_providers")
+}
+
+// Known sender email addresses for providers.
+// Used by the auto-matching service to link inbound invoice emails to providers.
+// A single email address can belong to only one provider (unique constraint).
+// isVerified becomes true after a PM confirms the match a second time.
+model CrmProviderEmail {
+  id          String      @id @default(cuid())
+  providerId  String
+  provider    CrmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  email       String      @unique  // One email → one provider only
+  isVerified  Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([providerId])
+  @@map("crm_provider_emails")
 }
 
 model CrmCommLog {
@@ -371,6 +389,10 @@ model InvInvoice {
   aiConfidence    Float?        // 0.0–1.0
   aiExtractedAt   DateTime?
   aiRawData       Json?         // Full Textract response
+
+  // Auto-matching — provider/participant linked by the matching service
+  matchConfidence Float?        // 0.0–1.0 confidence of the auto-match
+  matchMethod     String?       // e.g. "ABN_EXACT", "EMAIL_EXACT", "EMAIL_DOMAIN", "HISTORICAL", "NDIS_NUMBER", "MANUAL"
 
   // S3 storage — REQ-011: stored in ap-southeast-2
   s3Key           String?       // Key in S3 bucket
