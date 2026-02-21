@@ -6,7 +6,7 @@
  * Access: Director only (xero:write) for connect/disconnect; PM can view status.
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
@@ -42,7 +42,7 @@ function StatusBadge({ connected }: { connected: boolean }): React.JSX.Element {
   )
 }
 
-export default function SettingsPage(): React.JSX.Element {
+function SettingsContent(): React.JSX.Element {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
 
@@ -275,5 +275,13 @@ export default function SettingsPage(): React.JSX.Element {
         </Card>
       </div>
     </DashboardShell>
+  )
+}
+
+export default function SettingsPage(): React.JSX.Element {
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
   )
 }
