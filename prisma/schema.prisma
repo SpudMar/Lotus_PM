@@ -241,7 +241,7 @@ model PlanPlan {
   endDate         DateTime
   reviewDate      DateTime?
 
-  // PRODA reference
+  // PACE plan reference — populated manually or via B2B sync when available
   prodaPlanId     String?    @unique
 
   status          PlanStatus @default(ACTIVE)
@@ -385,7 +385,10 @@ model InvInvoiceLine {
 }
 
 // ─────────────────────────────────────────────
-// CLAIMS MODULE — NDIS Claims (manual now, PACE B2B later)
+// CLAIMS MODULE — NDIS Claims
+// Portal Mode: staff submit via PACE portal, record references + outcomes here.
+// B2B Mode (future): PACE API auto-submits claims, polls outcomes.
+// prodaXxx fields are optional — populated manually now, auto-populated with B2B.
 // ─────────────────────────────────────────────
 
 model ClmBatch {
@@ -405,7 +408,7 @@ model ClmBatch {
   completedAt     DateTime?
   notes           String?
 
-  // Future: PACE B2B batch reference
+  // PACE reference — entered manually (Portal Mode) or auto-populated (B2B Mode)
   prodaBatchId    String?       @unique
 
   createdAt       DateTime      @default(now())
@@ -439,7 +442,7 @@ model ClmClaim {
   batchId         String?
   batch           ClmBatch?   @relation(fields: [batchId], references: [id])
 
-  // PRODA reference — populated when B2B is available
+  // PACE references — entered manually (Portal Mode) or auto-populated (B2B Mode)
   prodaClaimId    String?     @unique
   prodaReference  String?
 

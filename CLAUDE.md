@@ -31,7 +31,7 @@ This file contains all locked decisions, requirements, and conventions for the L
 | REQ-006 | Current scale: 500–2,000 active participants | Scale |
 | REQ-007 | Invoice volume: 2,000–10,000 per month — AI processing is critical | Scale |
 | REQ-008 | Primary bank: CBA (Commonwealth Bank) | Integration |
-| REQ-009 | Must integrate with PRODA (B2B OAuth2/JWT auth) | Integration |
+| REQ-009 | PRODA/PACE integration (B2B OAuth2/JWT auth). PACE is the NDIA source of truth for participant plans, funding, budgets, support items, claims, and outcomes. App runs fully in **Portal Mode** (manual PACE portal + data entry) now. B2B API is a future automation layer, not a prerequisite. | Integration |
 | REQ-010 | Data retention: 7 years incidents, 5 years payments/invoices | Compliance |
 | REQ-011 | Australian data sovereignty — ALL data stays in Australia (AWS ap-southeast-2) | Compliance |
 | REQ-012 | WCAG 2.1 AA minimum for participant-facing app | Accessibility |
@@ -48,8 +48,8 @@ This file contains all locked decisions, requirements, and conventions for the L
 | REQ-023 | Xero accounting integration (two-way sync: invoices, payments, reconciliation) | Integration |
 | REQ-024 | Invoices arrive via shared email inbox | Workflow |
 | REQ-025 | Roles: Director (full + occasional PM), Plan Managers, Assistants (multi-role) | Security |
-| REQ-026 | PRODA/PACE B2B API access — application in progress (Nicole, 20 Feb 2026) | Integration |
-| REQ-027 | Target PACE B2B APIs (current system) — NOT legacy myNDIS APIs | Integration |
+| REQ-026 | PRODA/PACE B2B API access — application in progress (Nicole, 20 Feb 2026). Not blocking — app is fully operational in Portal Mode. B2B will automate data exchange when available. | Integration |
+| REQ-027 | When B2B is available, target PACE B2B APIs (current system) — NOT legacy myNDIS APIs | Integration |
 | REQ-028 | ABA files for payments now; must not preclude future payment provider API (e.g. Monoova). Where feasible, keep payment logic provider-agnostic without adding complexity | Architecture |
 
 ---
@@ -108,11 +108,11 @@ Every decision below is locked. Do not suggest alternatives without a clear reas
 3. ✅ **Plan Management** — plans, budgets, categories, spending tracking
 4. ✅ **Invoice Processing** — upload, extraction, validation, approval workflow
 
-### Priority 2 (Phase 2) — ACTIVE (partial blockers)
-5. **Claims & Payments** — PRODA integration, bulk claiming, status tracking ⛔ blocked on PACE B2B API
-6. **Banking** — ABA file generation (CBA format), bank reconciliation ✅ unblocked — ABA for now, future payment provider API (REQ-028)
-7. **Reporting** — dashboards, financial reports, NDIS compliance reports ✅ unblocked — can build
-8. **Notifications** — email (SES), in-app, SMS (SNS) ✅ unblocked — can build
+### Priority 2 (Phase 2) — ACTIVE
+5. **Claims & Payments** — Full manual workflow (Portal Mode). Bulk claiming, status tracking, batch operations. ✅ COMPLETE — PACE B2B API will add automation when available (not blocking).
+6. **Banking** — ABA file generation (CBA format), bank reconciliation ✅ COMPLETE — future payment provider API (REQ-028)
+7. **Reporting** — dashboards, financial reports, NDIS compliance reports ✅ COMPLETE
+8. **Notifications** — email (SES), in-app, SMS (SNS) ✅ COMPLETE
 
 ### Priority 3 (Phase 3–4)
 9. ✅ **Automation Engine** — rules, triggers, scheduled tasks — **COMPLETE (built ahead of schedule)**
@@ -233,7 +233,7 @@ See `.env.example` for the full list. Required for development:
 | AWS Account | Done | ✅ Account created 20 Feb 2026 | Nothing — unblocked |
 | Sentry Account | Done | ✅ Account created 20 Feb 2026 (US region — see DEC-001) | Nothing — unblocked |
 | GitHub setup | Done | ✅ Complete 21 Feb 2026 — main branch, protection rules, 6 labels | Phase 0 CI/CD |
-| PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | Phase 2 claims module only |
+| PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | **Not blocking.** App fully operational in Portal Mode. B2B will automate: participant/plan sync, claim submission, outcome polling, price guide validation. |
 | CBA CommBiz API | TBD | Not needed for MVP — ABA files used directly. Future: evaluate Monoova or similar API provider | Nothing (ABA unblocked) |
 | Xero API credentials | TBD | Existing developer account — retrieve Client ID/Secret from desktop | Phase 2 banking/accounting module |
 | Domain name | Done | ✅ `planmanager.lotusassist.com.au` — subdomain on existing domain | Staging deployment |
@@ -301,22 +301,48 @@ All routes smoke-tested locally. CI green on every PR.
 
 ---
 
-### Phase 2 — Claims & Payments (ACTIVE — partial blockers)
+### Phase 2 — Claims & Payments (ACTIVE — all modules complete in Portal Mode)
 
-Priority order for this phase:
+All four Phase 2 modules are **fully operational without PACE B2B API**. Staff use the PACE portal directly (as they do today with Entiprius) and enter data into Lotus PM manually. This is the standard workflow — B2B API is a future automation enhancement.
 
-1. **Claims & Payments** — ⛔ blocked on PRODA/PACE B2B API access (application sent 20 Feb, awaiting response). Module scaffolded with full CRUD, batch operations, and manual submit/outcome workflow.
-2. **Banking** — ✅ COMPLETE — ABA file generation, payment management, reconciliation. Manual upload to bank. Future: payment provider API (Monoova or similar, REQ-028).
-3. **Reporting** — ✅ COMPLETE — Dashboard summary, financial reports (Director-only), NDIS 5-day compliance metrics, budget utilisation, provider payment summary.
-4. **Notifications** — ✅ COMPLETE — In-app notifications with bell icon + unread badge in header. Convenience helpers for invoice/claim/compliance events. Automation NOTIFY_STAFF action wired. Email/SMS delivery tracking schema ready (SES/SNS integration pending).
+| Module | Status | Notes |
+|--------|--------|-------|
+| Claims & Payments | ✅ COMPLETE (Portal Mode) | Full CRUD, batch operations, manual submit + outcome recording. Staff submit claims via PACE portal, enter PRODA references and outcomes in Lotus PM. |
+| Banking | ✅ COMPLETE | ABA file generation (CBA format), payment management, reconciliation. Manual upload to bank. Future: payment provider API (REQ-028). |
+| Reporting | ✅ COMPLETE | Dashboard summary, financial reports (Director-only), NDIS 5-day compliance metrics, budget utilisation, provider payment summary. |
+| Notifications | ✅ COMPLETE | In-app notifications with bell icon + unread badge. Convenience helpers for invoice/claim/compliance events. Automation NOTIFY_STAFF action wired. Email/SMS delivery tracking schema ready (SES/SNS pending). |
 
-**Phase 2 blockers:**
+#### Portal Mode vs B2B API Mode
 
-| Blocker | Owner | Status |
-|---------|-------|--------|
-| PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response. Blocks Claims module live integration. |
-| Payment provider API (Monoova etc.) | TBD | Future — evaluate when volume justifies. ABA files used in the meantime. Not blocking. |
-| Xero API credentials | TBD | Existing dev account — retrieve Client ID/Secret from desktop. Blocks accounting sync. |
+The app operates in **Portal Mode** — staff interact with the PACE portal manually and enter results into Lotus PM. This mirrors existing plan management workflows and is production-ready.
+
+**Portal Mode (current — fully operational):**
+- Staff create participants, plans, and budgets via manual data entry
+- Staff submit claims to NDIA via the PACE portal, then record the PRODA reference in Lotus PM
+- Staff check claim outcomes in the PACE portal, then record approved/rejected/partial in Lotus PM
+- Support item codes and prices entered manually from provider invoices
+- Budget allocations entered manually from PACE-approved plan letters
+
+**B2B API Mode (future — when PRODA access granted):**
+When PACE B2B API credentials arrive, the following can be automated incrementally:
+
+| Capability | What it replaces | Effort | Priority |
+|------------|-----------------|--------|----------|
+| Claim submission via API | Manual PACE portal entry + copy-paste PRODA ref | Medium | High |
+| Claim outcome polling | Manual outcome checking + data entry | Medium | High |
+| Participant plan/funding sync | Manual budget entry from plan letters | Low | Medium |
+| Support item + price guide validation | No current validation (prices accepted as-is) | Medium | Medium |
+| Participant lookup/verification | Manual NDIS number entry | Low | Low |
+
+**Architecture is ready for B2B:** Schema has `prodaPlanId`, `prodaClaimId`, `prodaBatchId`, `prodaReference` fields (all optional). Business logic is isolated in module functions. When B2B arrives, add a PACE API client (`src/lib/modules/claims/pace-client.ts`) and replace manual submission with API calls — no business logic rewrite needed.
+
+#### Remaining external dependencies (not blocking app operation):
+
+| Dependency | Owner | Status | Impact |
+|------------|-------|--------|--------|
+| PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | Enables automation. Not blocking — app works in Portal Mode. |
+| Payment provider API (Monoova etc.) | TBD | Future — evaluate when volume justifies | ABA files working now. DEC-002. |
+| Xero API credentials | TBD | Existing dev account — retrieve Client ID/Secret from desktop | Blocks accounting sync only. |
 
 ---
 
@@ -336,7 +362,7 @@ Priority order for this phase:
 | Tests | ✅ | 27 passing (20 engine unit tests + 7 existing). All operators, template interpolation, multi-condition evaluation. |
 
 **Notes for next session:**
-- `NOTIFY_STAFF` action is stubbed — when Notifications module is built in Phase 2, wire it in.
+- ✅ `NOTIFY_STAFF` action wired to Notifications module (no longer stubbed).
 - Events are not yet emitted from invoice/plan modules — `processEvent` needs to be called from `approveInvoice`, `rejectInvoice`, etc. to trigger automation rules automatically.
 - Scheduled rules (`triggerType: SCHEDULE`, cronExpression) need a cron runner — not yet wired to any scheduler.
 
@@ -391,7 +417,7 @@ These are non-blocking observations recorded at end of Phase 1. Address opportun
 - **No pushing directly to `main`** — all changes via PR with passing CI checks.
 - **No skipping tests** — if you can't test it, that's a design problem, not a testing problem.
 - **No storing data outside AWS ap-southeast-2** — REQ-011, Australian data sovereignty.
-- **No legacy myNDIS APIs** — use PACE B2B APIs. REQ-027.
+- **No legacy myNDIS APIs** — when B2B integration is built, use PACE B2B APIs only. REQ-027.
 
 ---
 
@@ -433,5 +459,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 21 February 2026 — Phase 2: Reporting + Notifications complete; Banking complete (ABA, REQ-028); Claims scaffolded (awaiting PRODA)*
+*Last updated: 21 February 2026 — Phase 2 ALL MODULES COMPLETE (Portal Mode). Claims, Banking, Reporting, Notifications all operational without B2B. PACE B2B API is a future automation layer, not a prerequisite.*
 *All decisions in this file were made deliberately. Update with care.*

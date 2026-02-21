@@ -177,7 +177,7 @@ export default function BatchesPage(): React.JSX.Element {
             <DialogHeader>
               <DialogTitle>Submit Batch to NDIA</DialogTitle>
               <DialogDescription>
-                This will mark all claims in the batch as submitted. Enter the PRODA batch ID if available.
+                Submit this batch via the PACE portal, then enter the PRODA batch ID here to track it.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">

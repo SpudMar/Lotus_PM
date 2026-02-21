@@ -202,7 +202,7 @@ export default function ClaimsPage(): React.JSX.Element {
       <div className="space-y-4">
         <PageHeader
           title="Claims"
-          description="Create, submit, and track NDIS claims. Claims are submitted via the NDIA portal (PACE B2B integration pending)."
+          description="Create, submit, and track NDIS claims. Submit claims via the PACE portal and record references and outcomes here."
           actions={
             <div className="flex gap-2">
               {selectedClaims.size > 0 && (
@@ -405,7 +405,7 @@ export default function ClaimsPage(): React.JSX.Element {
             <DialogHeader>
               <DialogTitle>Submit Claim to NDIA</DialogTitle>
               <DialogDescription>
-                Mark this claim as submitted. Enter the PRODA reference if you have one from the NDIA portal.
+                Mark this claim as submitted to NDIA via the PACE portal. Enter the PRODA reference from the portal if available.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
