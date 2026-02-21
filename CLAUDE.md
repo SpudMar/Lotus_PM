@@ -50,6 +50,7 @@ This file contains all locked decisions, requirements, and conventions for the L
 | REQ-025 | Roles: Director (full + occasional PM), Plan Managers, Assistants (multi-role) | Security |
 | REQ-026 | PRODA/PACE B2B API access — application in progress (Nicole, 20 Feb 2026) | Integration |
 | REQ-027 | Target PACE B2B APIs (current system) — NOT legacy myNDIS APIs | Integration |
+| REQ-028 | ABA files for payments now; must not preclude future payment provider API (e.g. Monoova). Where feasible, keep payment logic provider-agnostic without adding complexity | Architecture |
 
 ---
 
@@ -109,7 +110,7 @@ Every decision below is locked. Do not suggest alternatives without a clear reas
 
 ### Priority 2 (Phase 2) — ACTIVE (partial blockers)
 5. **Claims & Payments** — PRODA integration, bulk claiming, status tracking ⛔ blocked on PACE B2B API
-6. **Banking** — ABA file generation (CBA format), bank reconciliation ⛔ blocked on CBA CommBiz API
+6. **Banking** — ABA file generation (CBA format), bank reconciliation ✅ unblocked — ABA for now, future payment provider API (REQ-028)
 7. **Reporting** — dashboards, financial reports, NDIS compliance reports ✅ unblocked — can build
 8. **Notifications** — email (SES), in-app, SMS (SNS) ✅ unblocked — can build
 
@@ -233,7 +234,7 @@ See `.env.example` for the full list. Required for development:
 | Sentry Account | Done | ✅ Account created 20 Feb 2026 (US region — see DEC-001) | Nothing — unblocked |
 | GitHub setup | Done | ✅ Complete 21 Feb 2026 — main branch, protection rules, 6 labels | Phase 0 CI/CD |
 | PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | Phase 2 claims module only |
-| CBA CommBiz API | TBD | Not started | Phase 2 banking module |
+| CBA CommBiz API | TBD | Not needed for MVP — ABA files used directly. Future: evaluate Monoova or similar API provider | Nothing (ABA unblocked) |
 | Xero API credentials | TBD | Existing developer account — retrieve Client ID/Secret from desktop | Phase 2 banking/accounting module |
 | Domain name | Done | ✅ `planmanager.lotusassist.com.au` — subdomain on existing domain | Staging deployment |
 | Entiprius data export | TBD | Not started | Phase 3 migration |
@@ -247,6 +248,7 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 | ID | Decision | Trigger | Options | Notes |
 |----|----------|---------|---------|-------|
 | DEC-001 | Sentry data residency for production | Before first real participant data enters staging OR before compliance sandpit testing | (A) Keep Sentry US + implement strict PII scrubbing via `beforeSend` hook — grey area under Privacy Act; (B) Self-host Sentry on ECS Fargate in ap-southeast-2 — fully compliant, higher ops overhead; (C) Drop Sentry, use CloudWatch only — simplest, fully compliant | Dev/coding uses Sentry US freely (no client data). Decision only needed when real data is in play. REQ-011. |
+| DEC-002 | Payment provider API (replace ABA manual upload) | When payment volume makes manual ABA upload impractical, or when provider payment speed becomes a business requirement | (A) Monoova — purpose-built AU disbursements, NPP, ~$0.10–$0.15/txn at volume; (B) Split Payments — cheapest ~$0.10/txn, payment splitting model; (C) Zepto (Cuscal) — direct NPP access, strong rates; (D) CBA CommBiz API — existing relationship, higher cost ~$0.40/txn | REQ-028. Banking module already built with ABA. Payment business logic is provider-agnostic — adding an API provider later requires implementing the payment initiation + webhook handling, not rewriting business logic. |
 
 ---
 
@@ -304,7 +306,7 @@ All routes smoke-tested locally. CI green on every PR.
 Priority order for this phase:
 
 1. **Claims & Payments** — ⛔ blocked on PRODA/PACE B2B API access (application sent 20 Feb, awaiting response). Can scaffold module, cannot integrate.
-2. **Banking** — ⛔ blocked on CBA CommBiz API (not started). Can scaffold ABA file generation logic, cannot submit.
+2. **Banking** — ✅ unblocked — ABA file generation for now. Manual upload to bank. Future: payment provider API (Monoova or similar, REQ-028).
 3. **Reporting** — ✅ unblocked — dashboards, financial reports, NDIS compliance reports
 4. **Notifications** — ✅ unblocked — email (SES), in-app, SMS (SNS)
 
@@ -313,7 +315,7 @@ Priority order for this phase:
 | Blocker | Owner | Status |
 |---------|-------|--------|
 | PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response. Blocks Claims module live integration. |
-| CBA CommBiz API | TBD | Not started. Blocks Banking module live submission. |
+| Payment provider API (Monoova etc.) | TBD | Future — evaluate when volume justifies. ABA files used in the meantime. Not blocking. |
 | Xero API credentials | TBD | Existing dev account — retrieve Client ID/Secret from desktop. Blocks accounting sync. |
 
 ---
