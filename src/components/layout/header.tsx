@@ -52,9 +52,15 @@ export function Header(): React.JSX.Element {
 
     void fetchCount()
     const interval = setInterval(() => void fetchCount(), 60_000)
+
+    // Refresh immediately when the notifications page marks items read/dismissed
+    const handleChange = () => void fetchCount()
+    window.addEventListener('lotus:notifications:changed', handleChange)
+
     return () => {
       cancelled = true
       clearInterval(interval)
+      window.removeEventListener('lotus:notifications:changed', handleChange)
     }
   }, [session])
 

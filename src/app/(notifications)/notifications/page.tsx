@@ -74,13 +74,21 @@ export default function NotificationsPage(): React.JSX.Element {
     void loadNotifications()
   }, [loadNotifications])
 
+  /** Notify the header bell badge to re-fetch its unread count immediately. */
+  function notifyBadgeRefresh() {
+    window.dispatchEvent(new CustomEvent('lotus:notifications:changed'))
+  }
+
   const handleMarkRead = async (id: string) => {
     const res = await fetch(`/api/notifications/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'read' }),
     })
-    if (res.ok) void loadNotifications()
+    if (res.ok) {
+      void loadNotifications()
+      notifyBadgeRefresh()
+    }
   }
 
   const handleDismiss = async (id: string) => {
@@ -89,7 +97,10 @@ export default function NotificationsPage(): React.JSX.Element {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'dismiss' }),
     })
-    if (res.ok) void loadNotifications()
+    if (res.ok) {
+      void loadNotifications()
+      notifyBadgeRefresh()
+    }
   }
 
   const handleMarkAllRead = async () => {
@@ -98,7 +109,10 @@ export default function NotificationsPage(): React.JSX.Element {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'read-all' }),
     })
-    if (res.ok) void loadNotifications()
+    if (res.ok) {
+      void loadNotifications()
+      notifyBadgeRefresh()
+    }
   }
 
   return (
