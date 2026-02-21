@@ -249,8 +249,10 @@ export async function getComplianceMetrics(): Promise<ComplianceMetrics> {
         atRisk.push({
           id: inv.id,
           invoiceNumber: inv.invoiceNumber,
-          providerName: inv.provider.name,
-          participantName: `${inv.participant.firstName} ${inv.participant.lastName}`,
+          providerName: inv.provider?.name ?? 'Unknown Provider',
+          participantName: inv.participant
+            ? `${inv.participant.firstName} ${inv.participant.lastName}`
+            : 'Unknown Participant',
           receivedAt: inv.receivedAt.toISOString(),
           businessDaysElapsed: daysElapsed,
         })

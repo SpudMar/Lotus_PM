@@ -298,12 +298,13 @@ model PlanBudgetLine {
 
 model InvInvoice {
   id              String        @id @default(cuid())
-  participantId   String
-  providerId      String
+  // Nullable — email-ingested drafts arrive before participant/provider are identified
+  participantId   String?
+  providerId      String?
   planId          String?
 
-  participant     CrmParticipant @relation(fields: [participantId], references: [id])
-  provider        CrmProvider   @relation(fields: [providerId], references: [id])
+  participant     CrmParticipant? @relation(fields: [participantId], references: [id])
+  provider        CrmProvider?  @relation(fields: [providerId], references: [id])
   plan            PlanPlan?     @relation(fields: [planId], references: [id])
 
   // Invoice details
@@ -336,6 +337,11 @@ model InvInvoice {
   approvedBy      CoreUser?     @relation("ApprovedBy", fields: [approvedById], references: [id])
   rejectedBy      CoreUser?     @relation("RejectedBy", fields: [rejectedById], references: [id])
 
+  // Email ingest — REQ-024
+  sourceEmail     String?       // Sender address from inbound email
+  textractJobId   String?       // Async Textract job ID (polled after processing)
+  ingestSource    InvIngestSource? // How the invoice entered the system
+
   // Xero sync — REQ-019/REQ-023
   xeroInvoiceId   String?       // Xero Invoice GUID after sync
   xeroSyncedAt    DateTime?     // Timestamp of last successful Xero sync
@@ -362,6 +368,12 @@ enum InvStatus {
   REJECTED
   CLAIMED
   PAID
+}
+
+enum InvIngestSource {
+  EMAIL   // Received via SES inbound email pipeline (REQ-024)
+  MANUAL  // Entered manually by staff via the web UI
+  API     // Submitted via external API (future)
 }
 
 model InvInvoiceLine {
