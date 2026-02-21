@@ -13,37 +13,51 @@ export const ROLES = {
 
 export type Role = typeof ROLES[keyof typeof ROLES]
 
-/** Permissions matrix — what each role can do */
+/**
+ * Permissions matrix — what each role can do.
+ *
+ * Role summary:
+ * - Director (Global Admin): Full system access including staff/settings management.
+ * - Plan Manager: Full authority over invoicing, claims, payments, client/provider
+ *   reviews. Some PMs also handle banking (ABA generation, reconciliation).
+ * - Assistant: Data entry for participants, providers, plans. Can see flagged items
+ *   and add comments, but cannot approve flagged items — PM or Director must approve.
+ */
 const PERMISSIONS = {
-  // Participants
+  // Participants — Assistants can create/edit (data entry)
   'participants:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
-  'participants:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  'participants:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'participants:delete': [ROLES.DIRECTOR],
 
-  // Providers
+  // Providers — Assistants can create/edit (data entry)
   'providers:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
-  'providers:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  'providers:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
 
-  // Plans & budgets
+  // Plans & budgets — Assistants can create/edit plans (plan entry)
   'plans:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
-  'plans:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  'plans:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
 
-  // Invoices
+  // Invoices — Assistants can upload/edit, only PM+ can approve/reject
   'invoices:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'invoices:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'invoices:approve': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
   'invoices:reject': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
 
-  // Claims
-  'claims:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  // Claims — Assistants can view; PM+ can create, submit, record outcomes
+  'claims:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'claims:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
   'claims:submit': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
   'claims:outcome': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
 
-  // Banking
+  // Banking — PM+ can view and manage; PM+ can generate ABA and reconcile
   'banking:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
-  'banking:write': [ROLES.DIRECTOR],
-  'banking:generate': [ROLES.DIRECTOR],
+  'banking:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  'banking:generate': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+
+  // Flagged items — Assistants can view and comment; PM+ can approve/resolve
+  'flags:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
+  'flags:comment': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
+  'flags:approve': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
 
   // Reports
   'reports:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],

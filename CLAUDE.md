@@ -86,10 +86,16 @@ Every decision below is locked. Do not suggest alternatives without a clear reas
 
 | Role | Access Level | Notes |
 |------|-------------|-------|
-| **Director** | Full system access | Can act as PM. Sees all financials. Manages staff. System config. |
-| **Plan Manager** | Full PM access | Manage participants, invoices, claims, plans, comms. Cannot manage staff or system settings. |
-| **Assistant** | Limited access | View participants, log comms, basic data entry, upload invoices. Cannot approve claims or modify plans. |
+| **Director** | Global Admin — full system access | Can act as PM. Sees all financials. Manages staff. System config. Approves flagged items. |
+| **Plan Manager** | Full operational authority | Full authority over invoicing, claims, payments, client/provider reviews. Can generate ABA files, reconcile payments, approve/reject invoices, submit claims, record outcomes. Can approve flagged items. Cannot manage staff or system settings. |
+| **Assistant** | Data entry + limited review | Create/edit participants, providers, plans. Upload invoices. View claims (read-only). Can see flagged/warning items and add comments, but **cannot approve** flagged items — PM or Director must approve. No banking access. |
 | **Participant** | Own data only | Via mobile app. Budget, invoice status, messages, documents. |
+
+### Flag/Review Workflow
+- Assistants doing data entry may encounter warnings (e.g., provider bank detail changes, duplicate entries, budget overspend alerts)
+- Assistants can **view** the warning and **add a comment** explaining context
+- Only Plan Manager or Director can **approve/resolve** a flagged item
+- This ensures quality control without blocking the Assistant from doing their data entry work
 
 ---
 
