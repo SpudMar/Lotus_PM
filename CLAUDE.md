@@ -238,7 +238,7 @@ See `.env.example` for the full list. Required for development:
 | GitHub setup | Done | ✅ Complete 21 Feb 2026 — main branch, protection rules, 6 labels | Phase 0 CI/CD |
 | PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | **Not blocking.** App fully operational in Portal Mode. B2B will automate: participant/plan sync, claim submission, outcome polling, price guide validation. |
 | CBA CommBiz API | TBD | Not needed for MVP — ABA files used directly. Future: evaluate Monoova or similar API provider | Nothing (ABA unblocked) |
-| Xero API credentials | TBD | Existing developer account — retrieve Client ID/Secret from desktop | Phase 2 banking/accounting module |
+| Xero API credentials | Done | ✅ App "Lotus Plan Management" on developer.xero.com. OAuth2 integration built (21 Feb 2026). Credentials in `.env.local`. | Nothing — unblocked |
 | Domain name | Done | ✅ `planmanager.lotusassist.com.au` — subdomain on existing domain | Staging deployment |
 | Entiprius data export | TBD | Not started | Phase 3 migration |
 
@@ -257,9 +257,9 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 
 ## CURRENT PHASE STATUS
 
-**Active Phase:** Phase 2 complete. SMS delivery live. Open PR #5 (`claude/app-without-b2b-IMm75` → `main`) ready for merge.
+**Active Phase:** Phase 2 complete. SMS delivery live. PR #5 merged. Xero OAuth2 integration complete.
 
-**Current working branch:** `claude/app-without-b2b-IMm75` — contains all Phase 2 + Phase 3 work + bug fixes + ClickSend SMS. **179/179 tests passing.**
+**Current working branch:** `claude/xero-integration-handoff-zpLeL` — Xero OAuth2 integration. **225/225 tests passing.**
 
 **Dev server:** `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`, Tailwind v4 requires Turbopack)
 
@@ -353,7 +353,7 @@ When PACE B2B API credentials arrive, the following can be automated incremental
 |------------|-------|--------|--------|
 | PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | Enables automation. Not blocking — app works in Portal Mode. |
 | Payment provider API (Monoova etc.) | TBD | Future — evaluate when volume justifies | ABA files working now. DEC-002. |
-| Xero API credentials | TBD | Existing dev account — retrieve Client ID/Secret from desktop | Blocks accounting sync only. |
+| Xero OAuth2 integration | Done | ✅ OAuth2 flow built. Settings page at `/settings`. Connect Xero, sync approved invoices as bills. 46 Xero tests pass. | Nothing — unblocked |
 
 ---
 
@@ -400,6 +400,17 @@ When PACE B2B API credentials arrive, the following can be automated incremental
 | `src/lib/modules/notifications/validation.ts` | Zod schemas for SMS (`sendSmsSchema`) and in-app notifications (`createNotificationSchema`) |
 | `src/app/api/notifications/sms/route.ts` | `POST /api/notifications/sms` — RBAC-protected SMS send + audit log |
 | `src/app/(notifications)/notifications/page.tsx` | Notifications UI — list, mark read, dismiss |
+| `src/lib/modules/xero/xero-auth.ts` | Xero OAuth2 helpers — `buildXeroAuthUrl`, `exchangeCodeForTokens`, `refreshXeroToken`, `getActiveXeroConnection` |
+| `src/lib/modules/xero/xero-client.ts` | Xero API client — contact find/create, invoice create/update |
+| `src/lib/modules/xero/xero-sync.ts` | Invoice → Xero bill sync — `syncInvoiceToXero`, `syncPendingInvoicesToXero` |
+| `src/lib/modules/xero/types.ts` | Xero TypeScript types (tokens, tenants, invoices, sync results) |
+| `src/app/api/xero/auth/route.ts` | `GET /api/xero/auth` — initiate OAuth2 flow (Director only) |
+| `src/app/api/xero/callback/route.ts` | `GET /api/xero/callback` — OAuth2 callback, store tokens |
+| `src/app/api/xero/status/route.ts` | `GET /api/xero/status` — connection status |
+| `src/app/api/xero/disconnect/route.ts` | `DELETE /api/xero/disconnect` — deactivate connection |
+| `src/app/api/xero/sync/route.ts` | `POST /api/xero/sync` — bulk sync approved invoices |
+| `src/app/api/xero/sync/[invoiceId]/route.ts` | `POST /api/xero/sync/[invoiceId]` — sync single invoice |
+| `src/app/(settings)/settings/page.tsx` | Settings UI — Xero connection status, connect/disconnect, trigger sync |
 | `infrastructure/lib/config.ts` | Environment configs (staging/production) |
 | `scripts/seed.ts` | Dev seed data (not idempotent — see Phase 1 notes) |
 | `docker-compose.yml` | Local Postgres 16, Redis 7, MailHog |
@@ -473,5 +484,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 21 February 2026 — Phase 2 ALL MODULES COMPLETE + ClickSend SMS live. 179/179 tests. PR #5 open (`claude/app-without-b2b-IMm75` → `main`). PACE B2B API is a future automation layer, not a prerequisite.*
+*Last updated: 21 February 2026 — Xero OAuth2 integration complete. 225/225 tests passing. Branch: `claude/xero-integration-handoff-zpLeL`. Connect Xero via Settings page, sync approved invoices to Xero as bills. Token refresh auto-managed. Director-only connect/disconnect, PM+ can trigger sync.*
 *All decisions in this file were made deliberately. Update with care.*
