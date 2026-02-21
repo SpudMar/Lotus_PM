@@ -223,6 +223,9 @@ See `.env.example` for the full list. Required for development:
 - `NEXTAUTH_URL` — `http://localhost:3000`
 - `NEXTAUTH_SECRET` — generate with `openssl rand -base64 32`
 - AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=ap-southeast-2`)
+- `CLICKSEND_USERNAME` — ClickSend account username (set in `.env.local`)
+- `CLICKSEND_API_KEY` — ClickSend API key (set in `.env.local`)
+- `CLICKSEND_FROM` — SMS sender ID, default `LotusAssist` (max 11 chars alphanumeric)
 
 ---
 
@@ -254,7 +257,15 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 
 ## CURRENT PHASE STATUS
 
-**Active Phase:** Phase 2 — Claims & Payments
+**Active Phase:** Phase 2 complete. SMS delivery live. Open PR #5 (`claude/app-without-b2b-IMm75` → `main`) ready for merge.
+
+**Current working branch:** `claude/app-without-b2b-IMm75` — contains all Phase 2 + Phase 3 work + bug fixes + ClickSend SMS. **179/179 tests passing.**
+
+**Dev server:** `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`, Tailwind v4 requires Turbopack)
+
+**DB migrations state:** All 5 migrations applied and recorded in `_prisma_migrations`. Last: `20260221120000_notifications_module` (adds `notif_notifications` table + `phone` field on `CoreUser`).
+
+**Staff phone numbers:** Director (`director@lotusassist.com.au`) and Plan Manager (`pm@lotusassist.com.au`) both have `phone = +61411941699` in DB for SMS testing.
 
 ---
 
@@ -310,7 +321,7 @@ All four Phase 2 modules are **fully operational without PACE B2B API**. Staff u
 | Claims & Payments | ✅ COMPLETE (Portal Mode) | Full CRUD, batch operations, manual submit + outcome recording. Staff submit claims via PACE portal, enter PRODA references and outcomes in Lotus PM. |
 | Banking | ✅ COMPLETE | ABA file generation (CBA format), payment management, reconciliation. Manual upload to bank. Future: payment provider API (REQ-028). |
 | Reporting | ✅ COMPLETE | Dashboard summary, financial reports (Director-only), NDIS 5-day compliance metrics, budget utilisation, provider payment summary. |
-| Notifications | ✅ COMPLETE | In-app notifications with bell icon + unread badge. Convenience helpers for invoice/claim/compliance events. Automation NOTIFY_STAFF action wired. Email/SMS delivery tracking schema ready (SES/SNS pending). |
+| Notifications | ✅ COMPLETE | In-app notifications with bell icon + unread badge. Bell badge updates in real-time via custom DOM event (`lotus:notifications:changed`). Dashboard stat cards wired to live DB. Seed script fully idempotent (upsert). **ClickSend SMS delivery live** — `POST /api/notifications/sms`, `NOTIFY_STAFF` automation action sends real SMS. |
 
 #### Portal Mode vs B2B API Mode
 
@@ -362,7 +373,7 @@ When PACE B2B API credentials arrive, the following can be automated incremental
 | Tests | ✅ | 27 passing (20 engine unit tests + 7 existing). All operators, template interpolation, multi-condition evaluation. |
 
 **Notes for next session:**
-- ✅ `NOTIFY_STAFF` action wired to Notifications module (no longer stubbed).
+- ✅ `NOTIFY_STAFF` action wired to ClickSend SMS — calls `sendSmsToStaffByRole()`, finds all active staff with a phone set, sends real SMS.
 - Events are not yet emitted from invoice/plan modules — `processEvent` needs to be called from `approveInvoice`, `rejectInvoice`, etc. to trigger automation rules automatically.
 - Scheduled rules (`triggerType: SCHEDULE`, cronExpression) need a cron runner — not yet wired to any scheduler.
 
@@ -384,7 +395,10 @@ When PACE B2B API credentials arrive, the following can be automated incremental
 | `src/app/(automation)/automation/page.tsx` | Automation UI — rule list, create, test, toggle |
 | `src/lib/modules/reports/reports.ts` | Reporting queries (dashboard, financial, compliance, budget) |
 | `src/app/(reports)/reports/page.tsx` | Reports UI — overview, compliance, budget, financial tabs |
-| `src/lib/modules/notifications/notifications.ts` | In-app notification CRUD and convenience helpers |
+| `src/lib/modules/notifications/notifications.ts` | SMS delivery (`sendSms`, `sendSmsToStaffByRole`) + in-app helpers (`getUnreadCount`, `markAsRead`, etc.) |
+| `src/lib/modules/notifications/clicksend.ts` | ClickSend REST API v3 client — normalises AU numbers, graceful degradation if env vars missing |
+| `src/lib/modules/notifications/validation.ts` | Zod schemas for SMS (`sendSmsSchema`) and in-app notifications (`createNotificationSchema`) |
+| `src/app/api/notifications/sms/route.ts` | `POST /api/notifications/sms` — RBAC-protected SMS send + audit log |
 | `src/app/(notifications)/notifications/page.tsx` | Notifications UI — list, mark read, dismiss |
 | `infrastructure/lib/config.ts` | Environment configs (staging/production) |
 | `scripts/seed.ts` | Dev seed data (not idempotent — see Phase 1 notes) |
@@ -399,8 +413,8 @@ These are non-blocking observations recorded at end of Phase 1. Address opportun
 
 | ID | Issue | Priority | Notes |
 |----|-------|----------|-------|
-| TD-001 | Dashboard stat cards show dashes | Low | `/dashboard` uses placeholder data — not wired to actual DB counts |
-| TD-002 | Seed script not idempotent | Medium | Running `npm run db:seed` multiple times creates duplicate data. Add upsert or `DELETE` at top before next use. |
+| TD-001 | ~~Dashboard stat cards show dashes~~ | ✅ FIXED | Dashboard now fetches live from `GET /api/reports/dashboard` on mount |
+| TD-002 | ~~Seed script not idempotent~~ | ✅ FIXED | Seed now uses upsert throughout — safe to run multiple times |
 | TD-003 | Plans page shows budget lines as rows | Low | Consider grouping by plan for plan-level summary view |
 | TD-004 | 37 npm audit vulnerabilities | Medium | 3 low, 1 moderate, 33 high — mostly transitive dependencies. Run `npm audit` to review before staging deployment. |
 
@@ -459,5 +473,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 21 February 2026 — Phase 2 ALL MODULES COMPLETE (Portal Mode). Claims, Banking, Reporting, Notifications all operational without B2B. PACE B2B API is a future automation layer, not a prerequisite.*
+*Last updated: 21 February 2026 — Phase 2 ALL MODULES COMPLETE + ClickSend SMS live. 179/179 tests. PR #5 open (`claude/app-without-b2b-IMm75` → `main`). PACE B2B API is a future automation layer, not a prerequisite.*
 *All decisions in this file were made deliberately. Update with care.*
