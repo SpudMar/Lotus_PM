@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requirePermission } from '@/lib/auth/session'
-import { getInvoice, approveInvoice, rejectInvoice } from '@/lib/modules/invoices/invoices'
-import { approveInvoiceSchema, rejectInvoiceSchema } from '@/lib/modules/invoices/validation'
+import { getInvoice, approveInvoice, rejectInvoice, updateInvoice } from '@/lib/modules/invoices/invoices'
+import { approveInvoiceSchema, rejectInvoiceSchema, updateInvoiceSchema } from '@/lib/modules/invoices/validation'
+import { z } from 'zod'
 
 export async function GET(
   _request: NextRequest,
@@ -23,6 +24,40 @@ export async function GET(
     }
     if (error instanceof Error && error.message === 'Forbidden') {
       return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 })
+    }
+    return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  try {
+    const session = await requirePermission('invoices:write')
+    const { id } = await params
+    const body = await request.json()
+    const input = updateInvoiceSchema.parse(body)
+    const invoice = await updateInvoice(id, input, session.user.id)
+    return NextResponse.json({ data: invoice })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 })
+    }
+    if (error instanceof Error && error.message === 'Forbidden') {
+      return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 })
+    }
+    if (error instanceof Error && error.message === 'NOT_FOUND') {
+      return NextResponse.json({ error: 'Invoice not found', code: 'NOT_FOUND' }, { status: 404 })
+    }
+    if (error instanceof Error && error.message === 'INVALID_STATUS') {
+      return NextResponse.json(
+        { error: 'Invoice cannot be edited in its current status', code: 'INVALID_STATUS' },
+        { status: 422 }
+      )
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: error.errors }, { status: 400 })
     }
     return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
   }

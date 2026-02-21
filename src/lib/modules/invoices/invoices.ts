@@ -2,9 +2,10 @@ import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { processEvent } from '@/lib/modules/automation/engine'
 import type { z } from 'zod'
-import type { createInvoiceSchema } from './validation'
+import type { createInvoiceSchema, updateInvoiceSchema } from './validation'
 
 type CreateInput = z.infer<typeof createInvoiceSchema>
+type UpdateInput = z.infer<typeof updateInvoiceSchema>
 
 export async function listInvoices(params: {
   page: number
@@ -12,13 +13,22 @@ export async function listInvoices(params: {
   status?: string
   participantId?: string
   providerId?: string
+  ingestSource?: string
+  search?: string
 }) {
-  const { page, pageSize, status, participantId, providerId } = params
+  const { page, pageSize, status, participantId, providerId, ingestSource, search } = params
   const where = {
     deletedAt: null,
-    ...(status ? { status: status as 'RECEIVED' | 'APPROVED' } : {}),
+    ...(status ? { status: status as 'RECEIVED' | 'PROCESSING' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'CLAIMED' | 'PAID' } : {}),
     ...(participantId ? { participantId } : {}),
     ...(providerId ? { providerId } : {}),
+    ...(ingestSource ? { ingestSource: ingestSource as 'EMAIL' | 'MANUAL' | 'API' } : {}),
+    ...(search ? {
+      OR: [
+        { invoiceNumber: { contains: search, mode: 'insensitive' as const } },
+        { sourceEmail: { contains: search, mode: 'insensitive' as const } },
+      ],
+    } : {}),
   }
 
   const [data, total] = await Promise.all([
@@ -90,6 +100,93 @@ export async function createInvoice(input: CreateInput, userId: string) {
     resource: 'invoice',
     resourceId: invoice.id,
     after: { invoiceNumber: invoice.invoiceNumber, totalCents: invoice.totalCents },
+  })
+
+  return invoice
+}
+
+/**
+ * Update a draft invoice (RECEIVED or PENDING_REVIEW only).
+ * Replaces all invoice lines if provided.
+ * When participantId/providerId change, updates linked CrmCorrespondence entries.
+ */
+export async function updateInvoice(id: string, input: UpdateInput, userId: string) {
+  // Guard: only allow updates on drafts not yet approved/claimed
+  const current = await prisma.invInvoice.findFirst({
+    where: { id, deletedAt: null },
+    select: { status: true, invoiceNumber: true, totalCents: true },
+  })
+
+  if (!current) {
+    throw new Error('NOT_FOUND')
+  }
+
+  if (current.status !== 'RECEIVED' && current.status !== 'PENDING_REVIEW') {
+    throw new Error('INVALID_STATUS')
+  }
+
+  // Replace lines if provided
+  if (input.lines !== undefined) {
+    await prisma.invInvoiceLine.deleteMany({ where: { invoiceId: id } })
+    if (input.lines.length > 0) {
+      await prisma.invInvoiceLine.createMany({
+        data: input.lines.map((line) => ({
+          invoiceId: id,
+          supportItemCode: line.supportItemCode,
+          supportItemName: line.supportItemName,
+          categoryCode: line.categoryCode,
+          serviceDate: new Date(line.serviceDate),
+          quantity: line.quantity,
+          unitPriceCents: line.unitPriceCents,
+          totalCents: line.totalCents,
+          gstCents: line.gstCents ?? 0,
+          budgetLineId: line.budgetLineId ?? undefined,
+        })),
+      })
+    }
+  }
+
+  const invoice = await prisma.invInvoice.update({
+    where: { id },
+    data: {
+      ...(input.invoiceNumber !== undefined ? { invoiceNumber: input.invoiceNumber } : {}),
+      ...(input.invoiceDate !== undefined ? { invoiceDate: new Date(input.invoiceDate) } : {}),
+      ...(input.subtotalCents !== undefined ? { subtotalCents: input.subtotalCents } : {}),
+      ...(input.gstCents !== undefined ? { gstCents: input.gstCents } : {}),
+      ...(input.totalCents !== undefined ? { totalCents: input.totalCents } : {}),
+      ...(input.participantId !== undefined ? { participantId: input.participantId } : {}),
+      ...(input.providerId !== undefined ? { providerId: input.providerId } : {}),
+      ...(input.planId !== undefined ? { planId: input.planId } : {}),
+    },
+    include: { lines: true },
+  })
+
+  // Update linked CrmCorrespondence entries when participant/provider are newly linked
+  if (input.participantId !== undefined) {
+    await prisma.crmCorrespondence.updateMany({
+      where: { invoiceId: id, participantId: null },
+      data: { participantId: input.participantId },
+    })
+  }
+  if (input.providerId !== undefined) {
+    await prisma.crmCorrespondence.updateMany({
+      where: { invoiceId: id, providerId: null },
+      data: { providerId: input.providerId },
+    })
+  }
+
+  await createAuditLog({
+    userId,
+    action: 'invoice.updated',
+    resource: 'invoice',
+    resourceId: id,
+    before: { invoiceNumber: current.invoiceNumber, totalCents: current.totalCents },
+    after: {
+      invoiceNumber: invoice.invoiceNumber,
+      totalCents: invoice.totalCents,
+      participantId: invoice.participantId,
+      providerId: invoice.providerId,
+    },
   })
 
   return invoice

@@ -42,7 +42,13 @@ export async function getProvider(id: string) {
   return prisma.crmProvider.findFirst({
     where: { id, deletedAt: null },
     include: {
-      invoices: { orderBy: { receivedAt: 'desc' }, take: 10 },
+      invoices: {
+        orderBy: { receivedAt: 'desc' },
+        take: 10,
+        include: {
+          participant: { select: { firstName: true, lastName: true } },
+        },
+      },
       commLogs: { orderBy: { occurredAt: 'desc' }, take: 20 },
     },
   })

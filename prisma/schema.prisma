@@ -47,6 +47,7 @@ model CoreUser {
   submittedBatches     ClmBatch[]       @relation("BatchSubmittedBy")
   inAppNotifications   NotifNotification[] @relation("UserNotifications")
   uploadedDocuments    DocDocument[]    @relation("UploadedDocuments")
+  createdCorrespondence CrmCorrespondence[] @relation("CreatedCorrespondence")
 
   @@map("core_users")
 }
@@ -158,6 +159,7 @@ model CrmParticipant {
   documents         DocDocument[]
   notifications     NotifNotification[]
   claims            ClmClaim[]
+  correspondence    CrmCorrespondence[]
 
   @@index([ndisNumber])
   @@index([assignedToId])
@@ -189,6 +191,7 @@ model CrmProvider {
   // Relations
   invoices        InvInvoice[]
   commLogs        CrmCommLog[]
+  correspondence  CrmCorrespondence[]
 
   @@index([abn])
   @@map("crm_providers")
@@ -229,6 +232,53 @@ enum CommDirection {
   INBOUND
   OUTBOUND
   INTERNAL
+}
+
+// Per-client correspondence hub — REQ-024, Part B
+// Unified timeline of all communications per participant/provider.
+model CrmCorrespondence {
+  id            String               @id @default(cuid())
+  type          CorrespondenceType
+
+  subject       String?
+  body          String               @db.Text
+
+  // Sender / recipient addresses (email address or phone number)
+  fromAddress   String?
+  toAddress     String?
+
+  // Optional links — one or more may be set
+  participantId String?
+  participant   CrmParticipant?      @relation(fields: [participantId], references: [id])
+
+  providerId    String?
+  provider      CrmProvider?         @relation(fields: [providerId], references: [id])
+
+  invoiceId     String?
+  invoice       InvInvoice?          @relation(fields: [invoiceId], references: [id])
+
+  documentId    String?              // Link to DocDocument (no FK — optional future use)
+
+  createdById   String?              // Staff user who created this (null = system/automation)
+  createdBy     CoreUser?            @relation("CreatedCorrespondence", fields: [createdById], references: [id])
+
+  metadata      Json?                // Extra context: s3Key, originalFilename, etc.
+
+  createdAt     DateTime             @default(now())
+
+  @@index([participantId, createdAt])
+  @@index([providerId, createdAt])
+  @@index([invoiceId])
+  @@map("crm_correspondence")
+}
+
+enum CorrespondenceType {
+  EMAIL_INBOUND
+  EMAIL_OUTBOUND
+  SMS_INBOUND
+  SMS_OUTBOUND
+  NOTE
+  PHONE_CALL
 }
 
 // ─────────────────────────────────────────────
@@ -352,6 +402,7 @@ model InvInvoice {
 
   lines           InvInvoiceLine[]
   claims          ClmClaim[]
+  correspondence  CrmCorrespondence[]
 
   @@index([participantId])
   @@index([providerId])
