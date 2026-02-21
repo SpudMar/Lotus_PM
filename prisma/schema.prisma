@@ -46,6 +46,7 @@ model CoreUser {
   outcomeClaims        ClmClaim[]       @relation("ClaimOutcomeBy")
   submittedBatches     ClmBatch[]       @relation("BatchSubmittedBy")
   inAppNotifications   NotifNotification[] @relation("UserNotifications")
+  uploadedDocuments    DocDocument[]    @relation("UploadedDocuments")
 
   @@map("core_users")
 }
@@ -563,6 +564,15 @@ model BnkAbaFile {
 // DOCUMENTS MODULE — File Storage
 // ─────────────────────────────────────────────
 
+enum DocCategory {
+  SERVICE_AGREEMENT
+  PLAN_LETTER
+  INVOICE
+  ASSESSMENT
+  CORRESPONDENCE
+  OTHER
+}
+
 model DocDocument {
   id            String      @id @default(cuid())
   participantId String?
@@ -570,6 +580,7 @@ model DocDocument {
 
   name          String
   description   String?
+  category      DocCategory @default(OTHER)
   mimeType      String
   sizeBytes     Int
   s3Key         String
@@ -580,9 +591,14 @@ model DocDocument {
   previousId    String?     // Points to prior version
 
   uploadedById  String
+  uploadedBy    CoreUser    @relation("UploadedDocuments", fields: [uploadedById], references: [id])
+
   createdAt     DateTime    @default(now())
+  deletedAt     DateTime?   // Soft delete — REQ-010
 
   @@index([participantId])
+  @@index([uploadedById])
+  @@index([category])
   @@map("doc_documents")
 }
 
