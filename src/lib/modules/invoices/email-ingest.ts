@@ -28,6 +28,7 @@ import { randomUUID } from 'crypto'
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { createFromEmailIngest } from '@/lib/modules/crm/correspondence'
+import { autoMatchInvoice } from './auto-match'
 import type { ExtractedInvoiceData } from './textract-extraction'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -380,6 +381,21 @@ export async function applyExtractionToInvoice(
     if (found) resolvedProviderId = found.id
   }
 
+  // Run auto-match service for email/domain/historical/NDIS-number based matching.
+  // Fetch sourceEmail from the draft invoice so we can pass it to the matcher.
+  const draft = await prisma.invInvoice.findFirst({
+    where: { id: invoiceId },
+    select: { sourceEmail: true },
+  })
+  const autoMatch = await autoMatchInvoice(extracted, draft?.sourceEmail ?? null)
+
+  // Provider: prefer ABN lookup (already resolved above), fall back to auto-match
+  const finalProviderId = resolvedProviderId ?? autoMatch.providerId ?? undefined
+  // Participant: always from auto-match (ABN lookup doesn't handle participants)
+  const finalParticipantId = autoMatch.participantId ?? undefined
+  // Match metadata: use auto-match result (covers ABN_EXACT and all other methods)
+  const hasMatch = finalProviderId !== undefined || finalParticipantId !== undefined
+
   // Clear any auto-generated placeholder lines before creating extraction results.
   // Email-ingested drafts start with no lines, so this is a no-op in practice.
   // Guard: we only delete lines on invoices that have no linked claim lines,
@@ -435,8 +451,13 @@ export async function applyExtractionToInvoice(
       ...(extracted.subtotalCents !== null
         ? { subtotalCents: extracted.subtotalCents }
         : {}),
-      ...(resolvedProviderId !== undefined
-        ? { providerId: resolvedProviderId }
+      ...(finalProviderId !== undefined ? { providerId: finalProviderId } : {}),
+      ...(finalParticipantId !== undefined ? { participantId: finalParticipantId } : {}),
+      ...(hasMatch
+        ? {
+            matchMethod: autoMatch.matchMethod,
+            matchConfidence: autoMatch.matchConfidence,
+          }
         : {}),
     },
   })
@@ -452,6 +473,8 @@ export async function applyExtractionToInvoice(
       invoiceNumber: extracted.invoiceNumber,
       lineItemCount: extracted.lineItems.length,
       confidence: extracted.confidence,
+      matchMethod: hasMatch ? autoMatch.matchMethod : null,
+      matchConfidence: hasMatch ? autoMatch.matchConfidence : null,
     },
   })
 

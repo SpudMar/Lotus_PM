@@ -40,6 +40,8 @@ export interface ExtractedInvoiceData {
   totalCents: number | null
   /** Normalized ABN (11 digits, no spaces) for provider lookup */
   providerAbn: string | null
+  /** Normalized NDIS participant number (digits only, no spaces) */
+  participantNdisNumber: string | null
   lineItems: ExtractedLineItem[]
   /** Average Textract confidence, 0.0–1.0 */
   confidence: number
@@ -52,6 +54,13 @@ const NDIS_CODE_RE = /\b(\d{2}_\d{3}_\d{4}_\d_\d)\b/
 
 /** ABN: 12 345 678 901 or 12345678901 */
 const ABN_RE = /\b(?:abn|australian\s+business\s+number)\s*:?\s*(\d{2}\s*\d{3}\s*\d{3}\s*\d{3})\b/i
+
+/**
+ * NDIS participant number: 9–10 digits, sometimes with spaces.
+ * Often preceded by "NDIS", "Participant", "Number", "No", "Num", "#", or "ID".
+ * Captures the raw digit-and-space sequence; strip spaces to normalize.
+ */
+const NDIS_NUMBER_RE = /(?:ndis|participant)(?:\s+(?:no|number|num|#|id))?\s*:?\s*(\d[\d\s]{7,10}\d)/i
 
 /** Currency amount: $1,234.56 or 1,234.56 or 1234.56 */
 const AMOUNT_RE = /\$?\s*([\d,]+(?:\.\d{1,2})?)/g
@@ -228,6 +237,18 @@ export function extractInvoiceData(blocks: Block[]): ExtractedInvoiceData {
     providerAbn = normalizeAbn(abnMatch[1])
   }
 
+  // ── Participant NDIS number ───────────────────────────────────────────────────
+  // Search line-by-line to avoid the regex crossing newline boundaries.
+  let participantNdisNumber: string | null = null
+  for (const textLine of lines) {
+    const ndisMatch = NDIS_NUMBER_RE.exec(textLine)
+    if (ndisMatch?.[1]) {
+      // Strip spaces to normalize: "430 111 222" → "430111222"
+      participantNdisNumber = ndisMatch[1].replace(/\s/g, '')
+      break
+    }
+  }
+
   // ── NDIS line items ───────────────────────────────────────────────────────────
   const lineItems: ExtractedLineItem[] = []
   const today = new Date()
@@ -296,6 +317,7 @@ export function extractInvoiceData(blocks: Block[]): ExtractedInvoiceData {
     gstCents,
     totalCents,
     providerAbn,
+    participantNdisNumber,
     lineItems,
     confidence,
   }
