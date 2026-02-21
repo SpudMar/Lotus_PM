@@ -102,13 +102,20 @@ async function executeAction(action: AutoAction, context: TriggerContext): Promi
         return true
       }
 
-      case 'NOTIFY_STAFF':
-        // Stubbed — Phase 2 Notifications module will implement this
-        // For now, log so we know it was triggered
-        console.info(
-          `[automation] NOTIFY_STAFF (stub): role=${action.params.notifyRole} msg=${interpolateTemplate(action.params.message, context)}`
-        )
+      case 'NOTIFY_STAFF': {
+        const { notifyByRole } = await import('@/lib/modules/notifications/notifications')
+        const notifyMessage = interpolateTemplate(action.params.message, context)
+        const role = action.params.notifyRole ?? 'PLAN_MANAGER'
+        await notifyByRole(role as 'DIRECTOR' | 'PLAN_MANAGER' | 'ASSISTANT', {
+          type: 'ACTION_REQUIRED',
+          title: 'Automation Alert',
+          body: notifyMessage,
+          category: 'SYSTEM',
+          priority: 'NORMAL',
+          channels: ['IN_APP'],
+        })
         return true
+      }
 
       default:
         return false

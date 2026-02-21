@@ -43,6 +43,7 @@ model CoreUser {
   submittedClaims      ClmClaim[]       @relation("ClaimSubmittedBy")
   outcomeClaims        ClmClaim[]       @relation("ClaimOutcomeBy")
   commLogs             CrmCommLog[]
+  notifications        NtfNotification[]
 
   @@map("core_users")
 }
@@ -663,4 +664,69 @@ enum AutoExecutionResult {
   SUCCESS  // All conditions met, all actions completed
   SKIPPED  // Conditions not met — rule did not fire
   FAILED   // Error during condition evaluation or action execution
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS MODULE — In-app, Email, SMS
+// ─────────────────────────────────────────────
+
+model NtfNotification {
+  id          String          @id @default(cuid())
+  userId      String          // Recipient staff user
+  user        CoreUser        @relation(fields: [userId], references: [id])
+
+  // Notification content
+  type        NtfType
+  title       String
+  body        String
+  link        String?         // Optional deep-link path, e.g. "/invoices?id=xxx"
+
+  // Categorisation
+  category    NtfCategory
+  priority    NtfPriority     @default(NORMAL)
+
+  // Read / dismissed tracking
+  readAt      DateTime?
+  dismissedAt DateTime?
+
+  // Delivery tracking (for email/SMS)
+  channels    NtfChannel[]    @default([IN_APP])
+  emailSentAt DateTime?
+  smsSentAt   DateTime?
+
+  createdAt   DateTime        @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@index([category])
+  @@map("ntf_notifications")
+}
+
+enum NtfType {
+  INFO
+  WARNING
+  ACTION_REQUIRED
+  SUCCESS
+}
+
+enum NtfCategory {
+  INVOICE       // Invoice received, needs review, approved, rejected
+  CLAIM         // Claim submitted, outcome received
+  PAYMENT       // Payment pending, cleared
+  PLAN          // Plan expiring, budget threshold
+  COMPLIANCE    // NDIS processing deadline approaching
+  SYSTEM        // System-level notifications
+}
+
+enum NtfPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum NtfChannel {
+  IN_APP
+  EMAIL
+  SMS
 }

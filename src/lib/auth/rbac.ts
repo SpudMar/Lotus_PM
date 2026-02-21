@@ -79,6 +79,10 @@ const PERMISSIONS = {
   'automation:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
   'automation:write': [ROLES.DIRECTOR],
 
+  // Notifications (all staff can receive and manage their own)
+  'notifications:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
+  'notifications:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
+
   // Documents (all staff can read/write; Director can delete)
   'documents:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'documents:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],

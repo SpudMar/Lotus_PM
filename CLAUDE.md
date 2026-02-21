@@ -305,10 +305,10 @@ All routes smoke-tested locally. CI green on every PR.
 
 Priority order for this phase:
 
-1. **Claims & Payments** — ⛔ blocked on PRODA/PACE B2B API access (application sent 20 Feb, awaiting response). Can scaffold module, cannot integrate.
-2. **Banking** — ✅ unblocked — ABA file generation for now. Manual upload to bank. Future: payment provider API (Monoova or similar, REQ-028).
-3. **Reporting** — ✅ unblocked — dashboards, financial reports, NDIS compliance reports
-4. **Notifications** — ✅ unblocked — email (SES), in-app, SMS (SNS)
+1. **Claims & Payments** — ⛔ blocked on PRODA/PACE B2B API access (application sent 20 Feb, awaiting response). Module scaffolded with full CRUD, batch operations, and manual submit/outcome workflow.
+2. **Banking** — ✅ COMPLETE — ABA file generation, payment management, reconciliation. Manual upload to bank. Future: payment provider API (Monoova or similar, REQ-028).
+3. **Reporting** — ✅ COMPLETE — Dashboard summary, financial reports (Director-only), NDIS 5-day compliance metrics, budget utilisation, provider payment summary.
+4. **Notifications** — ✅ COMPLETE — In-app notifications with bell icon + unread badge in header. Convenience helpers for invoice/claim/compliance events. Automation NOTIFY_STAFF action wired. Email/SMS delivery tracking schema ready (SES/SNS integration pending).
 
 **Phase 2 blockers:**
 
@@ -356,6 +356,10 @@ Priority order for this phase:
 | `src/lib/modules/automation/engine.ts` | Automation rule evaluator and executor |
 | `src/lib/modules/automation/rules.ts` | Automation CRUD and event lookup |
 | `src/app/(automation)/automation/page.tsx` | Automation UI — rule list, create, test, toggle |
+| `src/lib/modules/reports/reports.ts` | Reporting queries (dashboard, financial, compliance, budget) |
+| `src/app/(reports)/reports/page.tsx` | Reports UI — overview, compliance, budget, financial tabs |
+| `src/lib/modules/notifications/notifications.ts` | In-app notification CRUD and convenience helpers |
+| `src/app/(notifications)/notifications/page.tsx` | Notifications UI — list, mark read, dismiss |
 | `infrastructure/lib/config.ts` | Environment configs (staging/production) |
 | `scripts/seed.ts` | Dev seed data (not idempotent — see Phase 1 notes) |
 | `docker-compose.yml` | Local Postgres 16, Redis 7, MailHog |
@@ -429,5 +433,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 20 February 2026 — Phase 3 Automation Engine complete; Phase 2 active (partial blockers)*
+*Last updated: 21 February 2026 — Phase 2: Reporting + Notifications complete; Banking complete (ABA, REQ-028); Claims scaffolded (awaiting PRODA)*
 *All decisions in this file were made deliberately. Update with care.*
