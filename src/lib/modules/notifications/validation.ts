@@ -1,5 +1,29 @@
 import { z } from 'zod'
 
+// ── In-app / DB notification schemas ──────────────────────────────────────────
+
+export const createNotificationSchema = z.object({
+  userId: z.string().min(1),
+  type: z.enum(['INFO', 'WARNING', 'ACTION_REQUIRED', 'SUCCESS']),
+  title: z.string().min(1).max(200),
+  body: z.string().min(1).max(2000),
+  link: z.string().optional(),
+  category: z.enum(['INVOICE', 'CLAIM', 'PAYMENT', 'PLAN', 'COMPLIANCE', 'SYSTEM']),
+  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional(),
+  channels: z.array(z.enum(['IN_APP', 'EMAIL', 'SMS'])).optional(),
+})
+
+export type CreateNotificationInput = z.infer<typeof createNotificationSchema>
+
+export const notificationActionSchema = z.object({
+  action: z.enum(['read', 'read-all', 'dismiss']),
+  notificationId: z.string().optional(),
+})
+
+export type NotificationActionInput = z.infer<typeof notificationActionSchema>
+
+// ── SMS schemas ────────────────────────────────────────────────────────────────
+
 /**
  * Validates phone numbers in common Australian formats.
  * Accepts: +61XXXXXXXXX, 04XXXXXXXX, 61XXXXXXXXX
