@@ -1,4 +1,4 @@
-import { ROLES, hasPermission, hasAllPermissions, getPermissionsForRole } from './rbac'
+import { ROLES, hasPermission, hasAllPermissions, getPermissionsForRole, type Permission } from './rbac'
 
 describe('RBAC permissions', () => {
   describe('Global Admin', () => {
@@ -28,7 +28,7 @@ describe('RBAC permissions', () => {
         'xero:read', 'xero:write', 'xero:sync',
       ]
       for (const perm of expectedPerms) {
-        expect(hasPermission(role, perm as any)).toBe(true)
+        expect(hasPermission(role, perm as Permission)).toBe(true)
       }
       expect(allPerms.length).toBe(expectedPerms.length)
     })
