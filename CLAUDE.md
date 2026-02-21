@@ -47,7 +47,7 @@ This file contains all locked decisions, requirements, and conventions for the L
 | REQ-022 | Current Entiprius cost: $5,000/month ($60,000/year) | Financial |
 | REQ-023 | Xero accounting integration (two-way sync: invoices, payments, reconciliation) | Integration |
 | REQ-024 | Invoices arrive via shared email inbox | Workflow |
-| REQ-025 | Roles: Director (full + occasional PM), Plan Managers, Assistants (multi-role) | Security |
+| REQ-025 | Roles: Global Admin (PM + user management), Plan Managers (primary daily user), Assistants (data entry) | Security |
 | REQ-026 | PRODA/PACE B2B API access — application in progress (Nicole, 20 Feb 2026). Not blocking — app is fully operational in Portal Mode. B2B will automate data exchange when available. | Integration |
 | REQ-027 | When B2B is available, target PACE B2B APIs (current system) — NOT legacy myNDIS APIs | Integration |
 | REQ-028 | ABA files for payments now; must not preclude future payment provider API (e.g. Monoova). Where feasible, keep payment logic provider-agnostic without adding complexity | Architecture |
@@ -85,17 +85,19 @@ Every decision below is locked. Do not suggest alternatives without a clear reas
 
 ## RBAC — ROLE DEFINITIONS
 
-| Role | Access Level | Notes |
-|------|-------------|-------|
-| **Director** | Global Admin — full system access | Can act as PM. Sees all financials. Manages staff. System config. Approves flagged items. |
-| **Plan Manager** | Full operational authority | Full authority over invoicing, claims, payments, client/provider reviews. Can generate ABA files, reconcile payments, approve/reject invoices, submit claims, record outcomes. Can approve flagged items. Cannot manage staff or system settings. |
-| **Assistant** | Data entry + limited review | Create/edit participants, providers, plans. Upload invoices. View claims (read-only). Can see flagged/warning items and add comments, but **cannot approve** flagged items — PM or Director must approve. No banking access. |
-| **Participant** | Own data only | Via mobile app. Budget, invoice status, messages, documents. |
+| Role | DB Value | Access Level | Notes |
+|------|----------|-------------|-------|
+| **Global Admin** | `GLOBAL_ADMIN` | Everything a PM can do + user management | Acts as PM when covering leave. Creates/deletes staff accounts. The only exclusive permissions are `staff:read` and `staff:write`. |
+| **Plan Manager** | `PLAN_MANAGER` | **The primary daily user** — full operational authority | Full access to ALL operational features: invoicing, claims, payments, banking, reports (including financial), documents, automation rules, Xero integration, notifications. No restrictions on any plan management task. |
+| **Assistant** | `ASSISTANT` | Data entry + limited review | Create/edit participants, providers, plans. Upload invoices. View claims (read-only). Can see flagged/warning items and add comments, but **cannot approve** flagged items — PM or Global Admin must approve. No banking access. |
+| **Participant** | `PARTICIPANT` | Own data only | Via mobile app. Budget, invoice status, messages, documents. |
+
+**Important:** The Plan Manager is the everyday operator. Do NOT gate operational features behind Global Admin — PM must be able to do everything except manage staff accounts.
 
 ### Flag/Review Workflow
 - Assistants doing data entry may encounter warnings (e.g., provider bank detail changes, duplicate entries, budget overspend alerts)
 - Assistants can **view** the warning and **add a comment** explaining context
-- Only Plan Manager or Director can **approve/resolve** a flagged item
+- Only Plan Manager or Global Admin can **approve/resolve** a flagged item
 - This ensures quality control without blocking the Assistant from doing their data entry work
 
 ---
@@ -257,15 +259,15 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 
 ## CURRENT PHASE STATUS
 
-**Active Phase:** Phase 2 complete. SMS delivery live. PR #5 merged. Xero OAuth2 integration complete.
+**Active Phase:** Phase 2 complete. Phase 3 Documents + Xero integration merged. RBAC overhaul (DIRECTOR → GLOBAL_ADMIN) in PR #8.
 
-**Current working branch:** `claude/xero-integration-handoff-zpLeL` — Xero OAuth2 integration. **225/225 tests passing.**
+**Current test count:** 278/278 tests passing.
 
 **Dev server:** `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`, Tailwind v4 requires Turbopack)
 
-**DB migrations state:** All 5 migrations applied and recorded in `_prisma_migrations`. Last: `20260221120000_notifications_module` (adds `notif_notifications` table + `phone` field on `CoreUser`).
+**DB migrations state:** 8 migrations. Last: `20260221200001_rename_director_to_global_admin`. Role enum renamed from `DIRECTOR` to `GLOBAL_ADMIN`.
 
-**Staff phone numbers:** Director (`director@lotusassist.com.au`) and Plan Manager (`pm@lotusassist.com.au`) both have `phone = +61411941699` in DB for SMS testing.
+**Staff phone numbers:** Global Admin (`director@lotusassist.com.au`) and Plan Manager (`pm@lotusassist.com.au`) both have `phone = +61411941699` in DB for SMS testing.
 
 ---
 
@@ -308,7 +310,7 @@ All routes smoke-tested locally. CI green on every PR.
 | `/invoices` | Status tabs + 4 invoices |
 | Auth middleware | Unauthenticated API calls → `{"error":"Unauthorized","code":"UNAUTHORIZED"}` |
 
-**Seed data:** 3 users (Director: sarah@lotus.com, PM: james@lotus.com, Assistant: emily@lotus.com), 3 participants, 3 providers, 2 plans (with budget lines), 4 invoices. Seed script is **not idempotent** — running it multiple times creates duplicates. Add upsert or DELETE at top before next use.
+**Seed data:** 3 users (Global Admin: director@lotusassist.com.au, PM: pm@lotusassist.com.au, Assistant: assistant@lotusassist.com.au), 3 participants, 3 providers, 2 plans (with budget lines), 4 invoices. Seed script is idempotent (uses upsert).
 
 ---
 
@@ -484,5 +486,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 21 February 2026 — Xero OAuth2 integration complete. 225/225 tests passing. Branch: `claude/xero-integration-handoff-zpLeL`. Connect Xero via Settings page, sync approved invoices to Xero as bills. Token refresh auto-managed. Director-only connect/disconnect, PM+ can trigger sync.*
+*Last updated: 21 February 2026 — Phase 2 complete, Documents + Xero merged, RBAC overhaul (DIRECTOR→GLOBAL_ADMIN) in PR #8. 278/278 tests. PM is the primary daily user with full operational access. Only Global Admin-exclusive permission: staff management.*
 *All decisions in this file were made deliberately. Update with care.*
