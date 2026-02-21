@@ -107,7 +107,7 @@ export async function createNotificationRecord(
  * Count unread in-app notifications for a user (drives the bell badge).
  */
 export async function getUnreadCount(userId: string): Promise<number> {
-  return prisma.ntfNotification.count({
+  return prisma.notifNotification.count({
     where: { userId, readAt: null, dismissedAt: null },
   })
 }
@@ -116,7 +116,7 @@ export async function getUnreadCount(userId: string): Promise<number> {
  * Mark a single notification as read.
  */
 export async function markAsRead(notificationId: string, userId: string): Promise<void> {
-  await prisma.ntfNotification.updateMany({
+  await prisma.notifNotification.updateMany({
     where: { id: notificationId, userId },
     data: { readAt: new Date() },
   })
@@ -126,7 +126,7 @@ export async function markAsRead(notificationId: string, userId: string): Promis
  * Mark all unread notifications as read for a user.
  */
 export async function markAllAsRead(userId: string): Promise<void> {
-  await prisma.ntfNotification.updateMany({
+  await prisma.notifNotification.updateMany({
     where: { userId, readAt: null },
     data: { readAt: new Date() },
   })
@@ -136,7 +136,7 @@ export async function markAllAsRead(userId: string): Promise<void> {
  * Dismiss a notification (hide from list).
  */
 export async function dismissNotification(notificationId: string, userId: string): Promise<void> {
-  await prisma.ntfNotification.updateMany({
+  await prisma.notifNotification.updateMany({
     where: { id: notificationId, userId },
     data: { dismissedAt: new Date() },
   })
@@ -150,7 +150,7 @@ export async function getUserNotifications(
   limit = 50,
   offset = 0
 ) {
-  return prisma.ntfNotification.findMany({
+  return prisma.notifNotification.findMany({
     where: { userId, dismissedAt: null },
     orderBy: { createdAt: 'desc' },
     take: limit,

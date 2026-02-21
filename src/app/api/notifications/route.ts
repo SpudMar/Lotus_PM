@@ -1,26 +1,23 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requirePermission } from '@/lib/auth/session'
-import { listNotifications, markAllAsRead } from '@/lib/modules/notifications/notifications'
+import { listNotifications, markAllAsRead, getUnreadCount } from '@/lib/modules/notifications/notifications'
 import { paginationSchema, paginatedResponse } from '@/lib/modules/core/validation'
-import type { NtfCategory } from '@prisma/client'
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const session = await requirePermission('notifications:read')
     const searchParams = Object.fromEntries(request.nextUrl.searchParams)
     const { page, pageSize } = paginationSchema.parse(searchParams)
-    const unreadOnly = request.nextUrl.searchParams.get('unreadOnly') === 'true'
-    const category = request.nextUrl.searchParams.get('category') as NtfCategory | null
 
-    const { data, total, unreadCount } = await listNotifications({
-      userId: session.user.id,
-      page,
-      pageSize,
-      unreadOnly: unreadOnly || undefined,
-      category: category ?? undefined,
-    })
+    const [data, unreadCount] = await Promise.all([
+      listNotifications({
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+      }),
+      getUnreadCount(session.user.id),
+    ])
 
-    return NextResponse.json({ ...paginatedResponse(data, total, page, pageSize), unreadCount })
+    return NextResponse.json({ ...paginatedResponse(data, data.length, page, pageSize), unreadCount })
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 })

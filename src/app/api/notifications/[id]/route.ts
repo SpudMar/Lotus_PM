@@ -5,9 +5,10 @@ import { notificationActionSchema } from '@/lib/modules/notifications/validation
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
+    const { id } = await params
     const session = await requirePermission('notifications:write')
     const body = await request.json()
     const parsed = notificationActionSchema.safeParse(body)
@@ -20,12 +21,12 @@ export async function PATCH(
     }
 
     if (parsed.data.action === 'read') {
-      await markAsRead(params.id, session.user.id)
+      await markAsRead(id, session.user.id)
       return NextResponse.json({ data: { success: true } })
     }
 
     if (parsed.data.action === 'dismiss') {
-      await dismissNotification(params.id, session.user.id)
+      await dismissNotification(id, session.user.id)
       return NextResponse.json({ data: { success: true } })
     }
 

@@ -42,6 +42,10 @@ model CoreUser {
   approvedInvoices     InvInvoice[]     @relation("ApprovedBy")
   rejectedInvoices     InvInvoice[]     @relation("RejectedBy")
   commLogs             CrmCommLog[]
+  submittedClaims      ClmClaim[]       @relation("ClaimSubmittedBy")
+  outcomeClaims        ClmClaim[]       @relation("ClaimOutcomeBy")
+  submittedBatches     ClmBatch[]       @relation("BatchSubmittedBy")
+  inAppNotifications   NotifNotification[] @relation("UserNotifications")
 
   @@map("core_users")
 }
@@ -152,6 +156,7 @@ model CrmParticipant {
   commLogs          CrmCommLog[]
   documents         DocDocument[]
   notifications     NotifNotification[]
+  claims            ClmClaim[]
 
   @@index([ndisNumber])
   @@index([assignedToId])
@@ -376,6 +381,8 @@ model InvInvoiceLine {
   isPriceGuideCompliant Boolean   @default(true)
   priceGuideMaxCents    Int?      // Max allowed per price guide
 
+  claimLines      ClmClaimLine[]
+
   @@index([invoiceId])
   @@map("inv_invoice_lines")
 }
@@ -385,31 +392,103 @@ model InvInvoiceLine {
 // ─────────────────────────────────────────────
 
 model ClmClaim {
-  id              String      @id @default(cuid())
+  id              String         @id @default(cuid())
   invoiceId       String
-  invoice         InvInvoice  @relation(fields: [invoiceId], references: [id])
+  invoice         InvInvoice     @relation(fields: [invoiceId], references: [id])
+
+  // Sequential human-readable reference (CLM-2026-0001)
+  claimReference  String         @unique
+
+  // Direct participant link (denormalised for query efficiency)
+  participantId   String?
+  participant     CrmParticipant? @relation(fields: [participantId], references: [id])
 
   // PRODA reference
-  prodaClaimId    String?     @unique
+  prodaClaimId    String?        @unique
   prodaReference  String?
+
+  // Batch grouping
+  batchId         String?
+  batch           ClmBatch?      @relation(fields: [batchId], references: [id])
 
   // Amounts in cents
   claimedCents    Int
-  approvedCents   Int         @default(0)
+  approvedCents   Int            @default(0)
 
-  status          ClmStatus   @default(PENDING)
+  status          ClmStatus      @default(PENDING)
   submittedAt     DateTime?
+  submittedById   String?
+  submittedBy     CoreUser?      @relation("ClaimSubmittedBy", fields: [submittedById], references: [id])
   outcomeAt       DateTime?
+  outcomeById     String?
+  outcomeBy       CoreUser?      @relation("ClaimOutcomeBy", fields: [outcomeById], references: [id])
   outcomeNotes    String?
 
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
+  lines           ClmClaimLine[]
   payments        BnkPayment[]
 
   @@index([status])
   @@index([invoiceId])
+  @@index([participantId])
+  @@index([batchId])
   @@map("clm_claims")
+}
+
+model ClmClaimLine {
+  id              String      @id @default(cuid())
+  claimId         String
+  claim           ClmClaim    @relation(fields: [claimId], references: [id])
+
+  invoiceLineId   String?     // Optional link to source invoice line
+  invoiceLine     InvInvoiceLine? @relation(fields: [invoiceLineId], references: [id])
+
+  supportItemCode String
+  supportItemName String
+  categoryCode    String
+  serviceDate     DateTime
+  quantity        Float
+  unitPriceCents  Int
+  totalCents      Int
+  gstCents        Int         @default(0)
+
+  // Outcome (filled when PRODA responds)
+  status          ClmStatus?
+  approvedCents   Int?
+  outcomeNotes    String?
+
+  @@index([claimId])
+  @@map("clm_claim_lines")
+}
+
+model ClmBatch {
+  id            String        @id @default(cuid())
+  batchNumber   String        @unique
+  status        ClmBatchStatus @default(DRAFT)
+  notes         String?
+
+  claimCount    Int
+  totalCents    Int
+
+  submittedById String?
+  submittedBy   CoreUser?     @relation("BatchSubmittedBy", fields: [submittedById], references: [id])
+  submittedAt   DateTime?
+  prodaBatchId  String?       // PRODA batch reference
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  claims        ClmClaim[]
+
+  @@index([status])
+  @@map("clm_batches")
+}
+
+enum ClmBatchStatus {
+  DRAFT
+  SUBMITTED
 }
 
 enum ClmStatus {
@@ -580,15 +659,22 @@ enum AutoExecutionResult {
 model NotifNotification {
   id            String           @id @default(cuid())
   channel       NotifChannel
-  recipient     String           // Phone number (E.164) or email address
+  recipient     String           // Phone number (E.164), email, or user ID for IN_APP
   subject       String?          // For email notifications only
   message       String           @db.Text
+  category      NtfCategory?     // IN_APP categorisation
 
   // Delivery tracking
   status        NotifStatus      @default(PENDING)
   externalId    String?          // ClickSend message_id or SES message ID
   errorMessage  String?
   sentAt        DateTime?
+
+  // IN_APP read/dismiss tracking
+  userId        String?          // Staff user this notification is for (IN_APP channel)
+  user          CoreUser?        @relation("UserNotifications", fields: [userId], references: [id])
+  readAt        DateTime?
+  dismissedAt   DateTime?
 
   // Optional link to participants (REQ-010: 5-year retention)
   participantId String?
@@ -602,8 +688,18 @@ model NotifNotification {
 
   @@index([channel, status])
   @@index([participantId])
+  @@index([userId, readAt])
   @@index([createdAt])
   @@map("notif_notifications")
+}
+
+enum NtfCategory {
+  INVOICE
+  CLAIM
+  PAYMENT
+  PLAN
+  PARTICIPANT
+  SYSTEM
 }
 
 enum NotifChannel {
