@@ -336,6 +336,10 @@ model InvInvoice {
   approvedBy      CoreUser?     @relation("ApprovedBy", fields: [approvedById], references: [id])
   rejectedBy      CoreUser?     @relation("RejectedBy", fields: [rejectedById], references: [id])
 
+  // Xero sync — REQ-019/REQ-023
+  xeroInvoiceId   String?       // Xero Invoice GUID after sync
+  xeroSyncedAt    DateTime?     // Timestamp of last successful Xero sync
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   deletedAt       DateTime?     // Soft delete — REQ-010
@@ -720,4 +724,42 @@ enum NotifStatus {
   FAILED
   DELIVERED
   UNDELIVERED
+}
+
+// ─────────────────────────────────────────────
+// XERO MODULE — Accounting Integration
+// REQ-019/REQ-023: Two-way Xero sync (invoices, payments, reconciliation)
+// ─────────────────────────────────────────────
+
+model XeroConnection {
+  id              String    @id @default(cuid())
+
+  // Xero organisation/tenant (one connection per tenant)
+  tenantId        String    @unique  // Xero Organisation GUID
+  tenantName      String?            // Human-readable org name
+
+  // OAuth2 tokens (stored encrypted — REQ-016)
+  accessToken     String    @db.Text // Short-lived (30 min)
+  refreshToken    String    @db.Text // Long-lived — used to get new access tokens
+  tokenExpiresAt  DateTime           // When the access token expires
+
+  // Granted scopes
+  scopes          String[]  @default([])
+
+  isActive        Boolean   @default(true)
+
+  // Who connected this organisation
+  connectedById   String
+  connectedAt     DateTime  @default(now())
+
+  // Sync tracking
+  lastSyncAt      DateTime?
+  syncErrorCount  Int       @default(0)
+  lastSyncError   String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([isActive])
+  @@map("xero_connections")
 }

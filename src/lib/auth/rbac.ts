@@ -88,6 +88,13 @@ const PERMISSIONS = {
   'documents:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'documents:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
   'documents:delete': [ROLES.DIRECTOR],
+
+  // Xero integration — REQ-019/REQ-023
+  // Director + PM can view connection status and trigger syncs
+  // Only Director can connect/disconnect Xero
+  'xero:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  'xero:write': [ROLES.DIRECTOR],
+  'xero:sync': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
 } as const
 
 export type Permission = keyof typeof PERMISSIONS
