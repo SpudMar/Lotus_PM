@@ -1,20 +1,52 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Users, Receipt, FileText, CreditCard } from 'lucide-react'
-
-const stats = [
-  { title: 'Active Participants', value: '—', icon: Users, href: '/participants' },
-  { title: 'Pending Invoices', value: '—', icon: Receipt, href: '/invoices' },
-  { title: 'Active Plans', value: '—', icon: FileText, href: '/plans' },
-  { title: 'Pending Claims', value: '—', icon: CreditCard, href: '/claims' },
-]
+import type { DashboardSummary } from '@/lib/modules/reports/reports'
 
 export default function DashboardPage(): React.JSX.Element {
   const { data: session } = useSession()
+  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+
+  useEffect(() => {
+    fetch('/api/reports/dashboard')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { data: DashboardSummary } | null) => {
+        if (json) setSummary(json.data)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const stats = [
+    {
+      title: 'Active Participants',
+      value: summary ? String(summary.participants.active) : '—',
+      icon: Users,
+      href: '/participants',
+    },
+    {
+      title: 'Pending Invoices',
+      value: summary ? String(summary.invoices.pendingReview) : '—',
+      icon: Receipt,
+      href: '/invoices',
+    },
+    {
+      title: 'Active Plans',
+      value: summary ? String(summary.plans.active) : '—',
+      icon: FileText,
+      href: '/plans',
+    },
+    {
+      title: 'Pending Claims',
+      value: summary ? String(summary.claims.pending + summary.claims.submitted) : '—',
+      icon: CreditCard,
+      href: '/claims',
+    },
+  ]
 
   return (
     <DashboardShell>

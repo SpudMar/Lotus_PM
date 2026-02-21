@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
+import { processEvent } from '@/lib/modules/automation/engine'
 import type { z } from 'zod'
 import type { createInvoiceSchema } from './validation'
 
@@ -113,6 +114,16 @@ export async function approveInvoice(id: string, userId: string, planId?: string
     after: { status: 'APPROVED' },
   })
 
+  // Fire-and-forget: trigger automation rules for invoice approval
+  void processEvent('lotus-pm.invoices.approved', {
+    invoiceId: id,
+    approvedBy: userId,
+    amountCents: invoice.totalCents,
+    status: 'APPROVED',
+  }).catch(() => {
+    // Automation failures should not block invoice operations
+  })
+
   return invoice
 }
 
@@ -133,6 +144,16 @@ export async function rejectInvoice(id: string, userId: string, reason: string) 
     resource: 'invoice',
     resourceId: id,
     after: { status: 'REJECTED', reason },
+  })
+
+  // Fire-and-forget: trigger automation rules for invoice rejection
+  void processEvent('lotus-pm.invoices.rejected', {
+    invoiceId: id,
+    rejectedBy: userId,
+    reason,
+    status: 'REJECTED',
+  }).catch(() => {
+    // Automation failures should not block invoice operations
   })
 
   return invoice

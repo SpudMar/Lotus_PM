@@ -4,11 +4,23 @@
  *
  * Creates test users, participants, providers, plans, and invoices.
  * All data is fictional — no real PII.
+ *
+ * Idempotent: safe to run multiple times. Uses upsert with natural unique keys
+ * (email, abn, ndisNumber, claimReference) or findFirst+create guards for
+ * models without schema-level unique constraints (plans, invoices, payments).
  */
 
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
+
+/** Find-or-create helper for InvInvoice (no schema unique on invoiceNumber). */
+async function findOrCreateInvoice(data: Parameters<typeof prisma.invInvoice.create>[0]['data']) {
+  const existing = await prisma.invInvoice.findFirst({
+    where: { invoiceNumber: data.invoiceNumber as string },
+  })
+  return existing ?? await prisma.invInvoice.create({ data })
+}
 
 async function main(): Promise<void> {
   console.log('Seeding database...')
@@ -161,13 +173,18 @@ async function main(): Promise<void> {
   console.log(`Created ${participants.length} participants`)
 
   // ── Plans ──────────────────────────────────
-  const plan1 = await prisma.planPlan.create({
-    data: {
+  // Upsert by prodaPlanId (stable seed key). Budget lines are only created on
+  // first run — subsequent runs find the plan and skip the nested creates.
+  const plan1 = await prisma.planPlan.upsert({
+    where: { prodaPlanId: 'seed-plan-michael-2025' },
+    update: {},
+    create: {
       participantId: participants[0]!.id,
       startDate: new Date('2025-07-01'),
       endDate: new Date('2026-06-30'),
       reviewDate: new Date('2026-05-01'),
       status: 'ACTIVE',
+      prodaPlanId: 'seed-plan-michael-2025',
       budgetLines: {
         create: [
           { categoryCode: '01', categoryName: 'Daily Activities', allocatedCents: 5000000, spentCents: 1250000 },
@@ -179,12 +196,15 @@ async function main(): Promise<void> {
     },
   })
 
-  const plan2 = await prisma.planPlan.create({
-    data: {
+  const plan2 = await prisma.planPlan.upsert({
+    where: { prodaPlanId: 'seed-plan-jessica-2025' },
+    update: {},
+    create: {
       participantId: participants[1]!.id,
       startDate: new Date('2025-10-01'),
       endDate: new Date('2026-09-30'),
       status: 'ACTIVE',
+      prodaPlanId: 'seed-plan-jessica-2025',
       budgetLines: {
         create: [
           { categoryCode: '01', categoryName: 'Daily Activities', allocatedCents: 3000000 },
@@ -198,95 +218,222 @@ async function main(): Promise<void> {
   console.log(`Created plans for ${participants[0]!.firstName} and ${participants[1]!.firstName}`)
 
   // ── Invoices ───────────────────────────────
-  const budgetLines = await prisma.planBudgetLine.findMany({ where: { planId: plan1.id } })
-  const dailyBudget = budgetLines.find(b => b.categoryCode === '01')
+  // InvInvoice has no schema-level unique on invoiceNumber, so use findFirst guard.
+  await Promise.all([
+    findOrCreateInvoice({
+      participantId: participants[0]!.id,
+      providerId: providers[0]!.id,
+      planId: plan1.id,
+      invoiceNumber: 'INV-2026-001',
+      invoiceDate: new Date('2026-02-01'),
+      subtotalCents: 125000,
+      gstCents: 0,
+      totalCents: 125000,
+      status: 'APPROVED',
+      approvedById: planManager.id,
+      approvedAt: new Date('2026-02-03'),
+    }),
+    findOrCreateInvoice({
+      participantId: participants[0]!.id,
+      providerId: providers[1]!.id,
+      planId: plan1.id,
+      invoiceNumber: 'INV-2026-002',
+      invoiceDate: new Date('2026-02-10'),
+      subtotalCents: 85000,
+      gstCents: 0,
+      totalCents: 85000,
+      status: 'PENDING_REVIEW',
+    }),
+    findOrCreateInvoice({
+      participantId: participants[1]!.id,
+      providerId: providers[0]!.id,
+      planId: plan2.id,
+      invoiceNumber: 'INV-2026-003',
+      invoiceDate: new Date('2026-02-15'),
+      subtotalCents: 220000,
+      gstCents: 22000,
+      totalCents: 242000,
+      status: 'RECEIVED',
+    }),
+    findOrCreateInvoice({
+      participantId: participants[0]!.id,
+      providerId: providers[2]!.id,
+      invoiceNumber: 'INV-2026-004',
+      invoiceDate: new Date('2026-02-18'),
+      subtotalCents: 45000,
+      gstCents: 4500,
+      totalCents: 49500,
+      status: 'REJECTED',
+      rejectedById: director.id,
+      rejectedAt: new Date('2026-02-19'),
+      rejectionReason: 'Provider not NDIS registered. Transport needs pre-approval.',
+    }),
+    findOrCreateInvoice({
+      participantId: participants[1]!.id,
+      providerId: providers[1]!.id,
+      planId: plan2.id,
+      invoiceNumber: 'INV-2026-005',
+      invoiceDate: new Date('2026-02-12'),
+      subtotalCents: 175000,
+      gstCents: 0,
+      totalCents: 175000,
+      status: 'APPROVED',
+      approvedById: director.id,
+      approvedAt: new Date('2026-02-14'),
+    }),
+  ])
 
-  await prisma.invInvoice.createMany({
-    data: [
-      {
-        participantId: participants[0]!.id,
-        providerId: providers[0]!.id,
-        planId: plan1.id,
-        invoiceNumber: 'INV-2026-001',
-        invoiceDate: new Date('2026-02-01'),
-        subtotalCents: 125000,
-        gstCents: 0,
-        totalCents: 125000,
+  console.log('Created 5 sample invoices')
+
+  // ── Claims (from approved invoices) ────────
+  // Look up invoices by number for deterministic references.
+  const invoice1 = await prisma.invInvoice.findFirst({ where: { invoiceNumber: 'INV-2026-001' } })
+  const invoice5 = await prisma.invInvoice.findFirst({ where: { invoiceNumber: 'INV-2026-005' } })
+
+  if (invoice1) {
+    // Claim 1: from INV-2026-001 — upsert by claimReference (unique in schema)
+    const claim1 = await prisma.clmClaim.upsert({
+      where: { claimReference: 'CLM-2026-0001' },
+      update: {},
+      create: {
+        claimReference: 'CLM-2026-0001',
+        invoiceId: invoice1.id,
+        participantId: invoice1.participantId,
+        claimedCents: invoice1.totalCents,
         status: 'APPROVED',
-        approvedById: planManager.id,
-        approvedAt: new Date('2026-02-03'),
+        submittedById: planManager.id,
+        submittedAt: new Date('2026-02-05'),
+        approvedCents: invoice1.totalCents,
+        outcomeAt: new Date('2026-02-10'),
+        outcomeById: director.id,
+        outcomeNotes: 'Approved in full by NDIA',
+        lines: {
+          create: [
+            {
+              supportItemCode: '01_011_0107_1_1',
+              supportItemName: 'Assistance with Self-Care Activities',
+              categoryCode: '01',
+              serviceDate: new Date('2026-01-20'),
+              quantity: 5,
+              unitPriceCents: 6500,
+              totalCents: 32500,
+            },
+            {
+              supportItemCode: '01_002_0107_1_1',
+              supportItemName: 'Assistance in Supported Independent Living',
+              categoryCode: '01',
+              serviceDate: new Date('2026-01-27'),
+              quantity: 3,
+              unitPriceCents: 30833,
+              totalCents: 92500,
+            },
+          ],
+        },
       },
-      {
-        participantId: participants[0]!.id,
-        providerId: providers[1]!.id,
-        planId: plan1.id,
-        invoiceNumber: 'INV-2026-002',
-        invoiceDate: new Date('2026-02-10'),
-        subtotalCents: 85000,
-        gstCents: 0,
-        totalCents: 85000,
-        status: 'PENDING_REVIEW',
-      },
-      {
-        participantId: participants[1]!.id,
-        providerId: providers[0]!.id,
-        planId: plan2.id,
-        invoiceNumber: 'INV-2026-003',
-        invoiceDate: new Date('2026-02-15'),
-        subtotalCents: 220000,
-        gstCents: 22000,
-        totalCents: 242000,
-        status: 'RECEIVED',
-      },
-      {
-        participantId: participants[0]!.id,
-        providerId: providers[2]!.id,
-        invoiceNumber: 'INV-2026-004',
-        invoiceDate: new Date('2026-02-18'),
-        subtotalCents: 45000,
-        gstCents: 4500,
-        totalCents: 49500,
-        status: 'REJECTED',
-        rejectedById: director.id,
-        rejectedAt: new Date('2026-02-19'),
-        rejectionReason: 'Provider not NDIS registered. Transport needs pre-approval.',
-      },
-    ],
-  })
+    })
 
-  console.log('Created 4 sample invoices')
+    // Mark invoice1 as CLAIMED
+    await prisma.invInvoice.update({
+      where: { id: invoice1.id },
+      data: { status: 'CLAIMED' },
+    })
+
+    // Create payment for claim1 if not already present
+    const existingPayment = await prisma.bnkPayment.findFirst({ where: { claimId: claim1.id } })
+    if (!existingPayment) {
+      await prisma.bnkPayment.create({
+        data: {
+          claimId: claim1.id,
+          amountCents: claim1.claimedCents,
+          bsb: '062000',
+          accountNumber: '12345678',
+          accountName: 'Sunrise Support Services',
+          reference: claim1.claimReference,
+          status: 'PENDING',
+        },
+      })
+    }
+
+    console.log(`Created/verified claim: CLM-2026-0001 (APPROVED)`)
+  }
+
+  if (invoice5) {
+    // Claim 2: from INV-2026-005 — upsert by claimReference
+    await prisma.clmClaim.upsert({
+      where: { claimReference: 'CLM-2026-0002' },
+      update: {},
+      create: {
+        claimReference: 'CLM-2026-0002',
+        invoiceId: invoice5.id,
+        participantId: invoice5.participantId,
+        claimedCents: invoice5.totalCents,
+        status: 'PENDING',
+        lines: {
+          create: [
+            {
+              supportItemCode: '11_001_0110_6_1',
+              supportItemName: 'Exercise Physiology',
+              categoryCode: '11',
+              serviceDate: new Date('2026-02-08'),
+              quantity: 2,
+              unitPriceCents: 50000,
+              totalCents: 100000,
+            },
+            {
+              supportItemCode: '11_004_0110_6_1',
+              supportItemName: 'Dietetics',
+              categoryCode: '11',
+              serviceDate: new Date('2026-02-10'),
+              quantity: 1,
+              unitPriceCents: 75000,
+              totalCents: 75000,
+            },
+          ],
+        },
+      },
+    })
+
+    console.log(`Created/verified claim: CLM-2026-0002 (PENDING)`)
+  }
+
+  console.log('Created 1 pending payment from approved claim')
 
   // ── Comm Logs ──────────────────────────────
-  await prisma.crmCommLog.createMany({
-    data: [
-      {
-        type: 'PHONE',
-        direction: 'INBOUND',
-        subject: 'Plan review enquiry',
-        body: 'Michael called to ask about his upcoming plan review date. Advised it is scheduled for 1 May 2026.',
-        participantId: participants[0]!.id,
-        userId: planManager.id,
-      },
-      {
-        type: 'EMAIL',
-        direction: 'OUTBOUND',
-        subject: 'Invoice received confirmation',
-        body: 'Sent confirmation to Sunrise Support that their invoice INV-2026-001 has been received and is being processed.',
-        providerId: providers[0]!.id,
-        userId: assistant.id,
-      },
-      {
-        type: 'NOTE',
-        direction: 'INTERNAL',
-        subject: 'Transport provider issue',
-        body: 'Metro Transport is not NDIS registered. Need to discuss with participant about alternative transport providers.',
-        participantId: participants[0]!.id,
-        userId: director.id,
-      },
-    ],
-  })
-
-  console.log('Created 3 communication logs')
+  // No natural unique key — skip if any already exist to stay idempotent.
+  const commLogCount = await prisma.crmCommLog.count()
+  if (commLogCount === 0) {
+    await prisma.crmCommLog.createMany({
+      data: [
+        {
+          type: 'PHONE',
+          direction: 'INBOUND',
+          subject: 'Plan review enquiry',
+          body: 'Michael called to ask about his upcoming plan review date. Advised it is scheduled for 1 May 2026.',
+          participantId: participants[0]!.id,
+          userId: planManager.id,
+        },
+        {
+          type: 'EMAIL',
+          direction: 'OUTBOUND',
+          subject: 'Invoice received confirmation',
+          body: 'Sent confirmation to Sunrise Support that their invoice INV-2026-001 has been received and is being processed.',
+          providerId: providers[0]!.id,
+          userId: assistant.id,
+        },
+        {
+          type: 'NOTE',
+          direction: 'INTERNAL',
+          subject: 'Transport provider issue',
+          body: 'Metro Transport is not NDIS registered. Need to discuss with participant about alternative transport providers.',
+          participantId: participants[0]!.id,
+          userId: director.id,
+        },
+      ],
+    })
+    console.log('Created 3 communication logs')
+  } else {
+    console.log(`Skipped comm logs (${commLogCount} already exist)`)
+  }
 
   // ── Audit Log ──────────────────────────────
   await prisma.coreAuditLog.create({
