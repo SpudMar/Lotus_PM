@@ -40,6 +40,8 @@ model CoreUser {
   assignedParticipants CrmParticipant[] @relation("AssignedPlanManager")
   approvedInvoices     InvInvoice[]     @relation("ApprovedBy")
   rejectedInvoices     InvInvoice[]     @relation("RejectedBy")
+  submittedClaims      ClmClaim[]       @relation("ClaimSubmittedBy")
+  outcomeClaims        ClmClaim[]       @relation("ClaimOutcomeBy")
   commLogs             CrmCommLog[]
 
   @@map("core_users")
@@ -148,6 +150,7 @@ model CrmParticipant {
   // Relations
   plans             PlanPlan[]
   invoices          InvInvoice[]
+  claims            ClmClaim[]
   commLogs          CrmCommLog[]
   documents         DocDocument[]
 
@@ -374,20 +377,68 @@ model InvInvoiceLine {
   isPriceGuideCompliant Boolean   @default(true)
   priceGuideMaxCents    Int?      // Max allowed per price guide
 
+  claimLines      ClmClaimLine[]
+
   @@index([invoiceId])
   @@map("inv_invoice_lines")
 }
 
 // ─────────────────────────────────────────────
-// CLAIMS MODULE — PRODA Integration
+// CLAIMS MODULE — NDIS Claims (manual now, PACE B2B later)
 // ─────────────────────────────────────────────
+
+model ClmBatch {
+  id              String        @id @default(cuid())
+  batchNumber     String        @unique // e.g. "BATCH-2026-0001"
+
+  // Totals
+  claimCount      Int           @default(0)
+  totalCents      Int           @default(0)
+  approvedCents   Int           @default(0)
+
+  status          ClmBatchStatus @default(DRAFT)
+
+  // Who submitted and when
+  submittedById   String?
+  submittedAt     DateTime?
+  completedAt     DateTime?
+  notes           String?
+
+  // Future: PACE B2B batch reference
+  prodaBatchId    String?       @unique
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  claims          ClmClaim[]
+
+  @@index([status])
+  @@map("clm_batches")
+}
+
+enum ClmBatchStatus {
+  DRAFT          // Collecting claims
+  SUBMITTED      // Submitted to NDIA (manually via portal or future B2B)
+  PROCESSING     // NDIA is processing
+  COMPLETED      // All outcomes received
+  PARTIALLY_COMPLETED // Some outcomes received
+}
 
 model ClmClaim {
   id              String      @id @default(cuid())
+  claimReference  String      @unique // e.g. "CLM-2026-0001"
   invoiceId       String
   invoice         InvInvoice  @relation(fields: [invoiceId], references: [id])
 
-  // PRODA reference
+  // Participant — denormalised for easier querying/filtering
+  participantId   String
+  participant     CrmParticipant @relation(fields: [participantId], references: [id])
+
+  // Batch grouping (optional — claims can exist outside a batch)
+  batchId         String?
+  batch           ClmBatch?   @relation(fields: [batchId], references: [id])
+
+  // PRODA reference — populated when B2B is available
   prodaClaimId    String?     @unique
   prodaReference  String?
 
@@ -395,28 +446,71 @@ model ClmClaim {
   claimedCents    Int
   approvedCents   Int         @default(0)
 
+  // Claim lifecycle
   status          ClmStatus   @default(PENDING)
+  submittedById   String?
+  submittedBy     CoreUser?   @relation("ClaimSubmittedBy", fields: [submittedById], references: [id])
   submittedAt     DateTime?
   outcomeAt       DateTime?
   outcomeNotes    String?
+  outcomeById     String?
+  outcomeBy       CoreUser?   @relation("ClaimOutcomeBy", fields: [outcomeById], references: [id])
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
+  lines           ClmClaimLine[]
   payments        BnkPayment[]
 
   @@index([status])
   @@index([invoiceId])
+  @@index([participantId])
+  @@index([batchId])
   @@map("clm_claims")
 }
 
 enum ClmStatus {
+  PENDING        // Created, not yet submitted
+  SUBMITTED      // Submitted to NDIA
+  APPROVED       // Fully approved by NDIA
+  REJECTED       // Rejected by NDIA
+  PARTIAL        // Partially approved
+  PAID           // Provider paid
+}
+
+model ClmClaimLine {
+  id              String        @id @default(cuid())
+  claimId         String
+  claim           ClmClaim      @relation(fields: [claimId], references: [id])
+
+  // Maps to invoice line
+  invoiceLineId   String?
+  invoiceLine     InvInvoiceLine? @relation(fields: [invoiceLineId], references: [id])
+
+  // NDIS support item details (copied from invoice line for claim record)
+  supportItemCode String
+  supportItemName String
+  categoryCode    String
+  serviceDate     DateTime
+  quantity        Float
+  unitPriceCents  Int
+  totalCents      Int
+  gstCents        Int           @default(0)
+
+  // Outcome per line (NDIA may approve/reject individual lines)
+  approvedCents   Int           @default(0)
+  status          ClmLineStatus @default(PENDING)
+  outcomeNotes    String?
+
+  @@index([claimId])
+  @@map("clm_claim_lines")
+}
+
+enum ClmLineStatus {
   PENDING
-  SUBMITTED
   APPROVED
   REJECTED
   PARTIAL
-  PAID
 }
 
 // ─────────────────────────────────────────────

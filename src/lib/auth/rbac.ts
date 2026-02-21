@@ -36,11 +36,14 @@ const PERMISSIONS = {
 
   // Claims
   'claims:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  'claims:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
   'claims:submit': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  'claims:outcome': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
 
   // Banking
   'banking:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
   'banking:write': [ROLES.DIRECTOR],
+  'banking:generate': [ROLES.DIRECTOR],
 
   // Reports
   'reports:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],

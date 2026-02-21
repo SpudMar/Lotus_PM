@@ -256,6 +256,135 @@ async function main(): Promise<void> {
 
   console.log('Created 4 sample invoices')
 
+  // ── Claims (from approved invoices) ────────
+  const approvedInvoices = await prisma.invInvoice.findMany({
+    where: { status: 'APPROVED' },
+    include: { lines: true },
+  })
+
+  const approvedInvoice = approvedInvoices[0]
+  if (approvedInvoice) {
+    // Create a claim from the approved invoice
+    const claim1 = await prisma.clmClaim.create({
+      data: {
+        claimReference: 'CLM-2026-0001',
+        invoiceId: approvedInvoice.id,
+        participantId: approvedInvoice.participantId,
+        claimedCents: approvedInvoice.totalCents,
+        status: 'SUBMITTED',
+        submittedById: planManager.id,
+        submittedAt: new Date('2026-02-05'),
+        lines: {
+          create: [
+            {
+              supportItemCode: '01_011_0107_1_1',
+              supportItemName: 'Assistance with Self-Care Activities',
+              categoryCode: '01',
+              serviceDate: new Date('2026-01-20'),
+              quantity: 5,
+              unitPriceCents: 6500,
+              totalCents: 32500,
+            },
+            {
+              supportItemCode: '01_002_0107_1_1',
+              supportItemName: 'Assistance in Supported Independent Living',
+              categoryCode: '01',
+              serviceDate: new Date('2026-01-27'),
+              quantity: 3,
+              unitPriceCents: 30833,
+              totalCents: 92500,
+            },
+          ],
+        },
+      },
+    })
+
+    // Update the invoice to CLAIMED status
+    await prisma.invInvoice.update({
+      where: { id: approvedInvoice.id },
+      data: { status: 'CLAIMED' },
+    })
+
+    // Create a second claim that's still pending (for a second approved invoice we'll create)
+    const approvedInvoice2 = await prisma.invInvoice.create({
+      data: {
+        participantId: participants[1]!.id,
+        providerId: providers[1]!.id,
+        planId: plan2.id,
+        invoiceNumber: 'INV-2026-005',
+        invoiceDate: new Date('2026-02-12'),
+        subtotalCents: 175000,
+        gstCents: 0,
+        totalCents: 175000,
+        status: 'APPROVED',
+        approvedById: director.id,
+        approvedAt: new Date('2026-02-14'),
+      },
+    })
+
+    const claim2 = await prisma.clmClaim.create({
+      data: {
+        claimReference: 'CLM-2026-0002',
+        invoiceId: approvedInvoice2.id,
+        participantId: approvedInvoice2.participantId,
+        claimedCents: approvedInvoice2.totalCents,
+        status: 'PENDING',
+        lines: {
+          create: [
+            {
+              supportItemCode: '11_001_0110_6_1',
+              supportItemName: 'Exercise Physiology',
+              categoryCode: '11',
+              serviceDate: new Date('2026-02-08'),
+              quantity: 2,
+              unitPriceCents: 50000,
+              totalCents: 100000,
+            },
+            {
+              supportItemCode: '11_004_0110_6_1',
+              supportItemName: 'Dietetics',
+              categoryCode: '11',
+              serviceDate: new Date('2026-02-10'),
+              quantity: 1,
+              unitPriceCents: 75000,
+              totalCents: 75000,
+            },
+          ],
+        },
+      },
+    })
+
+    console.log(`Created claims: ${claim1.claimReference} (SUBMITTED), ${claim2.claimReference} (PENDING)`)
+
+    // ── Payments (from submitted claim with approved outcome) ──
+    // Record an outcome for claim1 so we can create a payment
+    await prisma.clmClaim.update({
+      where: { id: claim1.id },
+      data: {
+        status: 'APPROVED',
+        approvedCents: claim1.claimedCents,
+        outcomeAt: new Date('2026-02-10'),
+        outcomeById: director.id,
+        outcomeNotes: 'Approved in full by NDIA',
+      },
+    })
+
+    // Create a pending payment for the approved claim
+    await prisma.bnkPayment.create({
+      data: {
+        claimId: claim1.id,
+        amountCents: claim1.claimedCents,
+        bsb: '062000',
+        accountNumber: '12345678',
+        accountName: 'Sunrise Support Services',
+        reference: claim1.claimReference,
+        status: 'PENDING',
+      },
+    })
+
+    console.log('Created 1 pending payment from approved claim')
+  }
+
   // ── Comm Logs ──────────────────────────────
   await prisma.crmCommLog.createMany({
     data: [
