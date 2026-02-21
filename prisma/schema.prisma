@@ -662,7 +662,6 @@ model NotifNotification {
   recipient     String           // Phone number (E.164), email, or user ID for IN_APP
   subject       String?          // For email notifications only
   message       String           @db.Text
-  category      NtfCategory?     // IN_APP categorisation
 
   // Delivery tracking
   status        NotifStatus      @default(PENDING)
@@ -691,15 +690,6 @@ model NotifNotification {
   @@index([userId, readAt])
   @@index([createdAt])
   @@map("notif_notifications")
-}
-
-enum NtfCategory {
-  INVOICE
-  CLAIM
-  PAYMENT
-  PLAN
-  PARTICIPANT
-  SYSTEM
 }
 
 enum NotifChannel {

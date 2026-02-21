@@ -38,7 +38,6 @@ function makeNotification(overrides: Partial<NotifNotification> = {}): NotifNoti
     recipient: '+61412345678',
     subject: null,
     message: 'Test message',
-    category: null,
     status: 'PENDING',
     externalId: null,
     errorMessage: null,
