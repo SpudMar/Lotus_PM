@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requirePermission } from '@/lib/auth/session'
-import { getDocument, deleteDocument } from '@/lib/modules/documents/documents'
+import { getDocumentById, deleteDocument } from '@/lib/modules/documents/documents'
 import { createAuditLog } from '@/lib/modules/core/audit'
 
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
   try {
     await requirePermission('documents:read')
     const { id } = await params
-    const document = await getDocument(id)
+    const document = await getDocumentById(id)
     if (!document) {
       return NextResponse.json({ error: 'Document not found', code: 'NOT_FOUND' }, { status: 404 })
     }
@@ -34,7 +34,7 @@ export async function DELETE(
     const session = await requirePermission('documents:delete')
     const { id } = await params
 
-    const existing = await getDocument(id)
+    const existing = await getDocumentById(id)
     if (!existing) {
       return NextResponse.json({ error: 'Document not found', code: 'NOT_FOUND' }, { status: 404 })
     }
@@ -46,7 +46,11 @@ export async function DELETE(
       action: 'documents.document.deleted',
       resource: 'doc_document',
       resourceId: id,
-      before: { name: existing.name, participantId: existing.participantId ?? null },
+      before: {
+        name: existing.name,
+        category: existing.category,
+        participantId: existing.participantId ?? null,
+      },
     })
 
     return new NextResponse(null, { status: 204 })

@@ -84,9 +84,9 @@ const PERMISSIONS = {
   'notifications:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'notifications:send': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
 
-  // Documents (all staff can read/write; Director can delete)
+  // Documents — all staff can read; Director and Plan Manager can upload/create; Director can delete
   'documents:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
-  'documents:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
+  'documents:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
   'documents:delete': [ROLES.DIRECTOR],
 } as const
 
