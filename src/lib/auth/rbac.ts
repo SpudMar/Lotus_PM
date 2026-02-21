@@ -87,6 +87,10 @@ const PERMISSIONS = {
   'documents:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'documents:write': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'documents:delete': [ROLES.DIRECTOR],
+
+  // Notifications — SMS sending requires Director or Plan Manager
+  'notifications:read': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
+  'notifications:send': [ROLES.DIRECTOR, ROLES.PLAN_MANAGER],
 } as const
 
 export type Permission = keyof typeof PERMISSIONS

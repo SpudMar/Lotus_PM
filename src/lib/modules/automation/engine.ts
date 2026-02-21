@@ -8,6 +8,7 @@
 import { prisma } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 import type { AutoCondition, AutoAction, TriggerContext, RuleExecutionResult } from './types'
+import { sendSmsToStaffByRole } from '@/lib/modules/notifications/notifications'
 
 // ─── Condition evaluation ─────────────────────────────────────────────────────
 
@@ -103,17 +104,8 @@ async function executeAction(action: AutoAction, context: TriggerContext): Promi
       }
 
       case 'NOTIFY_STAFF': {
-        const { notifyByRole } = await import('@/lib/modules/notifications/notifications')
-        const notifyMessage = interpolateTemplate(action.params.message, context)
-        const role = action.params.notifyRole ?? 'PLAN_MANAGER'
-        await notifyByRole(role as 'DIRECTOR' | 'PLAN_MANAGER' | 'ASSISTANT', {
-          type: 'ACTION_REQUIRED',
-          title: 'Automation Alert',
-          body: notifyMessage,
-          category: 'SYSTEM',
-          priority: 'NORMAL',
-          channels: ['IN_APP'],
-        })
+        const message = interpolateTemplate(action.params.message, context)
+        await sendSmsToStaffByRole(action.params.notifyRole, message)
         return true
       }
 

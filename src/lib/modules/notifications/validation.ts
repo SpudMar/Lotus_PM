@@ -1,30 +1,26 @@
 import { z } from 'zod'
 
-export const createNotificationSchema = z.object({
-  userId: z.string().min(1),
-  type: z.enum(['INFO', 'WARNING', 'ACTION_REQUIRED', 'SUCCESS']),
-  title: z.string().min(1).max(200),
-  body: z.string().min(1).max(2000),
-  link: z.string().max(500).optional(),
-  category: z.enum(['INVOICE', 'CLAIM', 'PAYMENT', 'PLAN', 'COMPLIANCE', 'SYSTEM']),
-  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional(),
-  channels: z.array(z.enum(['IN_APP', 'EMAIL', 'SMS'])).optional(),
+/**
+ * Validates phone numbers in common Australian formats.
+ * Accepts: +61XXXXXXXXX, 04XXXXXXXX, 61XXXXXXXXX
+ * The clicksend module normalises to E.164 before sending.
+ */
+const phoneSchema = z
+  .string()
+  .min(8)
+  .max(20)
+  .regex(
+    /^\+?[0-9\s\-().]{8,20}$/,
+    'Invalid phone number — use format +61XXXXXXXXX or 04XXXXXXXX'
+  )
+
+export const sendSmsSchema = z.object({
+  to: phoneSchema,
+  message: z
+    .string()
+    .min(1, 'Message is required')
+    .max(1600, 'Message exceeds 10 SMS parts (1,600 chars max)'),
+  participantId: z.string().cuid().optional(),
 })
 
-export const markReadSchema = z.object({
-  action: z.literal('read'),
-})
-
-export const markAllReadSchema = z.object({
-  action: z.literal('read-all'),
-})
-
-export const dismissSchema = z.object({
-  action: z.literal('dismiss'),
-})
-
-export const notificationActionSchema = z.discriminatedUnion('action', [
-  markReadSchema,
-  markAllReadSchema,
-  dismissSchema,
-])
+export type SendSmsInput = z.infer<typeof sendSmsSchema>

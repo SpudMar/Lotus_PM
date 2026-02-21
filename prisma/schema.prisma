@@ -22,6 +22,7 @@ model CoreUser {
   email         String    @unique
   name          String
   role          CoreRole  @default(ASSISTANT)
+  phone         String?   // E.164 format — used for SMS notifications
   isActive      Boolean   @default(true)
   mfaEnabled    Boolean   @default(false)
   lastLoginAt   DateTime?
@@ -40,10 +41,7 @@ model CoreUser {
   assignedParticipants CrmParticipant[] @relation("AssignedPlanManager")
   approvedInvoices     InvInvoice[]     @relation("ApprovedBy")
   rejectedInvoices     InvInvoice[]     @relation("RejectedBy")
-  submittedClaims      ClmClaim[]       @relation("ClaimSubmittedBy")
-  outcomeClaims        ClmClaim[]       @relation("ClaimOutcomeBy")
   commLogs             CrmCommLog[]
-  notifications        NtfNotification[]
 
   @@map("core_users")
 }
@@ -151,9 +149,9 @@ model CrmParticipant {
   // Relations
   plans             PlanPlan[]
   invoices          InvInvoice[]
-  claims            ClmClaim[]
   commLogs          CrmCommLog[]
   documents         DocDocument[]
+  notifications     NotifNotification[]
 
   @@index([ndisNumber])
   @@index([assignedToId])
@@ -241,7 +239,7 @@ model PlanPlan {
   endDate         DateTime
   reviewDate      DateTime?
 
-  // PACE plan reference — populated manually or via B2B sync when available
+  // PRODA reference
   prodaPlanId     String?    @unique
 
   status          PlanStatus @default(ACTIVE)
@@ -378,71 +376,20 @@ model InvInvoiceLine {
   isPriceGuideCompliant Boolean   @default(true)
   priceGuideMaxCents    Int?      // Max allowed per price guide
 
-  claimLines      ClmClaimLine[]
-
   @@index([invoiceId])
   @@map("inv_invoice_lines")
 }
 
 // ─────────────────────────────────────────────
-// CLAIMS MODULE — NDIS Claims
-// Portal Mode: staff submit via PACE portal, record references + outcomes here.
-// B2B Mode (future): PACE API auto-submits claims, polls outcomes.
-// prodaXxx fields are optional — populated manually now, auto-populated with B2B.
+// CLAIMS MODULE — PRODA Integration
 // ─────────────────────────────────────────────
-
-model ClmBatch {
-  id              String        @id @default(cuid())
-  batchNumber     String        @unique // e.g. "BATCH-2026-0001"
-
-  // Totals
-  claimCount      Int           @default(0)
-  totalCents      Int           @default(0)
-  approvedCents   Int           @default(0)
-
-  status          ClmBatchStatus @default(DRAFT)
-
-  // Who submitted and when
-  submittedById   String?
-  submittedAt     DateTime?
-  completedAt     DateTime?
-  notes           String?
-
-  // PACE reference — entered manually (Portal Mode) or auto-populated (B2B Mode)
-  prodaBatchId    String?       @unique
-
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  claims          ClmClaim[]
-
-  @@index([status])
-  @@map("clm_batches")
-}
-
-enum ClmBatchStatus {
-  DRAFT          // Collecting claims
-  SUBMITTED      // Submitted to NDIA (manually via portal or future B2B)
-  PROCESSING     // NDIA is processing
-  COMPLETED      // All outcomes received
-  PARTIALLY_COMPLETED // Some outcomes received
-}
 
 model ClmClaim {
   id              String      @id @default(cuid())
-  claimReference  String      @unique // e.g. "CLM-2026-0001"
   invoiceId       String
   invoice         InvInvoice  @relation(fields: [invoiceId], references: [id])
 
-  // Participant — denormalised for easier querying/filtering
-  participantId   String
-  participant     CrmParticipant @relation(fields: [participantId], references: [id])
-
-  // Batch grouping (optional — claims can exist outside a batch)
-  batchId         String?
-  batch           ClmBatch?   @relation(fields: [batchId], references: [id])
-
-  // PACE references — entered manually (Portal Mode) or auto-populated (B2B Mode)
+  // PRODA reference
   prodaClaimId    String?     @unique
   prodaReference  String?
 
@@ -450,71 +397,28 @@ model ClmClaim {
   claimedCents    Int
   approvedCents   Int         @default(0)
 
-  // Claim lifecycle
   status          ClmStatus   @default(PENDING)
-  submittedById   String?
-  submittedBy     CoreUser?   @relation("ClaimSubmittedBy", fields: [submittedById], references: [id])
   submittedAt     DateTime?
   outcomeAt       DateTime?
   outcomeNotes    String?
-  outcomeById     String?
-  outcomeBy       CoreUser?   @relation("ClaimOutcomeBy", fields: [outcomeById], references: [id])
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  lines           ClmClaimLine[]
   payments        BnkPayment[]
 
   @@index([status])
   @@index([invoiceId])
-  @@index([participantId])
-  @@index([batchId])
   @@map("clm_claims")
 }
 
 enum ClmStatus {
-  PENDING        // Created, not yet submitted
-  SUBMITTED      // Submitted to NDIA
-  APPROVED       // Fully approved by NDIA
-  REJECTED       // Rejected by NDIA
-  PARTIAL        // Partially approved
-  PAID           // Provider paid
-}
-
-model ClmClaimLine {
-  id              String        @id @default(cuid())
-  claimId         String
-  claim           ClmClaim      @relation(fields: [claimId], references: [id])
-
-  // Maps to invoice line
-  invoiceLineId   String?
-  invoiceLine     InvInvoiceLine? @relation(fields: [invoiceLineId], references: [id])
-
-  // NDIS support item details (copied from invoice line for claim record)
-  supportItemCode String
-  supportItemName String
-  categoryCode    String
-  serviceDate     DateTime
-  quantity        Float
-  unitPriceCents  Int
-  totalCents      Int
-  gstCents        Int           @default(0)
-
-  // Outcome per line (NDIA may approve/reject individual lines)
-  approvedCents   Int           @default(0)
-  status          ClmLineStatus @default(PENDING)
-  outcomeNotes    String?
-
-  @@index([claimId])
-  @@map("clm_claim_lines")
-}
-
-enum ClmLineStatus {
   PENDING
+  SUBMITTED
   APPROVED
   REJECTED
   PARTIAL
+  PAID
 }
 
 // ─────────────────────────────────────────────
@@ -670,66 +574,48 @@ enum AutoExecutionResult {
 }
 
 // ─────────────────────────────────────────────
-// NOTIFICATIONS MODULE — In-app, Email, SMS
+// NOTIFICATIONS MODULE — SMS, Email, In-App
 // ─────────────────────────────────────────────
 
-model NtfNotification {
-  id          String          @id @default(cuid())
-  userId      String          // Recipient staff user
-  user        CoreUser        @relation(fields: [userId], references: [id])
+model NotifNotification {
+  id            String           @id @default(cuid())
+  channel       NotifChannel
+  recipient     String           // Phone number (E.164) or email address
+  subject       String?          // For email notifications only
+  message       String           @db.Text
 
-  // Notification content
-  type        NtfType
-  title       String
-  body        String
-  link        String?         // Optional deep-link path, e.g. "/invoices?id=xxx"
+  // Delivery tracking
+  status        NotifStatus      @default(PENDING)
+  externalId    String?          // ClickSend message_id or SES message ID
+  errorMessage  String?
+  sentAt        DateTime?
 
-  // Categorisation
-  category    NtfCategory
-  priority    NtfPriority     @default(NORMAL)
+  // Optional link to participants (REQ-010: 5-year retention)
+  participantId String?
+  participant   CrmParticipant?  @relation(fields: [participantId], references: [id])
 
-  // Read / dismissed tracking
-  readAt      DateTime?
-  dismissedAt DateTime?
+  // Who triggered this notification (null = system/automation)
+  triggeredById String?
 
-  // Delivery tracking (for email/SMS)
-  channels    NtfChannel[]    @default([IN_APP])
-  emailSentAt DateTime?
-  smsSentAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
-  createdAt   DateTime        @default(now())
-
-  @@index([userId, readAt])
-  @@index([userId, createdAt])
-  @@index([category])
-  @@map("ntf_notifications")
+  @@index([channel, status])
+  @@index([participantId])
+  @@index([createdAt])
+  @@map("notif_notifications")
 }
 
-enum NtfType {
-  INFO
-  WARNING
-  ACTION_REQUIRED
-  SUCCESS
-}
-
-enum NtfCategory {
-  INVOICE       // Invoice received, needs review, approved, rejected
-  CLAIM         // Claim submitted, outcome received
-  PAYMENT       // Payment pending, cleared
-  PLAN          // Plan expiring, budget threshold
-  COMPLIANCE    // NDIS processing deadline approaching
-  SYSTEM        // System-level notifications
-}
-
-enum NtfPriority {
-  LOW
-  NORMAL
-  HIGH
-  URGENT
-}
-
-enum NtfChannel {
-  IN_APP
-  EMAIL
+enum NotifChannel {
   SMS
+  EMAIL
+  IN_APP
+}
+
+enum NotifStatus {
+  PENDING
+  SENT
+  FAILED
+  DELIVERED
+  UNDELIVERED
 }
