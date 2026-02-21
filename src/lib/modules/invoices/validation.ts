@@ -56,3 +56,10 @@ export const approveInvoiceSchema = z.object({
 export const rejectInvoiceSchema = z.object({
   reason: z.string().min(1, 'Rejection reason is required').max(500),
 })
+
+/** Bulk invoice action — approve, reject, or generate claims for multiple invoices */
+export const bulkInvoiceActionSchema = z.object({
+  action: z.enum(['approve', 'reject', 'claim']),
+  invoiceIds: z.array(z.string().min(1)).min(1, 'At least one invoice ID is required').max(100),
+  reason: z.string().min(1).max(500).optional(),
+})

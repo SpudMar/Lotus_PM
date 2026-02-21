@@ -535,6 +535,10 @@ model ClmClaimLine {
   invoiceLineId   String?     // Optional link to source invoice line
   invoiceLine     InvInvoiceLine? @relation(fields: [invoiceLineId], references: [id])
 
+  // Direct link back to the source invoice (set on batch-generated claims).
+  // Denormalised for efficient lookup without joining through invoice lines.
+  sourceInvoiceId String?
+
   supportItemCode String
   supportItemName String
   categoryCode    String

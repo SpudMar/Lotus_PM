@@ -7,19 +7,32 @@ import type { createInvoiceSchema, updateInvoiceSchema } from './validation'
 type CreateInput = z.infer<typeof createInvoiceSchema>
 type UpdateInput = z.infer<typeof updateInvoiceSchema>
 
+type InvStatusValue = 'RECEIVED' | 'PROCESSING' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'CLAIMED' | 'PAID'
+
 export async function listInvoices(params: {
   page: number
   pageSize: number
   status?: string
+  /** Multiple statuses — takes precedence over the single `status` field */
+  statusIn?: string[]
   participantId?: string
   providerId?: string
   ingestSource?: string
   search?: string
 }) {
-  const { page, pageSize, status, participantId, providerId, ingestSource, search } = params
+  const { page, pageSize, status, statusIn, participantId, providerId, ingestSource, search } = params
+
+  // statusIn (array) takes precedence over single status
+  const statusFilter =
+    statusIn && statusIn.length > 0
+      ? { status: { in: statusIn as InvStatusValue[] } }
+      : status
+        ? { status: status as InvStatusValue }
+        : {}
+
   const where = {
     deletedAt: null,
-    ...(status ? { status: status as 'RECEIVED' | 'PROCESSING' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'CLAIMED' | 'PAID' } : {}),
+    ...statusFilter,
     ...(participantId ? { participantId } : {}),
     ...(providerId ? { providerId } : {}),
     ...(ingestSource ? { ingestSource: ingestSource as 'EMAIL' | 'MANUAL' | 'API' } : {}),
