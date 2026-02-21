@@ -27,6 +27,7 @@ import { z } from 'zod'
 import { randomUUID } from 'crypto'
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
+import { createFromEmailIngest } from '@/lib/modules/crm/correspondence'
 import type { ExtractedInvoiceData } from './textract-extraction'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -84,6 +85,12 @@ export interface EmailInvoiceDraftData {
   sourceEmail: string
   /** Textract async job ID — used to poll for extraction results */
   textractJobId: string
+  /** Email subject line — stored in CrmCorrespondence */
+  emailSubject?: string
+  /** Plain-text email body — stored in CrmCorrespondence (truncated to 5000 chars) */
+  emailBody?: string
+  /** Original filename of the PDF attachment */
+  originalFilename?: string
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -246,6 +253,24 @@ export async function createEmailInvoiceDraft(
     resourceId: invoice.id,
     after: { ingestSource: 'EMAIL', textractJobId: data.textractJobId },
   })
+
+  // Create CrmCorrespondence EMAIL_INBOUND entry for the per-client timeline.
+  // Participant/provider are not linked yet — resolved during triage.
+  // Best-effort: do not fail the whole ingest if correspondence creation fails.
+  try {
+    await createFromEmailIngest({
+      invoiceId: invoice.id,
+      fromAddress: data.sourceEmail,
+      subject: data.emailSubject ?? '',
+      body: data.emailBody ?? '',
+      metadata: {
+        s3Key: data.pdfS3Key,
+        originalFilename: data.originalFilename ?? null,
+      },
+    })
+  } catch {
+    // Non-blocking: correspondence log failure must not prevent invoice creation
+  }
 
   // Emit EventBridge event so automation rules can react (e.g. notify staff)
   const eb = makeEventBridgeClient()
