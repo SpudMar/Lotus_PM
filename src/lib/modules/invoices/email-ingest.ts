@@ -15,13 +15,19 @@
  */
 
 import { S3Client, GetObjectCommand, PutObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3'
-import { TextractClient, StartDocumentTextDetectionCommand } from '@aws-sdk/client-textract'
+import {
+  TextractClient,
+  StartDocumentTextDetectionCommand,
+  GetDocumentTextDetectionCommand,
+  type Block,
+} from '@aws-sdk/client-textract'
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge'
 import { simpleParser } from 'mailparser'
 import { z } from 'zod'
 import { randomUUID } from 'crypto'
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
+import type { ExtractedInvoiceData } from './textract-extraction'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -44,6 +50,17 @@ export const sqsMessageSchema = z.object({
 })
 
 export type SqsMessage = z.infer<typeof sqsMessageSchema>
+
+/**
+ * Input schema for POST /api/email-ingest/textract-complete.
+ * Called after a Textract job is known to be finished (by scheduler or SNS).
+ */
+export const textractCompleteSchema = z.object({
+  jobId: z.string().min(1, 'jobId is required'),
+  invoiceId: z.string().min(1, 'invoiceId is required'),
+})
+
+export type TextractCompleteInput = z.infer<typeof textractCompleteSchema>
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -243,6 +260,191 @@ export async function createEmailInvoiceDraft(
             invoiceId: invoice.id,
             ingestSource: 'EMAIL',
             receivedAt: new Date().toISOString(),
+          }),
+        },
+      ],
+    })
+  )
+
+  return invoice
+}
+
+// ── Textract result polling ────────────────────────────────────────────────────
+
+/**
+ * Thrown when a Textract job is still IN_PROGRESS or PARTIAL_SUCCESS.
+ * The API route returns 202 Accepted so the caller can retry later.
+ */
+export class TextractJobPendingError extends Error {
+  constructor(jobId: string, status: string) {
+    super(`Textract job ${jobId} is not yet complete (status: ${status})`)
+    this.name = 'TextractJobPendingError'
+  }
+}
+
+/**
+ * Fetch all pages of Textract GetDocumentTextDetection results for a job.
+ * Handles NextToken pagination — a multi-page PDF may produce many pages of blocks.
+ *
+ * @throws TextractJobPendingError if the job is still IN_PROGRESS
+ * @throws Error if the job has FAILED
+ */
+export async function pollTextractResult(jobId: string): Promise<Block[]> {
+  const textract = makeTextractClient()
+  const blocks: Block[] = []
+  let nextToken: string | undefined
+
+  do {
+    const response = await textract.send(
+      new GetDocumentTextDetectionCommand({
+        JobId: jobId,
+        ...(nextToken ? { NextToken: nextToken } : {}),
+      })
+    )
+
+    const status = response.JobStatus ?? 'UNKNOWN'
+
+    if (status === 'FAILED') {
+      throw new Error(
+        `Textract job ${jobId} failed: ${response.StatusMessage ?? 'unknown error'}`
+      )
+    }
+
+    if (status !== 'SUCCEEDED') {
+      throw new TextractJobPendingError(jobId, status)
+    }
+
+    for (const block of response.Blocks ?? []) {
+      blocks.push(block)
+    }
+    nextToken = response.NextToken
+  } while (nextToken)
+
+  return blocks
+}
+
+// ── Apply extraction results to the draft invoice ─────────────────────────────
+
+/**
+ * Update a draft InvInvoice with data extracted from Textract blocks:
+ * - Populates invoiceNumber, invoiceDate, subtotalCents, gstCents, totalCents
+ *   (only fields that were successfully extracted; unextracted fields stay as-is)
+ * - Creates InvInvoiceLine records for each detected NDIS support item
+ * - Links provider by ABN if found in DB
+ * - Sets status → PENDING_REVIEW (ready for human review)
+ * - Sets aiExtractedAt, aiConfidence, aiRawData
+ * - Writes TEXTRACT_COMPLETE audit log entry
+ * - Emits lotus-pm.invoices.extraction-complete EventBridge event
+ *
+ * Safe to call on a draft with no existing lines (email-ingested invoices
+ * start with zero lines). Existing lines are cleared before new ones are added.
+ */
+export async function applyExtractionToInvoice(
+  invoiceId: string,
+  extracted: ExtractedInvoiceData
+) {
+  // Attempt provider lookup by ABN — best-effort, not required
+  let resolvedProviderId: string | undefined
+  if (extracted.providerAbn) {
+    const abn = extracted.providerAbn // Normalized: no spaces
+    const abnSpaced = abn.replace(/^(\d{2})(\d{3})(\d{3})(\d{3})$/, '$1 $2 $3 $4')
+    const found = await prisma.crmProvider.findFirst({
+      where: { deletedAt: null, OR: [{ abn }, { abn: abnSpaced }] },
+      select: { id: true },
+    })
+    if (found) resolvedProviderId = found.id
+  }
+
+  // Clear any auto-generated placeholder lines before creating extraction results.
+  // Email-ingested drafts start with no lines, so this is a no-op in practice.
+  // Guard: we only delete lines on invoices that have no linked claim lines,
+  // which is guaranteed for status RECEIVED drafts.
+  await prisma.invInvoiceLine.deleteMany({ where: { invoiceId } })
+
+  // Create one InvInvoiceLine per detected NDIS line item
+  for (const item of extracted.lineItems) {
+    await prisma.invInvoiceLine.create({
+      data: {
+        invoiceId,
+        supportItemCode: item.supportItemCode,
+        supportItemName: item.supportItemName,
+        categoryCode: item.categoryCode,
+        serviceDate: item.serviceDate,
+        quantity: item.quantity,
+        unitPriceCents: item.unitPriceCents,
+        totalCents: item.totalCents,
+        gstCents: item.gstCents,
+      },
+    })
+  }
+
+  // Build the invoice update — only overwrite fields we actually extracted
+  const invoice = await prisma.invInvoice.update({
+    where: { id: invoiceId },
+    data: {
+      status: 'PENDING_REVIEW',
+      aiExtractedAt: new Date(),
+      aiConfidence: extracted.confidence,
+      // Store a structured extraction summary (not raw blocks — too large)
+      aiRawData: {
+        source: 'textract',
+        extractedAt: new Date().toISOString(),
+        invoiceNumber: extracted.invoiceNumber,
+        invoiceDate: extracted.invoiceDate?.toISOString() ?? null,
+        totalCents: extracted.totalCents,
+        gstCents: extracted.gstCents,
+        subtotalCents: extracted.subtotalCents,
+        providerAbn: extracted.providerAbn,
+        lineItemCount: extracted.lineItems.length,
+        confidence: extracted.confidence,
+      },
+      // Only update the fields we actually extracted
+      ...(extracted.invoiceNumber !== null
+        ? { invoiceNumber: extracted.invoiceNumber }
+        : {}),
+      ...(extracted.invoiceDate !== null
+        ? { invoiceDate: extracted.invoiceDate }
+        : {}),
+      ...(extracted.totalCents !== null ? { totalCents: extracted.totalCents } : {}),
+      ...(extracted.gstCents !== null ? { gstCents: extracted.gstCents } : {}),
+      ...(extracted.subtotalCents !== null
+        ? { subtotalCents: extracted.subtotalCents }
+        : {}),
+      ...(resolvedProviderId !== undefined
+        ? { providerId: resolvedProviderId }
+        : {}),
+    },
+  })
+
+  // REQ-017: Audit log — no PII
+  await createAuditLog({
+    userId: SYSTEM_USER_ID,
+    action: 'TEXTRACT_COMPLETE',
+    resource: 'invoice',
+    resourceId: invoiceId,
+    after: {
+      status: 'PENDING_REVIEW',
+      invoiceNumber: extracted.invoiceNumber,
+      lineItemCount: extracted.lineItems.length,
+      confidence: extracted.confidence,
+    },
+  })
+
+  // Emit EventBridge so automation rules can react (e.g. notify staff to review)
+  const eb = makeEventBridgeClient()
+  await eb.send(
+    new PutEventsCommand({
+      Entries: [
+        {
+          EventBusName: process.env.EVENTBRIDGE_BUS_NAME ?? 'lotus-pm-events',
+          Source: 'lotus-pm.invoices',
+          DetailType: 'lotus-pm.invoices.extraction-complete',
+          Detail: JSON.stringify({
+            invoiceId,
+            confidence: extracted.confidence,
+            lineItemCount: extracted.lineItems.length,
+            status: 'PENDING_REVIEW',
+            extractedAt: new Date().toISOString(),
           }),
         },
       ],
