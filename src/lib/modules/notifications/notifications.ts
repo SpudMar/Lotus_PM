@@ -101,7 +101,64 @@ export async function createNotificationRecord(
   })
 }
 
-// ─── Query ────────────────────────────────────────────────────────────────────
+// ─── In-App notification helpers (bell badge / notifications page) ────────────
+
+/**
+ * Count unread in-app notifications for a user (drives the bell badge).
+ */
+export async function getUnreadCount(userId: string): Promise<number> {
+  return prisma.ntfNotification.count({
+    where: { userId, readAt: null, dismissedAt: null },
+  })
+}
+
+/**
+ * Mark a single notification as read.
+ */
+export async function markAsRead(notificationId: string, userId: string): Promise<void> {
+  await prisma.ntfNotification.updateMany({
+    where: { id: notificationId, userId },
+    data: { readAt: new Date() },
+  })
+}
+
+/**
+ * Mark all unread notifications as read for a user.
+ */
+export async function markAllAsRead(userId: string): Promise<void> {
+  await prisma.ntfNotification.updateMany({
+    where: { userId, readAt: null },
+    data: { readAt: new Date() },
+  })
+}
+
+/**
+ * Dismiss a notification (hide from list).
+ */
+export async function dismissNotification(notificationId: string, userId: string): Promise<void> {
+  await prisma.ntfNotification.updateMany({
+    where: { id: notificationId, userId },
+    data: { dismissedAt: new Date() },
+  })
+}
+
+/**
+ * Get paginated notifications for a user (notifications page).
+ */
+export async function getUserNotifications(
+  userId: string,
+  limit = 50,
+  offset = 0
+) {
+  return prisma.ntfNotification.findMany({
+    where: { userId, dismissedAt: null },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    skip: offset,
+  })
+}
+
+// ─── Delivery tracking query ───────────────────────────────────────────────────
 
 export interface ListNotificationsFilter {
   channel?: 'SMS' | 'EMAIL' | 'IN_APP'
