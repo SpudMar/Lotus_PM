@@ -237,6 +237,7 @@ See `.env.example` for the full list. Required for development:
 - `CLICKSEND_USERNAME` — ClickSend account username (set in `.env.local`)
 - `CLICKSEND_API_KEY` — ClickSend API key (set in `.env.local`)
 - `CLICKSEND_FROM` — SMS sender ID, default `LotusAssist` (max 11 chars alphanumeric)
+- `CRON_SECRET` — bearer token for `POST /api/automation/cron`. Generate: `openssl rand -base64 32`. Also add to GitHub Actions secrets (`Settings → Secrets → CRON_SECRET`) to activate the cron workflow.
 
 ---
 
@@ -270,7 +271,7 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 
 **Active Phase:** Phase 3B COMPLETE — all 7 workstreams merged (PRs #14–#21). Staging fully deployed to ap-southeast-2 (PR #22).
 
-**Current test count:** 619/619 tests passing.
+**Current test count:** 626/626 tests passing (35 test suites).
 
 **Dev server:** `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`, Tailwind v4 requires Turbopack)
 
@@ -293,6 +294,7 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 - [x] Step 8: Smoke test — `GET /api/health` returns `{"status":"ok","service":"lotus-pm"}`
 
 Branch protection updated: Required check name is `Lint, Type Check & Test` (matches `name:` field in ci.yml, not the job ID). `strict: true` — branch must be up-to-date with main. No review required (solo dev). `enforce_admins: false`.
+When concurrent PRs advance main while CI is running, the branch goes stale. Fix: `git merge main && git push` then wait for CI rerun. Or use `gh pr merge --auto` to let GitHub do it automatically once CI passes.
 
 ---
 
@@ -383,10 +385,10 @@ When PACE B2B API credentials arrive, the following can be automated incremental
 | UI | ✅ | Table with toggle/test/delete, create dialog with trigger type, event, conditions, message template (`src/app/(automation)/automation/page.tsx`) |
 | Tests | ✅ | 27 passing (20 engine unit tests + 7 existing). All operators, template interpolation, multi-condition evaluation. |
 
-**Notes for next session:**
-- ✅ `NOTIFY_STAFF` action wired to ClickSend SMS — calls `sendSmsToStaffByRole()`, finds all active staff with a phone set, sends real SMS.
-- Events are not yet emitted from invoice/plan modules — `processEvent` needs to be called from `approveInvoice`, `rejectInvoice`, etc. to trigger automation rules automatically.
-- Scheduled rules (`triggerType: SCHEDULE`, cronExpression) need a cron runner — not yet wired to any scheduler.
+**Automation engine fully live (PRs #29–#31):**
+- ✅ `NOTIFY_STAFF` wired to ClickSend SMS.
+- ✅ `processEvent` wired (fire-and-forget) from: `approveInvoice`, `rejectInvoice`, `submitClaim`, `recordClaimOutcome`, `reconcilePayments`.
+- ✅ Cron runner: `POST /api/automation/cron` (CRON_SECRET bearer auth). GitHub Actions `.github/workflows/cron.yml` fires every 5 min against staging CloudFront endpoint. Add `CRON_SECRET` to GitHub Actions secrets to activate.
 
 ---
 
@@ -433,6 +435,8 @@ All 6 CDK stacks CREATE_COMPLETE in ap-southeast-2 (Sydney). Deployed 22 Feb 202
 | `src/lib/events/types.ts` | EventBridge event type definitions (9 event types) |
 | `src/lib/modules/automation/engine.ts` | Automation rule evaluator and executor |
 | `src/lib/modules/automation/rules.ts` | Automation CRUD and event lookup |
+| `src/app/api/automation/cron/route.ts` | Cron runner — CRON_SECRET auth, evaluates due SCHEDULE rules every 5 min |
+| `.github/workflows/cron.yml` | GitHub Actions schedule — POSTs to staging CloudFront every 5 min |
 | `src/app/(automation)/automation/page.tsx` | Automation UI — rule list, create, test, toggle |
 | `src/lib/modules/reports/reports.ts` | Reporting queries (dashboard, financial, compliance, budget) |
 | `src/app/(reports)/reports/page.tsx` | Reports UI — overview, compliance, budget, financial tabs |
@@ -533,5 +537,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 22 February 2026 — Phase 3B complete (all 7 WSs merged, PRs #14–#21). 619/619 tests. 19 migrations. Staging live in ap-southeast-2 (PR #22). CDK scaffolding uses nginx on port 80 — real app image not yet deployed.*
+*Last updated: 23 February 2026 — 626/626 tests, 35 suites. Automation engine fully live (PRs #29–#31): UI brand refresh (green/Jakarta), processEvent wiring, cron runner. Next: deploy real app image to ECS, Documents module, Participant App.*
 *All decisions in this file were made deliberately. Update with care.*
