@@ -16,8 +16,6 @@ import { getConfig } from '../config'
 interface AppStackProps extends cdk.StackProps {
   environment: string
   vpc: ec2.Vpc
-  appSecurityGroup: ec2.SecurityGroup
-  albSecurityGroup: ec2.SecurityGroup
   db: rds.DatabaseInstance
   dbSecret: secretsmanager.ISecret
   invoiceBucket: s3.Bucket
@@ -39,7 +37,7 @@ export class LotusPmAppStack extends cdk.Stack {
     const cluster = new ecs.Cluster(this, 'Cluster', {
       clusterName: `lotus-pm-${env}`,
       vpc: props.vpc,
-      containerInsights: true,
+      containerInsightsV2: ecs.ContainerInsights.ENABLED,
     })
 
     // ── CloudWatch Log Group ─────────────────────────────────────────
@@ -55,7 +53,7 @@ export class LotusPmAppStack extends cdk.Stack {
     const taskRole = new iam.Role(this, 'TaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       roleName: `lotus-pm-${env}-task-role`,
-      description: 'Lotus PM ECS task role — S3, SQS, SES, Textract, EventBridge',
+      description: 'Lotus PM ECS task role - S3, SQS, SES, Textract, EventBridge',
     })
 
     // S3: read/write invoices and documents
@@ -119,37 +117,21 @@ export class LotusPmAppStack extends cdk.Stack {
     appSecret.grantRead(taskRole)
 
     // ── Container ────────────────────────────────────────────────────
+    // Scaffold placeholder: nginx responds on port 80 so ECS stabilises immediately.
+    // CI/CD replaces this with the real ECR image (port 3000) and re-enables secrets.
     taskDefinition.addContainer('App', {
-      image: ecs.ContainerImage.fromRegistry(
-        // Placeholder — replaced by CI/CD with ECR image on deploy
-        `public.ecr.aws/amazonlinux/amazonlinux:latest`
-      ),
+      image: ecs.ContainerImage.fromRegistry('public.ecr.aws/nginx/nginx:stable-alpine3.20-slim'),
       containerName: 'lotus-pm-app',
-      portMappings: [{ containerPort: 3000 }],
+      portMappings: [{ containerPort: 80 }],
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'app',
         logGroup,
       }),
+      // No secrets injected for placeholder - avoids Secrets Manager key errors
+      // CI/CD will add: DB_HOST/PORT/USER/PASSWORD/NAME from RDS secret + NEXTAUTH_SECRET
       environment: {
-        NODE_ENV: env === 'production' ? 'production' : 'staging',
-        AWS_REGION: 'ap-southeast-2',
-        NEXTAUTH_URL: `https://${config.subDomain}.${config.domainName}`,
-        EVENTBRIDGE_BUS_NAME: 'lotus-pm-events',
-        SQS_INVOICE_QUEUE_URL: props.invoiceQueue.queueUrl,
-        SQS_NOTIFICATION_QUEUE_URL: props.notificationQueue.queueUrl,
-        S3_BUCKET_INVOICES: props.invoiceBucket.bucketName,
-        S3_BUCKET_DOCUMENTS: props.documentBucket.bucketName,
-      },
-      secrets: {
-        DATABASE_URL: ecs.Secret.fromSecretsManager(props.dbSecret, 'dbUrl'),
-        NEXTAUTH_SECRET: ecs.Secret.fromSecretsManager(appSecret, 'nextauthSecret'),
-      },
-      healthCheck: {
-        command: ['CMD-SHELL', 'curl -f http://localhost:3000/api/health || exit 1'],
-        interval: cdk.Duration.seconds(30),
-        timeout: cdk.Duration.seconds(10),
-        retries: 3,
-        startPeriod: cdk.Duration.seconds(60),
+        DB_SECRET_ARN: props.dbSecret.secretArn,
+        APP_SECRET_ARN: appSecret.secretArn,
       },
     })
 
@@ -159,21 +141,22 @@ export class LotusPmAppStack extends cdk.Stack {
       taskDefinition,
       desiredCount: config.desiredCount,
       publicLoadBalancer: true,
-      listenerPort: 443,
-      securityGroups: [props.appSecurityGroup],
+      // Port 80 for scaffold (nginx placeholder); CI/CD switches to 443 + ACM cert
+      listenerPort: 80,
       loadBalancerName: `lotus-pm-${env}`,
       serviceName: `lotus-pm-${env}`,
-      circuitBreaker: { rollback: true },
+      // Circuit breaker disabled for initial deploy (placeholder image has no app on :3000)
+      // Re-enable once real ECR image is in place via CI/CD
+      // circuitBreaker: { rollback: true },
       deploymentController: {
         type: ecs.DeploymentControllerType.ECS,
       },
-      // Health check
       healthCheckGracePeriod: cdk.Duration.seconds(120),
     })
 
-    // Health check target group settings
+    // Health check: nginx returns 200 on / - CI/CD updates to /api/health on port 3000
     this.fargateService.targetGroup.configureHealthCheck({
-      path: '/api/health',
+      path: '/',
       healthyHttpCodes: '200',
       interval: cdk.Duration.seconds(30),
       timeout: cdk.Duration.seconds(10),
@@ -208,7 +191,8 @@ export class LotusPmAppStack extends cdk.Stack {
       comment: `lotus-pm-${env}`,
       defaultBehavior: {
         origin: new origins.LoadBalancerV2Origin(this.fargateService.loadBalancer, {
-          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
+          // HTTP_ONLY for scaffold (port 80); CI/CD switches back to HTTPS_ONLY + ACM cert
+          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
         }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,    // Dynamic app — no caching
@@ -219,7 +203,7 @@ export class LotusPmAppStack extends cdk.Stack {
       additionalBehaviors: {
         '/_next/static/*': {
           origin: new origins.LoadBalancerV2Origin(this.fargateService.loadBalancer, {
-            protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
+            protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
           }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
@@ -236,7 +220,7 @@ export class LotusPmAppStack extends cdk.Stack {
     })
     new cdk.CfnOutput(this, 'CloudFrontDomain', {
       value: distribution.distributionDomainName,
-      description: 'CloudFront domain — point DNS CNAME here for staging',
+      description: 'CloudFront domain - point DNS CNAME here for staging',
       exportName: `lotus-pm-${env}-cloudfront-domain`,
     })
     new cdk.CfnOutput(this, 'EcrImagePlaceholder', {

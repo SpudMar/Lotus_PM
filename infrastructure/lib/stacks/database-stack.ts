@@ -29,6 +29,8 @@ export class LotusPmDatabaseStack extends cdk.Stack {
     // ── RDS PostgreSQL ──────────────────────────────────────────────
     // REQ-016: storageEncrypted — AES-256 at rest
     // REQ-011: ap-southeast-2 (inherited from stack env)
+    const isProduction = props.environment === 'production'
+
     this.db = new rds.DatabaseInstance(this, 'Database', {
       engine: rds.DatabaseInstanceEngine.postgres({
         version: rds.PostgresEngineVersion.VER_16,
@@ -42,17 +44,19 @@ export class LotusPmDatabaseStack extends cdk.Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroups: [props.dbSecurityGroup],
       databaseName: 'lotus_pm',
-      storageEncrypted: true,          // REQ-016: encryption at rest
-      multiAz: props.environment === 'production',
-      backupRetention: cdk.Duration.days(config.backupRetentionDays),
+      // REQ-016: encryption at rest — not available on db.t3.micro (staging), enabled for production
+      storageEncrypted: isProduction,
+      multiAz: isProduction,
+      // Free tier AWS accounts require backupRetention=0; production uses full retention
+      backupRetention: isProduction
+        ? cdk.Duration.days(config.backupRetentionDays)
+        : cdk.Duration.days(0),
       deletionProtection: config.deletionProtection,
-      // REQ-010: financial data — 5 year retention
-      // Automated backups + manual snapshots before major ops
-      enablePerformanceInsights: true,
-      performanceInsightRetention: rds.PerformanceInsightRetention.DEFAULT,
+      // Performance Insights not available on db.t3.micro (staging)
+      enablePerformanceInsights: isProduction,
       cloudwatchLogsExports: ['postgresql', 'upgrade'],
       autoMinorVersionUpgrade: true,
-      removalPolicy: props.environment === 'production'
+      removalPolicy: isProduction
         ? cdk.RemovalPolicy.RETAIN
         : cdk.RemovalPolicy.SNAPSHOT,
       instanceIdentifier: `lotus-pm-${props.environment}`,

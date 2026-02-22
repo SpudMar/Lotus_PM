@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib'
 import * as s3 from 'aws-cdk-lib/aws-s3'
+import * as s3n from 'aws-cdk-lib/aws-s3-notifications'
 import * as sqs from 'aws-cdk-lib/aws-sqs'
 import * as events from 'aws-cdk-lib/aws-events'
 import * as ses from 'aws-cdk-lib/aws-ses'
@@ -137,16 +138,24 @@ export class LotusPmStorageStack extends cdk.Stack {
       scanEnabled: true,  // Enable SES spam/virus scanning
       actions: [
         // Action 1: Save raw .eml to S3 under inbound/ prefix
+        // Action 2 (SQS notification) is wired via S3 event notification below —
+        // sesActions.Sqs does not exist in aws-cdk-lib v2; use S3 → SQS instead.
         new sesActions.S3({
           bucket: this.invoiceBucket,
           objectKeyPrefix: 'inbound/',
         }),
-        // Action 2: Notify invoice queue so the worker can process the email
-        new sesActions.Sqs({
-          queue: this.invoiceQueue,
-        }),
       ],
     })
+
+    // ── S3 → SQS: Wire inbound email saves to invoice queue ─────────
+    // SES saves the .eml to inbound/ prefix; this triggers invoiceQueue
+    // so the worker at POST /api/email-ingest can process it.
+    // (sesActions.Sqs not available in aws-cdk-lib v2 — use S3 notification instead)
+    this.invoiceBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.SqsDestination(this.invoiceQueue),
+      { prefix: 'inbound/' }
+    )
 
     // ── Outputs ─────────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'InvoiceBucketName', {
