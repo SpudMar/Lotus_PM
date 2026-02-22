@@ -26,6 +26,11 @@ export type LotusEvent =
   | InvoiceParticipantApprovedEvent
   | InvoiceParticipantRejectedEvent
   | InvoiceApprovalSkippedEvent
+  | FundQuarantineCreatedEvent
+  | FundQuarantineReleasedEvent
+  | FundQuarantineThresholdEvent
+  | CoordinatorAssignedEvent
+  | CoordinatorUnassignedEvent
 
 interface BaseEvent {
   eventBusName: 'lotus-pm-events'
@@ -252,5 +257,61 @@ export interface InvoiceApprovalSkippedEvent extends BaseEvent {
   detail: {
     invoiceId: string
     participantId: string
+  }
+}
+
+export interface FundQuarantineCreatedEvent extends BaseEvent {
+  source: 'lotus-pm.fund-quarantine'
+  detailType: 'lotus-pm.fund-quarantine.created'
+  detail: {
+    quarantineId: string
+    budgetLineId: string
+    providerId: string
+    quarantinedCents: number
+    serviceAgreementId?: string
+  }
+}
+
+export interface FundQuarantineReleasedEvent extends BaseEvent {
+  source: 'lotus-pm.fund-quarantine'
+  detailType: 'lotus-pm.fund-quarantine.released'
+  detail: {
+    quarantineId: string
+    budgetLineId: string
+    providerId: string
+  }
+}
+
+export interface FundQuarantineThresholdEvent extends BaseEvent {
+  source: 'lotus-pm.fund-quarantine'
+  detailType: 'lotus-pm.fund-quarantine.threshold-reached'
+  detail: {
+    quarantineId: string
+    budgetLineId: string
+    providerId: string
+    usedPercent: number
+  }
+}
+
+export interface CoordinatorAssignedEvent extends BaseEvent {
+  source: 'lotus-pm.crm'
+  detailType: 'lotus-pm.crm.coordinator-assigned'
+  detail: {
+    participantId: string
+    coordinatorId: string
+    assignmentId: string
+    assignedById: string
+    organisation?: string
+  }
+}
+
+export interface CoordinatorUnassignedEvent extends BaseEvent {
+  source: 'lotus-pm.crm'
+  detailType: 'lotus-pm.crm.coordinator-unassigned'
+  detail: {
+    participantId: string
+    coordinatorId: string
+    assignmentId: string
+    deactivatedById: string
   }
 }

@@ -1,0 +1,19 @@
+import { NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth/session'
+import { getCoordinatorParticipants } from '@/lib/modules/crm/coordinators'
+
+export async function GET(): Promise<NextResponse> {
+  try {
+    const session = await requirePermission('coordinator:read')
+    const participants = await getCoordinatorParticipants(session.user.id)
+    return NextResponse.json(participants)
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 })
+    }
+    if (error instanceof Error && error.message === 'Forbidden') {
+      return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 })
+    }
+    return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
+  }
+}

@@ -74,6 +74,8 @@ interface Participant {
   state: string | null
   postcode: string | null
   isActive: boolean
+  onboardingStatus: string | null
+  ingestSource: string | null
   assignedTo: { id: string; name: string; email: string } | null
   plans: { id: string; startDate: string; endDate: string; status: string }[]
   invoices: { id: string; invoiceNumber: string; totalCents: number; status: string; receivedAt: string }[]
@@ -135,6 +137,7 @@ export default function ParticipantDetailPage({
   const [noteSubject, setNoteSubject] = useState('')
   const [noteBody, setNoteBody] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
+  const [activatingOnboarding, setActivatingOnboarding] = useState(false)
 
   // -- Invoice approval preferences --
   const [approvalEnabled, setApprovalEnabled] = useState(false)
@@ -224,6 +227,24 @@ export default function ParticipantDetailPage({
     }
   }
 
+  async function handleActivateOnboarding(): Promise<void> {
+    setActivatingOnboarding(true)
+    try {
+      const res = await fetch(`/api/crm/participants/${id}/activate-onboarding`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        const updated = await fetch(`/api/crm/participants/${id}`)
+        if (updated.ok) {
+          const json = await updated.json() as { data: Participant }
+          setParticipant(json.data)
+        }
+      }
+    } finally {
+      setActivatingOnboarding(false)
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -263,6 +284,27 @@ export default function ParticipantDetailPage({
           </div>
         }
       />
+
+      {/* ── WordPress onboarding banner ──────────────────────────────────── */}
+      {participant.onboardingStatus === 'DRAFT' && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Complete Onboarding</p>
+            <p className="text-sm text-amber-700 mt-0.5">
+              This participant was created via the WordPress intake form and is pending activation.
+              Review their details, then click Activate to make them an active participant.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => void handleActivateOnboarding()}
+            disabled={activatingOnboarding}
+            className="shrink-0"
+          >
+            {activatingOnboarding ? 'Activating...' : 'Activate Participant'}
+          </Button>
+        </div>
+      )}
 
       <Tabs defaultValue="overview">
         <TabsList>
