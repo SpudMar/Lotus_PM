@@ -22,6 +22,9 @@ export type LotusEvent =
   | ServiceAgreementTerminatedEvent
   | EmailSentEvent
   | EmailDeliveryFailedEvent
+  | FundQuarantineCreatedEvent
+  | FundQuarantineReleasedEvent
+  | FundQuarantineThresholdEvent
   | CoordinatorAssignedEvent
   | CoordinatorUnassignedEvent
 
@@ -214,6 +217,39 @@ export interface EmailDeliveryFailedEvent extends BaseEvent {
     toEmail: string
     errorMessage: string
     failedAt: string
+  }
+}
+
+export interface FundQuarantineCreatedEvent extends BaseEvent {
+  source: 'lotus-pm.fund-quarantine'
+  detailType: 'lotus-pm.fund-quarantine.created'
+  detail: {
+    quarantineId: string
+    budgetLineId: string
+    providerId: string
+    quarantinedCents: number
+    serviceAgreementId?: string
+  }
+}
+
+export interface FundQuarantineReleasedEvent extends BaseEvent {
+  source: 'lotus-pm.fund-quarantine'
+  detailType: 'lotus-pm.fund-quarantine.released'
+  detail: {
+    quarantineId: string
+    budgetLineId: string
+    providerId: string
+  }
+}
+
+export interface FundQuarantineThresholdEvent extends BaseEvent {
+  source: 'lotus-pm.fund-quarantine'
+  detailType: 'lotus-pm.fund-quarantine.threshold-reached'
+  detail: {
+    quarantineId: string
+    budgetLineId: string
+    providerId: string
+    usedPercent: number
   }
 }
 
