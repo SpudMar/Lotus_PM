@@ -48,6 +48,7 @@ model CoreUser {
   inAppNotifications   NotifNotification[] @relation("UserNotifications")
   uploadedDocuments    DocDocument[]    @relation("UploadedDocuments")
   createdCorrespondence CrmCorrespondence[] @relation("CreatedCorrespondence")
+  managedAgreements    SaServiceAgreement[] @relation("AgreementManager")
 
   // Coordinator relations (WS4)
   coordinatorAssignments CrmCoordinatorAssignment[] @relation("CoordinatorAssignments")
@@ -167,6 +168,7 @@ model CrmParticipant {
   notifications     NotifNotification[]
   claims            ClmClaim[]
   correspondence    CrmCorrespondence[]
+  serviceAgreements SaServiceAgreement[]
 
   sentEmails        NotifSentEmail[]
   coordinatorAssignments CrmCoordinatorAssignment[] @relation("AssignedCoordinator")
@@ -201,8 +203,9 @@ model CrmProvider {
   // Relations
   invoices        InvInvoice[]
   commLogs        CrmCommLog[]
-  correspondence  CrmCorrespondence[]
-  emails          CrmProviderEmail[]
+  correspondence    CrmCorrespondence[]
+  emails            CrmProviderEmail[]
+  serviceAgreements SaServiceAgreement[]
 
   @@index([abn])
   @@map("crm_providers")
@@ -761,6 +764,9 @@ model DocDocument {
   createdAt     DateTime    @default(now())
   deletedAt     DateTime?   // Soft delete — REQ-010
 
+  serviceAgreementId String?
+  serviceAgreement   SaServiceAgreement? @relation(fields: [serviceAgreementId], references: [id])
+
   @@index([participantId])
   @@index([uploadedById])
   @@index([category])
@@ -923,6 +929,63 @@ model XeroConnection {
 
   @@index([isActive])
   @@map("xero_connections")
+}
+
+// ─────────────────────────────────────────────
+// SERVICE AGREEMENTS MODULE — Provider ↔ Participant agreements (WS1)
+// ─────────────────────────────────────────────
+
+enum SaStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+model SaServiceAgreement {
+  id             String    @id @default(cuid())
+  agreementRef   String    @unique
+  participantId  String
+  providerId     String
+  startDate      DateTime
+  endDate        DateTime
+  reviewDate     DateTime?
+  status         SaStatus  @default(DRAFT)
+  notes          String?
+  managedById    String
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  participant    CrmParticipant     @relation(fields: [participantId], references: [id])
+  provider       CrmProvider        @relation(fields: [providerId], references: [id])
+  managedBy      CoreUser           @relation("AgreementManager", fields: [managedById], references: [id])
+  rateLines      SaRateLine[]
+  documents      DocDocument[]
+
+  @@index([participantId])
+  @@index([providerId])
+  @@index([status])
+  @@map("sa_service_agreements")
+}
+
+model SaRateLine {
+  id              String    @id @default(cuid())
+  agreementId     String
+  categoryCode    String
+  categoryName    String
+  supportItemCode String?
+  supportItemName String?
+  agreedRateCents Int
+  maxQuantity     Decimal?
+  unitType        String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  agreement       SaServiceAgreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@index([agreementId])
+  @@map("sa_rate_lines")
 }
 
 // ─────────────────────────────────────────────

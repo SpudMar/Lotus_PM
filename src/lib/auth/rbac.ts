@@ -100,6 +100,10 @@ const PERMISSIONS = {
   // Coordinator management — coordinators can read their own scope; PM+ can assign
   'coordinator:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER, ROLES.SUPPORT_COORDINATOR],
   'coordinator:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
+
+  // Service agreements — WS1: read for all staff + support coordinator; write for PM+
+  'service-agreements:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER, ROLES.ASSISTANT, ROLES.SUPPORT_COORDINATOR],
+  'service-agreements:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
 } as const
 
 export type Permission = keyof typeof PERMISSIONS
