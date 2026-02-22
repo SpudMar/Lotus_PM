@@ -221,14 +221,15 @@ export default function EmailTemplatesPage(): React.JSX.Element {
   return (
     <DashboardShell>
       <PageHeader
-        heading="Email Templates"
-        text="Manage customisable email templates with merge fields and attachments."
-      >
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Template
-        </Button>
-      </PageHeader>
+        title="Email Templates"
+        description="Manage customisable email templates with merge fields and attachments."
+        actions={
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Template
+          </Button>
+        }
+      />
 
       <div className="space-y-4">
         {loading && (
