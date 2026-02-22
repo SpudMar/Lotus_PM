@@ -25,7 +25,8 @@ export interface AutoCondition {
 
 export type AutoActionType =
   | 'LOG_COMM'       // Create a CRM communication log entry
-  | 'NOTIFY_STAFF'   // Future: send in-app / email notification (Phase 2 Notifications)
+  | 'NOTIFY_STAFF'   // Send SMS to staff by role
+  | 'SEND_EMAIL'     // Send a templated email via AWS SES (WS5)
 
 export interface LogCommAction {
   type: 'LOG_COMM'
@@ -43,7 +44,16 @@ export interface NotifyStaffAction {
   }
 }
 
-export type AutoAction = LogCommAction | NotifyStaffAction
+export interface SendEmailAction {
+  type: 'SEND_EMAIL'
+  params: {
+    templateId: string
+    recipientType: 'participant' | 'staff' | 'custom'
+    customEmail?: string
+  }
+}
+
+export type AutoAction = LogCommAction | NotifyStaffAction | SendEmailAction
 
 // ─── Trigger context ──────────────────────────────────────────────────────────
 
