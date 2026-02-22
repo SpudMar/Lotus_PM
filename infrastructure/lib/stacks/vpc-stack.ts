@@ -9,8 +9,6 @@ interface VpcStackProps extends cdk.StackProps {
 
 export class LotusPmVpcStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc
-  public readonly appSecurityGroup: ec2.SecurityGroup
-  public readonly albSecurityGroup: ec2.SecurityGroup
   public readonly dbSecurityGroup: ec2.SecurityGroup
   public readonly cacheSecurityGroup: ec2.SecurityGroup
 
@@ -45,50 +43,33 @@ export class LotusPmVpcStack extends cdk.Stack {
     })
 
     // ── Security Groups ─────────────────────────────────────────────
+    // ECS and ALB security groups are created by ApplicationLoadBalancedFargateService
+    // in the app stack — defining them here would create cross-stack cyclic references.
+    // RDS and Redis SGs use VPC CIDR ingress to accept traffic from any ECS task
+    // in the private subnets (10.0.0.0/8 range).
 
-    // ALB: accepts HTTPS from anywhere
-    this.albSecurityGroup = new ec2.SecurityGroup(this, 'AlbSg', {
-      vpc: this.vpc,
-      description: 'ALB — accepts HTTPS traffic from internet',
-      allowAllOutbound: true,
-    })
-    this.albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS from internet')
-    this.albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'HTTP (redirect to HTTPS)')
-
-    // App (ECS): only accepts traffic from ALB
-    this.appSecurityGroup = new ec2.SecurityGroup(this, 'AppSg', {
-      vpc: this.vpc,
-      description: 'ECS Fargate tasks — receives traffic from ALB only',
-      allowAllOutbound: true,
-    })
-    this.appSecurityGroup.addIngressRule(
-      this.albSecurityGroup,
-      ec2.Port.tcp(3000),
-      'Traffic from ALB'
-    )
-
-    // RDS: only accepts traffic from App
+    // RDS: accepts PostgreSQL from private subnet CIDR
     this.dbSecurityGroup = new ec2.SecurityGroup(this, 'DbSg', {
       vpc: this.vpc,
-      description: 'RDS PostgreSQL — receives traffic from ECS only',
+      description: 'RDS PostgreSQL - receives traffic from ECS private subnets',
       allowAllOutbound: false,
     })
     this.dbSecurityGroup.addIngressRule(
-      this.appSecurityGroup,
+      ec2.Peer.ipv4(this.vpc.vpcCidrBlock),
       ec2.Port.tcp(5432),
-      'PostgreSQL from ECS'
+      'PostgreSQL from VPC'
     )
 
-    // Redis: only accepts traffic from App
+    // Redis: accepts connections from private subnet CIDR
     this.cacheSecurityGroup = new ec2.SecurityGroup(this, 'CacheSg', {
       vpc: this.vpc,
-      description: 'ElastiCache Redis — receives traffic from ECS only',
+      description: 'ElastiCache Redis - receives traffic from ECS private subnets',
       allowAllOutbound: false,
     })
     this.cacheSecurityGroup.addIngressRule(
-      this.appSecurityGroup,
+      ec2.Peer.ipv4(this.vpc.vpcCidrBlock),
       ec2.Port.tcp(6379),
-      'Redis from ECS'
+      'Redis from VPC'
     )
 
     // ── Outputs ─────────────────────────────────────────────────────

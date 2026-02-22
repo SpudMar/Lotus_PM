@@ -10,7 +10,7 @@ import { LotusPmMonitoringStack } from '../lib/stacks/monitoring-stack'
 
 const app = new cdk.App()
 
-// Environment from context — default to staging
+// Environment from context - default to staging
 const environment = app.node.tryGetContext('environment') as string ?? 'staging'
 
 const env = {
@@ -24,7 +24,7 @@ const prefix = `lotus-pm-${environment}`
 const vpcStack = new LotusPmVpcStack(app, `${prefix}-vpc`, {
   env,
   environment,
-  description: 'Lotus PM — VPC, subnets, security groups',
+  description: 'Lotus PM - VPC, subnets, security groups',
 })
 
 // ── Stack 2: Database (RDS PostgreSQL) ─────────────────────────────
@@ -33,7 +33,7 @@ const dbStack = new LotusPmDatabaseStack(app, `${prefix}-database`, {
   environment,
   vpc: vpcStack.vpc,
   dbSecurityGroup: vpcStack.dbSecurityGroup,
-  description: 'Lotus PM — RDS PostgreSQL (financial data)',
+  description: 'Lotus PM - RDS PostgreSQL (financial data)',
 })
 dbStack.addDependency(vpcStack)
 
@@ -41,7 +41,7 @@ dbStack.addDependency(vpcStack)
 const storageStack = new LotusPmStorageStack(app, `${prefix}-storage`, {
   env,
   environment,
-  description: 'Lotus PM — S3 buckets, SES, SQS queues, EventBridge',
+  description: 'Lotus PM - S3 buckets, SES, SQS queues, EventBridge',
 })
 
 // ── Stack 4: Cache (ElastiCache Redis) ─────────────────────────────
@@ -50,7 +50,7 @@ const cacheStack = new LotusPmCacheStack(app, `${prefix}-cache`, {
   environment,
   vpc: vpcStack.vpc,
   cacheSecurityGroup: vpcStack.cacheSecurityGroup,
-  description: 'Lotus PM — ElastiCache Redis (sessions, rate limiting)',
+  description: 'Lotus PM - ElastiCache Redis (sessions, rate limiting)',
 })
 cacheStack.addDependency(vpcStack)
 
@@ -59,15 +59,13 @@ const appStack = new LotusPmAppStack(app, `${prefix}-app`, {
   env,
   environment,
   vpc: vpcStack.vpc,
-  appSecurityGroup: vpcStack.appSecurityGroup,
-  albSecurityGroup: vpcStack.albSecurityGroup,
   db: dbStack.db,
   dbSecret: dbStack.dbSecret,
   invoiceBucket: storageStack.invoiceBucket,
   documentBucket: storageStack.documentBucket,
   invoiceQueue: storageStack.invoiceQueue,
   notificationQueue: storageStack.notificationQueue,
-  description: 'Lotus PM — ECS Fargate app, ALB, CloudFront',
+  description: 'Lotus PM - ECS Fargate app, ALB, CloudFront',
 })
 appStack.addDependency(vpcStack)
 appStack.addDependency(dbStack)
@@ -80,7 +78,7 @@ const monitoringStack = new LotusPmMonitoringStack(app, `${prefix}-monitoring`, 
   environment,
   fargateService: appStack.fargateService,
   db: dbStack.db,
-  description: 'Lotus PM — CloudWatch dashboards and alarms',
+  description: 'Lotus PM - CloudWatch dashboards and alarms',
 })
 monitoringStack.addDependency(appStack)
 monitoringStack.addDependency(dbStack)

@@ -92,7 +92,7 @@ export class LotusPmMonitoringStack extends cdk.Stack {
     const errorAlarm = new cloudwatch.Alarm(this, '5xxAlarm', {
       alarmName: `lotus-pm-${env}-5xx-errors`,
       alarmDescription: 'ALB 5xx errors > 10 in 5 minutes',
-      metric: props.fargateService.loadBalancer.metricHttpCodeElb(
+      metric: props.fargateService.loadBalancer.metrics.httpCodeElb(
         cdk.aws_elasticloadbalancingv2.HttpCodeElb.ELB_5XX_COUNT,
         { period: cdk.Duration.minutes(5), statistic: 'Sum' }
       ),
@@ -124,10 +124,10 @@ export class LotusPmMonitoringStack extends cdk.Stack {
       new cloudwatch.GraphWidget({
         title: 'ALB Request Count & Latency',
         left: [
-          props.fargateService.loadBalancer.metricRequestCount({ period: cdk.Duration.minutes(5) }),
+          props.fargateService.loadBalancer.metrics.requestCount({ period: cdk.Duration.minutes(5) }),
         ],
         right: [
-          props.fargateService.loadBalancer.metricTargetResponseTime({ period: cdk.Duration.minutes(5) }),
+          props.fargateService.loadBalancer.metrics.targetResponseTime({ period: cdk.Duration.minutes(5) }),
         ],
         width: 12,
       }),
