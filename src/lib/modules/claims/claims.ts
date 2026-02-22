@@ -192,7 +192,7 @@ export async function createClaimFromInvoice(input: CreateInput, userId: string)
 export async function submitClaim(id: string, input: SubmitInput, userId: string) {
   const claim = await prisma.clmClaim.findUnique({
     where: { id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, invoiceId: true, claimedCents: true },
   })
 
   if (!claim) {
@@ -221,14 +221,13 @@ export async function submitClaim(id: string, input: SubmitInput, userId: string
     after: { status: 'SUBMITTED', prodaReference: input.prodaReference },
   })
 
-  // Fire-and-forget: trigger automation rules
+  // Fire-and-forget: don't block the caller on automation failures
   void processEvent('lotus-pm.claims.submitted', {
     claimId: id,
-    submittedBy: userId,
-    status: 'SUBMITTED',
-  }).catch(() => {
-    // Automation failures should not block claim operations
-  })
+    invoiceId: claim.invoiceId ?? '',
+    amountCents: claim.claimedCents,
+    submittedAt: new Date().toISOString(),
+  }).catch(() => {/* automation failures must not affect main flow */})
 
   return updated
 }
@@ -288,15 +287,13 @@ export async function recordClaimOutcome(id: string, input: OutcomeInput, userId
     after: { status: clmStatus, approvedCents: input.approvedCents, outcome: input.outcome },
   })
 
-  // Fire-and-forget: trigger automation rules for claim outcome
+  // Fire-and-forget: don't block the caller on automation failures
   void processEvent('lotus-pm.claims.outcome-received', {
     claimId: id,
     outcome: input.outcome,
-    approvedCents: input.approvedCents,
-    status: clmStatus,
-  }).catch(() => {
-    // Automation failures should not block claim operations
-  })
+    paidAmountCents: input.approvedCents ?? 0,
+    receivedAt: new Date().toISOString(),
+  }).catch(() => {/* automation failures must not affect main flow */})
 
   return updated
 }
