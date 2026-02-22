@@ -32,13 +32,26 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy Prisma schema (needed for migrations on startup)
+# Copy Prisma schema + migration files (needed for prisma migrate deploy)
 COPY --from=builder /app/prisma ./prisma
+
+# Copy Prisma CLI and engines so we can run migrations on startup
+# prisma/  — CLI package
+# @prisma/ — engines (query, migration, schema, introspection)
+COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Copy standalone Next.js output
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Entrypoint: constructs DATABASE_URL from injected secret env vars,
+# runs Prisma migrations, then starts the Next.js server.
+# ECS injects: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, NEXTAUTH_SECRET
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 USER nextjs
 
@@ -50,4 +63,4 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget -qO- http://localhost:3000/api/health || exit 1
 
-CMD ["node", "server.js"]
+CMD ["./entrypoint.sh"]

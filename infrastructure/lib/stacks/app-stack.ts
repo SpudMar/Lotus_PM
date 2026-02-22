@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib'
 import * as ec2 from 'aws-cdk-lib/aws-ec2'
+import * as ecr from 'aws-cdk-lib/aws-ecr'
 import * as ecs from 'aws-cdk-lib/aws-ecs'
 import * as ecsPatterns from 'aws-cdk-lib/aws-ecs-patterns'
 import * as s3 from 'aws-cdk-lib/aws-s3'
@@ -26,12 +27,34 @@ interface AppStackProps extends cdk.StackProps {
 
 export class LotusPmAppStack extends cdk.Stack {
   public readonly fargateService: ecsPatterns.ApplicationLoadBalancedFargateService
+  public readonly ecrRepository: ecr.Repository
 
   constructor(scope: Construct, id: string, props: AppStackProps) {
     super(scope, id, props)
 
     const config = getConfig(props.environment)
     const env = props.environment
+
+    // ── ECR Repository ───────────────────────────────────────────────
+    // CD pipeline builds Docker image and pushes here on every merge to main
+    this.ecrRepository = new ecr.Repository(this, 'EcrRepo', {
+      repositoryName: `lotus-pm-${env}`,
+      removalPolicy: env === 'production'
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+      // Keep last 10 images; purge untagged after 1 day
+      lifecycleRules: [
+        {
+          maxImageCount: 10,
+          description: 'Keep last 10 tagged images',
+        },
+        {
+          maxImageAge: cdk.Duration.days(1),
+          tagStatus: ecr.TagStatus.UNTAGGED,
+          description: 'Purge untagged images after 1 day',
+        },
+      ],
+    })
 
     // ── ECS Cluster ─────────────────────────────────────────────────
     const cluster = new ecs.Cluster(this, 'Cluster', {
@@ -88,7 +111,7 @@ export class LotusPmAppStack extends cdk.Stack {
       resources: ['*'],
     }))
 
-    // Secrets Manager: read DB credentials and other secrets
+    // Secrets Manager: read DB credentials and app secrets
     props.dbSecret.grantRead(taskRole)
 
     // Cognito: user management
@@ -101,6 +124,10 @@ export class LotusPmAppStack extends cdk.Stack {
       resources: ['*'],
     }))
 
+    // ── Task Execution Role (ECR pull + Secrets Manager) ─────────────
+    // CDK creates a default execution role, but we need to grant ECR pull
+    // This is handled automatically by fromEcrRepository below
+
     // ── Task Definition ──────────────────────────────────────────────
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'TaskDef', {
       family: `lotus-pm-${env}`,
@@ -109,29 +136,60 @@ export class LotusPmAppStack extends cdk.Stack {
       taskRole,
     })
 
-    // ── App Secret (NEXTAUTH_SECRET etc.) ───────────────────────────
+    // Grant ECR pull to the task execution role
+    this.ecrRepository.grantPull(taskDefinition.obtainExecutionRole())
+
+    // ── App Secrets (NEXTAUTH_SECRET etc.) ───────────────────────────
+    // Populated manually in AWS Secrets Manager before first deploy:
+    //   aws secretsmanager put-secret-value \
+    //     --secret-id lotus-pm/staging/app-secrets \
+    //     --secret-string '{"NEXTAUTH_SECRET":"<random-32-char-string>"}'
     const appSecret = new secretsmanager.Secret(this, 'AppSecret', {
       secretName: `lotus-pm/${env}/app-secrets`,
       description: 'Lotus PM application secrets (NEXTAUTH_SECRET, etc.)',
     })
     appSecret.grantRead(taskRole)
+    appSecret.grantRead(taskDefinition.obtainExecutionRole())
+    props.dbSecret.grantRead(taskDefinition.obtainExecutionRole())
 
     // ── Container ────────────────────────────────────────────────────
-    // Scaffold placeholder: nginx responds on port 80 so ECS stabilises immediately.
-    // CI/CD replaces this with the real ECR image (port 3000) and re-enables secrets.
+    // Uses the ECR image built and pushed by the CD pipeline (cd.yml).
+    // The :latest tag is always the most recently deployed image.
+    // entrypoint.sh constructs DATABASE_URL from injected secret fields,
+    // runs prisma migrate deploy, then starts the Next.js server.
     taskDefinition.addContainer('App', {
-      image: ecs.ContainerImage.fromRegistry('public.ecr.aws/nginx/nginx:stable-alpine3.20-slim'),
+      image: ecs.ContainerImage.fromEcrRepository(this.ecrRepository, 'latest'),
       containerName: 'lotus-pm-app',
-      portMappings: [{ containerPort: 80 }],
+      portMappings: [{ containerPort: 3000 }],
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'app',
         logGroup,
       }),
-      // No secrets injected for placeholder - avoids Secrets Manager key errors
-      // CI/CD will add: DB_HOST/PORT/USER/PASSWORD/NAME from RDS secret + NEXTAUTH_SECRET
+      // Plain env vars
       environment: {
-        DB_SECRET_ARN: props.dbSecret.secretArn,
-        APP_SECRET_ARN: appSecret.secretArn,
+        NODE_ENV: 'production',
+        NEXT_TELEMETRY_DISABLED: '1',
+        // NEXTAUTH_URL updated to staging.planmanager.lotusassist.com.au after DNS is wired
+        NEXTAUTH_URL: `https://d2iv01jt8w4gxn.cloudfront.net`,
+        PORT: '3000',
+        HOSTNAME: '0.0.0.0',
+      },
+      // Secrets injected from Secrets Manager at container startup
+      // entrypoint.sh constructs DATABASE_URL from these individual fields
+      secrets: {
+        DB_HOST: ecs.Secret.fromSecretsManager(props.dbSecret, 'host'),
+        DB_PORT: ecs.Secret.fromSecretsManager(props.dbSecret, 'port'),
+        DB_USER: ecs.Secret.fromSecretsManager(props.dbSecret, 'username'),
+        DB_PASSWORD: ecs.Secret.fromSecretsManager(props.dbSecret, 'password'),
+        DB_NAME: ecs.Secret.fromSecretsManager(props.dbSecret, 'dbname'),
+        NEXTAUTH_SECRET: ecs.Secret.fromSecretsManager(appSecret, 'NEXTAUTH_SECRET'),
+      },
+      healthCheck: {
+        command: ['CMD-SHELL', 'wget -qO- http://localhost:3000/api/health || exit 1'],
+        interval: cdk.Duration.seconds(30),
+        timeout: cdk.Duration.seconds(10),
+        startPeriod: cdk.Duration.seconds(60),
+        retries: 3,
       },
     })
 
@@ -141,22 +199,19 @@ export class LotusPmAppStack extends cdk.Stack {
       taskDefinition,
       desiredCount: config.desiredCount,
       publicLoadBalancer: true,
-      // Port 80 for scaffold (nginx placeholder); CI/CD switches to 443 + ACM cert
-      listenerPort: 80,
+      listenerPort: 80, // Switch to 443 after ACM cert is attached
       loadBalancerName: `lotus-pm-${env}`,
       serviceName: `lotus-pm-${env}`,
-      // Circuit breaker disabled for initial deploy (placeholder image has no app on :3000)
-      // Re-enable once real ECR image is in place via CI/CD
-      // circuitBreaker: { rollback: true },
+      circuitBreaker: { rollback: true },
       deploymentController: {
         type: ecs.DeploymentControllerType.ECS,
       },
       healthCheckGracePeriod: cdk.Duration.seconds(120),
     })
 
-    // Health check: nginx returns 200 on / - CI/CD updates to /api/health on port 3000
+    // ALB health check: /api/health returns 200 when Next.js is ready
     this.fargateService.targetGroup.configureHealthCheck({
-      path: '/',
+      path: '/api/health',
       healthyHttpCodes: '200',
       interval: cdk.Duration.seconds(30),
       timeout: cdk.Duration.seconds(10),
@@ -170,14 +225,12 @@ export class LotusPmAppStack extends cdk.Stack {
       maxCapacity: config.maxCapacity,
     })
 
-    // Scale on CPU (target 70%)
     scaling.scaleOnCpuUtilization('CpuScaling', {
       targetUtilizationPercent: 70,
       scaleInCooldown: cdk.Duration.seconds(300),
       scaleOutCooldown: cdk.Duration.seconds(60),
     })
 
-    // Scale on request count
     scaling.scaleOnRequestCount('RequestScaling', {
       requestsPerTarget: 1000,
       targetGroup: this.fargateService.targetGroup,
@@ -186,20 +239,18 @@ export class LotusPmAppStack extends cdk.Stack {
     })
 
     // ── CloudFront Distribution ──────────────────────────────────────
-    // REQ-016: HTTPS only, TLS 1.2+
     const distribution = new cloudfront.Distribution(this, 'Cdn', {
       comment: `lotus-pm-${env}`,
       defaultBehavior: {
         origin: new origins.LoadBalancerV2Origin(this.fargateService.loadBalancer, {
-          // HTTP_ONLY for scaffold (port 80); CI/CD switches back to HTTPS_ONLY + ACM cert
+          // HTTP_ONLY until ACM cert is attached and ALB switches to port 443
           protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
         }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,    // Dynamic app — no caching
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
         originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
       },
-      // Cache static assets
       additionalBehaviors: {
         '/_next/static/*': {
           origin: new origins.LoadBalancerV2Origin(this.fargateService.loadBalancer, {
@@ -223,9 +274,10 @@ export class LotusPmAppStack extends cdk.Stack {
       description: 'CloudFront domain - point DNS CNAME here for staging',
       exportName: `lotus-pm-${env}-cloudfront-domain`,
     })
-    new cdk.CfnOutput(this, 'EcrImagePlaceholder', {
-      value: 'Replace container image with ECR URI in CI/CD pipeline',
-      description: 'CI/CD pipeline updates this with the built Docker image',
+    new cdk.CfnOutput(this, 'EcrRepositoryUri', {
+      value: this.ecrRepository.repositoryUri,
+      description: 'ECR repository URI - used by CD pipeline to push Docker images',
+      exportName: `lotus-pm-${env}-ecr-uri`,
     })
 
     cdk.Tags.of(this).add('Project', 'lotus-pm')

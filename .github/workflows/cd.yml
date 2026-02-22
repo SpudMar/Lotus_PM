@@ -1,0 +1,104 @@
+# CD Pipeline — Build Docker image, push to ECR, deploy to ECS staging
+#
+# Triggers on every push to main (after CI passes).
+# The ECS task's entrypoint.sh runs "prisma migrate deploy" before starting the app.
+#
+# Required GitHub repository secrets (Settings > Secrets and variables > Actions):
+#   AWS_ACCESS_KEY_ID      — IAM user access key
+#   AWS_SECRET_ACCESS_KEY  — IAM user secret key
+#
+# The IAM user needs the following minimum permissions:
+#   ecr:GetAuthorizationToken
+#   ecr:BatchCheckLayerAvailability
+#   ecr:GetDownloadUrlForLayer
+#   ecr:BatchGetImage
+#   ecr:PutImage
+#   ecr:InitiateLayerUpload
+#   ecr:UploadLayerPart
+#   ecr:CompleteLayerUpload
+#   ecs:DescribeTaskDefinition
+#   ecs:RegisterTaskDefinition
+#   ecs:UpdateService
+#   ecs:DescribeServices
+#   iam:PassRole  (for the ECS task role and execution role)
+#
+# Recommended: attach the AWS-managed policies
+#   AmazonEC2ContainerRegistryPowerUser
+#   AmazonECS_FullAccess  (or a scoped-down custom policy)
+
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: ap-southeast-2
+  ECS_CLUSTER: lotus-pm-staging
+  ECS_SERVICE: lotus-pm-staging
+  ECS_TASK_FAMILY: lotus-pm-staging
+  CONTAINER_NAME: lotus-pm-app
+
+jobs:
+  deploy:
+    name: Build and deploy to staging
+    runs-on: ubuntu-latest
+    # Only run if CI workflow succeeded (avoids deploying broken code)
+    # CI runs on pull_request; this runs on push to main after merge.
+    # They run independently, so we check CI passed via branch protection.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push Docker image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          ECR_REPOSITORY="${ECR_REGISTRY}/lotus-pm-staging"
+          IMAGE_URI="${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+          echo "Building image: ${IMAGE_URI}"
+          docker build -t "${IMAGE_URI}" -t "${ECR_REPOSITORY}:latest" .
+
+          echo "Pushing image..."
+          docker push "${IMAGE_URI}"
+          docker push "${ECR_REPOSITORY}:latest"
+
+          echo "image=${IMAGE_URI}" >> $GITHUB_OUTPUT
+
+      - name: Download current ECS task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_TASK_FAMILY }} \
+            --query taskDefinition \
+            > task-definition.json
+
+      - name: Update ECS task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
