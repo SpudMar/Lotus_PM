@@ -309,6 +309,12 @@ export async function autoCreateFromServiceAgreement(
     throw new Error('SERVICE_AGREEMENT_NOT_FOUND')
   }
 
+  if (!sa.providerId) {
+    throw new Error('SERVICE_AGREEMENT_NO_PROVIDER')
+  }
+
+  const providerId = sa.providerId
+
   const created: Awaited<ReturnType<typeof prisma.fqQuarantine.create>>[] = []
 
   for (const rateLine of sa.rateLines) {
@@ -343,7 +349,7 @@ export async function autoCreateFromServiceAgreement(
       data: {
         serviceAgreementId,
         budgetLineId: budgetLine.id,
-        providerId: sa.providerId,
+        providerId,
         supportItemCode: rateLine.supportItemCode === null ? undefined : rateLine.supportItemCode,
         quarantinedCents,
         createdById: userId,
