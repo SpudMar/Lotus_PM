@@ -77,6 +77,8 @@ interface Participant {
   assignedTo: { id: string; name: string; email: string } | null
   plans: { id: string; startDate: string; endDate: string; status: string }[]
   invoices: { id: string; invoiceNumber: string; totalCents: number; status: string; receivedAt: string }[]
+  invoiceApprovalEnabled?: boolean
+  invoiceApprovalMethod?: 'APP' | 'EMAIL' | 'SMS' | null
 }
 
 // ── Correspondence icon/label helpers ─────────────────────────────────────────
@@ -134,6 +136,12 @@ export default function ParticipantDetailPage({
   const [noteBody, setNoteBody] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
 
+  // -- Invoice approval preferences --
+  const [approvalEnabled, setApprovalEnabled] = useState(false)
+  const [approvalMethod, setApprovalMethod] = useState<'APP' | 'EMAIL' | 'SMS'>('APP')
+  const [approvalSaving, setApprovalSaving] = useState(false)
+  const [approvalLoaded, setApprovalLoaded] = useState(false)
+
   // ── Load data ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -159,6 +167,36 @@ export default function ParticipantDetailPage({
     loadCorrespondence(typeFilter)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, typeFilter])
+
+  useEffect(() => {
+    if (!id) return
+    void fetch(`/api/crm/participants/${id}/approval-preferences`)
+      .then((r) => r.json())
+      .then((j: { data: { invoiceApprovalEnabled: boolean; invoiceApprovalMethod: 'APP' | 'EMAIL' | 'SMS' | null } }) => {
+        setApprovalEnabled(j.data.invoiceApprovalEnabled)
+        setApprovalMethod(j.data.invoiceApprovalMethod ?? 'APP')
+        setApprovalLoaded(true)
+      })
+      .catch(() => null)
+  }, [id])
+
+  async function handleSaveApprovalPreferences(): Promise<void> {
+    setApprovalSaving(true)
+    try {
+      await fetch(`/api/crm/participants/${id}/approval-preferences`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoiceApprovalEnabled: approvalEnabled,
+          invoiceApprovalMethod: approvalEnabled ? approvalMethod : null,
+        }),
+      })
+    } catch {
+      // Silently ignore -- user can retry
+    } finally {
+      setApprovalSaving(false)
+    }
+  }
 
   // ── Add note ──────────────────────────────────────────────────────────────
 
@@ -240,6 +278,9 @@ export default function ParticipantDetailPage({
             {participant.invoices.length > 0 && (
               <Badge variant="secondary" className="ml-1.5 text-xs">{participant.invoices.length}</Badge>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="approval">
+            Invoice Approval
           </TabsTrigger>
         </TabsList>
 
@@ -416,6 +457,60 @@ export default function ParticipantDetailPage({
               </table>
             </div>
           )}
+        </TabsContent>
+
+        {/* -- Invoice Approval Preferences -- */}
+        <TabsContent value="approval" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Invoice Approval Preferences</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!approvalLoaded ? (
+                <div className="text-sm text-muted-foreground">Loading preferences...</div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <input
+                      id="approval-enabled"
+                      type="checkbox"
+                      checked={approvalEnabled}
+                      onChange={(e) => setApprovalEnabled(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <Label htmlFor="approval-enabled" className="cursor-pointer">
+                      Enable invoice approval for this participant
+                    </Label>
+                  </div>
+                  {approvalEnabled && (
+                    <div className="space-y-1">
+                      <Label htmlFor="approval-method">Notification method</Label>
+                      <Select
+                        value={approvalMethod}
+                        onValueChange={(v) => setApprovalMethod(v as 'APP' | 'EMAIL' | 'SMS')}
+                      >
+                        <SelectTrigger id="approval-method" className="w-48">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="APP">In-App notification</SelectItem>
+                          <SelectItem value="EMAIL">Email link</SelectItem>
+                          <SelectItem value="SMS">SMS link</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <Button
+                    onClick={() => void handleSaveApprovalPreferences()}
+                    disabled={approvalSaving}
+                    size="sm"
+                  >
+                    {approvalSaving ? 'Saving...' : 'Save preferences'}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

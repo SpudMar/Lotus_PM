@@ -22,6 +22,10 @@ export type LotusEvent =
   | ServiceAgreementTerminatedEvent
   | EmailSentEvent
   | EmailDeliveryFailedEvent
+  | InvoiceApprovalRequestedEvent
+  | InvoiceParticipantApprovedEvent
+  | InvoiceParticipantRejectedEvent
+  | InvoiceApprovalSkippedEvent
 
 interface BaseEvent {
   eventBusName: 'lotus-pm-events'
@@ -212,5 +216,41 @@ export interface EmailDeliveryFailedEvent extends BaseEvent {
     toEmail: string
     errorMessage: string
     failedAt: string
+  }
+}
+export interface InvoiceApprovalRequestedEvent extends BaseEvent {
+  source: 'lotus-pm.invoices'
+  detailType: 'lotus-pm.invoices.approval-requested'
+  detail: {
+    invoiceId: string
+    participantId: string
+    method: string
+  }
+}
+
+export interface InvoiceParticipantApprovedEvent extends BaseEvent {
+  source: 'lotus-pm.invoices'
+  detailType: 'lotus-pm.invoices.participant-approved'
+  detail: {
+    invoiceId: string
+    participantId: string
+  }
+}
+
+export interface InvoiceParticipantRejectedEvent extends BaseEvent {
+  source: 'lotus-pm.invoices'
+  detailType: 'lotus-pm.invoices.participant-rejected'
+  detail: {
+    invoiceId: string
+    participantId: string
+  }
+}
+
+export interface InvoiceApprovalSkippedEvent extends BaseEvent {
+  source: 'lotus-pm.invoices'
+  detailType: 'lotus-pm.invoices.approval-skipped'
+  detail: {
+    invoiceId: string
+    participantId: string
   }
 }
