@@ -21,5 +21,8 @@ export const config = {
     '/coordinators/:path*',
     '/coordinator/:path*',
     '/service-agreements/:path*',
+    // Public paths (NOT listed here -- no session required):
+    //   /approval/:path*  -- public participant approval page (WS7)
+    //   /api/invoices/approval/* -- public approval respond/status API (WS7)
   ],
 }
