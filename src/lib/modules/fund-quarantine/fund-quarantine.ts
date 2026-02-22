@@ -344,7 +344,7 @@ export async function autoCreateFromServiceAgreement(
         serviceAgreementId,
         budgetLineId: budgetLine.id,
         providerId: sa.providerId,
-        supportItemCode: rateLine.supportItemCode ?? null,
+        supportItemCode: rateLine.supportItemCode ?? undefined,
         quarantinedCents,
         createdById: userId,
       },
