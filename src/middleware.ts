@@ -18,5 +18,6 @@ export const config = {
     '/reports/:path*',
     '/documents/:path*',
     '/settings/:path*',
+    '/service-agreements/:path*',
   ],
 }
