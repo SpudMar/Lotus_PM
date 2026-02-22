@@ -51,6 +51,7 @@ model CoreUser {
   managedAgreements    SaServiceAgreement[] @relation("AgreementManager")
 
   createdTemplates     NotifEmailTemplate[] @relation("TemplateCreatedBy")
+  createdQuarantines   FqQuarantine[]       @relation("QuarantineCreatedBy")
 
   @@map("core_users")
 }
@@ -149,6 +150,14 @@ model CrmParticipant {
   emergencyContactPhone String?
   emergencyContactRel   String?
 
+  // WordPress ingest tracking (WS6)
+  onboardingStatus  ParticipantOnboardingStatus?
+  ingestSource      CrmIngestSource?
+
+  // Invoice approval — WS7
+  invoiceApprovalEnabled  Boolean         @default(false)
+  invoiceApprovalMethod   ApprovalMethod?
+
   // Metadata
   isActive          Boolean   @default(true)
   onboardedAt       DateTime  @default(now())
@@ -201,6 +210,7 @@ model CrmProvider {
   correspondence    CrmCorrespondence[]
   emails            CrmProviderEmail[]
   serviceAgreements SaServiceAgreement[]
+  quarantines       FqQuarantine[]
 
   @@index([abn])
   @@map("crm_providers")
@@ -364,6 +374,7 @@ model PlanBudgetLine {
 
   invoiceLines    InvInvoiceLine[]
   periodBudgets   PlanPeriodBudget[]
+  quarantines     FqQuarantine[]
 
   @@unique([planId, categoryCode])
   @@index([planId])
@@ -460,6 +471,14 @@ model InvInvoice {
   textractJobId   String?       // Async Textract job ID (polled after processing)
   ingestSource    InvIngestSource? // How the invoice entered the system
 
+  // Participant approval — WS7
+  participantApprovalStatus  ParticipantApprovalStatus?
+  participantApprovedAt      DateTime?
+  approvalTokenHash          String?
+  approvalTokenExpiresAt     DateTime?
+  approvalSentAt             DateTime?
+  approvalSkippedAt          DateTime?
+
   // Xero sync — REQ-019/REQ-023
   xeroInvoiceId   String?       // Xero Invoice GUID after sync
   xeroSyncedAt    DateTime?     // Timestamp of last successful Xero sync
@@ -483,6 +502,7 @@ enum InvStatus {
   RECEIVED
   PROCESSING
   PENDING_REVIEW
+  PENDING_PARTICIPANT_APPROVAL
   APPROVED
   REJECTED
   CLAIMED
@@ -917,7 +937,7 @@ model SaServiceAgreement {
   id             String    @id @default(cuid())
   agreementRef   String    @unique
   participantId  String
-  providerId     String
+  providerId     String?   // Optional — WordPress-ingested SAs may not have a provider yet
   startDate      DateTime
   endDate        DateTime
   reviewDate     DateTime?
@@ -929,10 +949,11 @@ model SaServiceAgreement {
   updatedAt      DateTime  @updatedAt
 
   participant    CrmParticipant     @relation(fields: [participantId], references: [id])
-  provider       CrmProvider        @relation(fields: [providerId], references: [id])
+  provider       CrmProvider?       @relation(fields: [providerId], references: [id])
   managedBy      CoreUser           @relation("AgreementManager", fields: [managedById], references: [id])
   rateLines      SaRateLine[]
   documents      DocDocument[]
+  quarantines    FqQuarantine[]
 
   @@index([participantId])
   @@index([providerId])
@@ -1024,4 +1045,71 @@ model NotifSentEmail {
   @@index([status])
   @@index([createdAt])
   @@map("notif_sent_emails")
+}
+
+enum ParticipantOnboardingStatus {
+  DRAFT
+  PENDING_PLAN
+  COMPLETE
+}
+
+enum CrmIngestSource {
+  MANUAL
+  WORDPRESS
+  API
+}
+
+// ─────────────────────────────────────────────
+// FUND QUARANTINE MODULE — Earmarked Budget per Provider (REQ-030)
+// ─────────────────────────────────────────────
+
+enum FqStatus {
+  ACTIVE
+  RELEASED
+  EXPIRED
+}
+
+model FqQuarantine {
+  id                  String    @id @default(cuid())
+  serviceAgreementId  String?
+  budgetLineId        String
+  providerId          String
+  supportItemCode     String?
+  quarantinedCents    Int
+  usedCents           Int       @default(0)
+  fundingPeriodId     String?   // FK deferred — WS3 (DEC-003)
+  status              FqStatus  @default(ACTIVE)
+  notes               String?
+  createdById         String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  serviceAgreement    SaServiceAgreement? @relation(fields: [serviceAgreementId], references: [id])
+  budgetLine          PlanBudgetLine      @relation(fields: [budgetLineId], references: [id])
+  provider            CrmProvider         @relation(fields: [providerId], references: [id])
+  createdBy           CoreUser            @relation("QuarantineCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([budgetLineId, providerId, supportItemCode])
+  @@index([budgetLineId])
+  @@index([providerId])
+  @@index([status])
+  @@map("fq_quarantines")
+}
+
+// ─────────────────────────────────────────────
+// PARTICIPANT APPROVAL MODULE — WS7
+// ─────────────────────────────────────────────
+
+enum ApprovalMethod {
+  APP
+  EMAIL
+  SMS
+}
+
+enum ParticipantApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SKIPPED
+  NOT_REQUIRED
 }

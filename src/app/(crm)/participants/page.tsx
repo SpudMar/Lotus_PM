@@ -19,6 +19,7 @@ interface Participant {
   email: string | null
   phone: string | null
   isActive: boolean
+  onboardingStatus: string | null
   assignedTo: { id: string; name: string } | null
   _count: { plans: number; invoices: number }
 }
@@ -96,9 +97,16 @@ export default function ParticipantsPage(): React.JSX.Element {
                 participants.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell>
-                      <Link href={`/participants/${p.id}`} className="font-medium hover:underline">
-                        {p.firstName} {p.lastName}
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/participants/${p.id}`} className="font-medium hover:underline">
+                          {p.firstName} {p.lastName}
+                        </Link>
+                        {p.onboardingStatus === 'DRAFT' && (
+                          <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">
+                            DRAFT
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="font-mono text-sm">{formatNdisNumber(p.ndisNumber)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{p.email ?? p.phone ?? '—'}</TableCell>
