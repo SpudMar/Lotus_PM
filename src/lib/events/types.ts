@@ -17,6 +17,9 @@ export type LotusEvent =
   | BudgetAlertEvent
   | PlanReviewDueEvent
   | ParticipantCreatedEvent
+  | ServiceAgreementCreatedEvent
+  | ServiceAgreementActivatedEvent
+  | ServiceAgreementTerminatedEvent
 
 interface BaseEvent {
   eventBusName: 'lotus-pm-events'
@@ -146,5 +149,41 @@ export interface ParticipantCreatedEvent extends BaseEvent {
     participantId: string
     ndisNumber: string
     createdAt: string
+  }
+}
+
+export interface ServiceAgreementCreatedEvent extends BaseEvent {
+  source: 'lotus-pm.service-agreements'
+  detailType: 'lotus-pm.service-agreements.created'
+  detail: {
+    agreementId: string
+    agreementRef: string
+    participantId: string
+    providerId: string
+    createdAt: string
+  }
+}
+
+export interface ServiceAgreementActivatedEvent extends BaseEvent {
+  source: 'lotus-pm.service-agreements'
+  detailType: 'lotus-pm.service-agreements.activated'
+  detail: {
+    agreementId: string
+    agreementRef: string
+    participantId: string
+    providerId: string
+    activatedAt: string
+  }
+}
+
+export interface ServiceAgreementTerminatedEvent extends BaseEvent {
+  source: 'lotus-pm.service-agreements'
+  detailType: 'lotus-pm.service-agreements.terminated'
+  detail: {
+    agreementId: string
+    agreementRef: string
+    participantId: string
+    providerId: string
+    terminatedAt: string
   }
 }

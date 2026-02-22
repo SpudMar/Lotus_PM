@@ -17,6 +17,7 @@ import {
   Zap,
   FolderOpen,
   Mail,
+  Handshake,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
   { title: 'Comms', href: '/comms', icon: MessageSquare, permission: 'comms:read' },
   { title: 'Automation', href: '/automation', icon: Zap, permission: 'automation:read' },
   { title: 'Documents', href: '/documents', icon: FolderOpen, permission: 'documents:read' },
+  { title: 'Agreements', href: '/service-agreements', icon: Handshake, permission: 'service-agreements:read' },
   { title: 'Settings', href: '/settings', icon: Settings, permission: 'settings:read' },
 ]
 

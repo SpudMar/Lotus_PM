@@ -9,6 +9,7 @@ export const ROLES = {
   PLAN_MANAGER: 'PLAN_MANAGER',
   ASSISTANT: 'ASSISTANT',
   PARTICIPANT: 'PARTICIPANT',
+  SUPPORT_COORDINATOR: 'SUPPORT_COORDINATOR',
 } as const
 
 export type Role = typeof ROLES[keyof typeof ROLES]
@@ -95,6 +96,10 @@ const PERMISSIONS = {
   'xero:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
   'xero:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
   'xero:sync': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
+
+  // Service agreements — WS1: read for all staff + support coordinator; write for PM+
+  'service-agreements:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER, ROLES.ASSISTANT, ROLES.SUPPORT_COORDINATOR],
+  'service-agreements:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
 } as const
 
 export type Permission = keyof typeof PERMISSIONS
