@@ -97,9 +97,9 @@ export default async function ServiceAgreementDetailPage({
           </CardHeader>
           <CardContent>
             <p className="font-semibold">
-              {agreement.participant.firstName} {agreement.participant.lastName}
+              {agreement.participant?.firstName} {agreement.participant?.lastName}
             </p>
-            <p className="text-sm text-muted-foreground">NDIS: {agreement.participant.ndisNumber}</p>
+            <p className="text-sm text-muted-foreground">NDIS: {agreement.participant?.ndisNumber}</p>
           </CardContent>
         </Card>
 
@@ -108,7 +108,7 @@ export default async function ServiceAgreementDetailPage({
             <CardTitle className="text-sm font-medium text-muted-foreground">Provider</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="font-semibold">{agreement.provider.name}</p>
+            <p className="font-semibold">{agreement.provider?.name}</p>
           </CardContent>
         </Card>
 

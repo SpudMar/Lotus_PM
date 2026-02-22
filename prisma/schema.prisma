@@ -55,6 +55,7 @@ model CoreUser {
   coordinatorAssignedBy  CrmCoordinatorAssignment[] @relation("CoordinatorAssignedBy")
 
   createdTemplates     NotifEmailTemplate[] @relation("TemplateCreatedBy")
+  createdQuarantines   FqQuarantine[]       @relation("QuarantineCreatedBy")
 
   @@map("core_users")
 }
@@ -206,6 +207,7 @@ model CrmProvider {
   correspondence    CrmCorrespondence[]
   emails            CrmProviderEmail[]
   serviceAgreements SaServiceAgreement[]
+  quarantines       FqQuarantine[]
 
   @@index([abn])
   @@map("crm_providers")
@@ -393,6 +395,7 @@ model PlanBudgetLine {
 
   invoiceLines    InvInvoiceLine[]
   periodBudgets   PlanPeriodBudget[]
+  quarantines     FqQuarantine[]
 
   @@unique([planId, categoryCode])
   @@index([planId])
@@ -962,6 +965,7 @@ model SaServiceAgreement {
   managedBy      CoreUser           @relation("AgreementManager", fields: [managedById], references: [id])
   rateLines      SaRateLine[]
   documents      DocDocument[]
+  quarantines    FqQuarantine[]
 
   @@index([participantId])
   @@index([providerId])
@@ -1053,4 +1057,41 @@ model NotifSentEmail {
   @@index([status])
   @@index([createdAt])
   @@map("notif_sent_emails")
+}
+
+// ─────────────────────────────────────────────
+// FUND QUARANTINE MODULE — Earmarked Budget per Provider (REQ-030)
+// ─────────────────────────────────────────────
+
+enum FqStatus {
+  ACTIVE
+  RELEASED
+  EXPIRED
+}
+
+model FqQuarantine {
+  id                  String    @id @default(cuid())
+  serviceAgreementId  String?
+  budgetLineId        String
+  providerId          String
+  supportItemCode     String?
+  quarantinedCents    Int
+  usedCents           Int       @default(0)
+  fundingPeriodId     String?   // FK deferred — WS3 (DEC-003)
+  status              FqStatus  @default(ACTIVE)
+  notes               String?
+  createdById         String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  serviceAgreement    SaServiceAgreement? @relation(fields: [serviceAgreementId], references: [id])
+  budgetLine          PlanBudgetLine      @relation(fields: [budgetLineId], references: [id])
+  provider            CrmProvider         @relation(fields: [providerId], references: [id])
+  createdBy           CoreUser            @relation("QuarantineCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([budgetLineId, providerId, supportItemCode])
+  @@index([budgetLineId])
+  @@index([providerId])
+  @@index([status])
+  @@map("fq_quarantines")
 }
