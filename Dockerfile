@@ -62,6 +62,12 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
+# Demo seed: plain-JS seed script + its own entrypoint.
+# Run as a one-off ECS task with command override: ["./seed-entrypoint.sh"]
+COPY scripts/seed.js ./seed.js
+COPY seed-entrypoint.sh ./seed-entrypoint.sh
+RUN chmod +x ./seed-entrypoint.sh
+
 USER nextjs
 
 EXPOSE 3000
