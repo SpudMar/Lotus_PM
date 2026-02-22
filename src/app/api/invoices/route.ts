@@ -10,12 +10,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const searchParams = Object.fromEntries(request.nextUrl.searchParams)
     const { page, pageSize } = paginationSchema.parse(searchParams)
     const status = request.nextUrl.searchParams.get('status') ?? undefined
+    // `statuses` accepts comma-separated values, e.g. "PENDING_REVIEW,APPROVED"
+    const statusesRaw = request.nextUrl.searchParams.get('statuses')
+    const statusIn = statusesRaw ? statusesRaw.split(',').map((s) => s.trim()).filter(Boolean) : undefined
     const participantId = request.nextUrl.searchParams.get('participantId') ?? undefined
     const providerId = request.nextUrl.searchParams.get('providerId') ?? undefined
     const ingestSource = request.nextUrl.searchParams.get('ingestSource') ?? undefined
     const search = request.nextUrl.searchParams.get('search') ?? undefined
 
-    const { data, total } = await listInvoices({ page, pageSize, status, participantId, providerId, ingestSource, search })
+    const { data, total } = await listInvoices({ page, pageSize, status, statusIn, participantId, providerId, ingestSource, search })
     return NextResponse.json(paginatedResponse(data, total, page, pageSize))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
