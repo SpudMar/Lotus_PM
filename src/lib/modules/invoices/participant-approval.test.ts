@@ -52,6 +52,7 @@ jest.mock('@/lib/modules/notifications/email-send', () => ({
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
+import { createHmac } from 'crypto'
 import { prisma } from '@/lib/db'
 import {
   generateApprovalToken,
@@ -155,8 +156,7 @@ describe('generateApprovalToken + verifyApprovalToken', () => {
 
   it('rejects an expired token', () => {
     // Build a token with exp in the past
-    const { createHmac } = require('crypto') as typeof import('crypto')
-    const secret = 'dev-approval-secret-change-in-prod'
+const secret = 'dev-approval-secret-change-in-prod'
     const payload = {
       invoiceId: INVOICE_ID,
       participantId: PARTICIPANT_ID,
@@ -417,8 +417,7 @@ describe('processApprovalResponse', () => {
   })
 
   it('rejects an expired token before DB lookup', async () => {
-    const { createHmac } = require('crypto') as typeof import('crypto')
-    const secret = 'dev-approval-secret-change-in-prod'
+const secret = 'dev-approval-secret-change-in-prod'
     const payload = {
       invoiceId: INVOICE_ID,
       participantId: PARTICIPANT_ID,
@@ -548,8 +547,7 @@ describe('getApprovalStatus', () => {
   })
 
   it('throws for expired token', () => {
-    const { createHmac } = require('crypto') as typeof import('crypto')
-    const secret = 'dev-approval-secret-change-in-prod'
+const secret = 'dev-approval-secret-change-in-prod'
     const payload = {
       invoiceId: INVOICE_ID,
       participantId: PARTICIPANT_ID,
