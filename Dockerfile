@@ -10,6 +10,9 @@ RUN npm ci --omit=dev
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# OpenSSL required by Prisma engine binaries on Alpine 3.17+ (OpenSSL 3.x)
+RUN apk add --no-cache openssl
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -28,6 +31,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# OpenSSL required by Prisma query engine at runtime on Alpine 3.17+
+RUN apk add --no-cache openssl
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
