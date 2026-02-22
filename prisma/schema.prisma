@@ -50,6 +50,10 @@ model CoreUser {
   createdCorrespondence CrmCorrespondence[] @relation("CreatedCorrespondence")
   managedAgreements    SaServiceAgreement[] @relation("AgreementManager")
 
+  // Coordinator relations (WS4)
+  coordinatorAssignments CrmCoordinatorAssignment[] @relation("CoordinatorAssignments")
+  coordinatorAssignedBy  CrmCoordinatorAssignment[] @relation("CoordinatorAssignedBy")
+
   createdTemplates     NotifEmailTemplate[] @relation("TemplateCreatedBy")
   createdQuarantines   FqQuarantine[]       @relation("QuarantineCreatedBy")
 
@@ -176,6 +180,7 @@ model CrmParticipant {
   serviceAgreements SaServiceAgreement[]
 
   sentEmails        NotifSentEmail[]
+  coordinatorAssignments CrmCoordinatorAssignment[] @relation("AssignedCoordinator")
 
   @@index([ndisNumber])
   @@index([assignedToId])
@@ -315,6 +320,30 @@ enum CorrespondenceType {
   SMS_OUTBOUND
   NOTE
   PHONE_CALL
+}
+
+// ─────────────────────────────────────────────
+// COORDINATOR ASSIGNMENT MODULE (WS4)
+// ─────────────────────────────────────────────
+
+model CrmCoordinatorAssignment {
+  id             String    @id @default(cuid())
+  coordinatorId  String
+  participantId  String
+  organisation   String?
+  assignedAt     DateTime  @default(now())
+  assignedById   String
+  isActive       Boolean   @default(true)
+  deactivatedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  coordinator    CoreUser          @relation("CoordinatorAssignments", fields: [coordinatorId], references: [id])
+  participant    CrmParticipant    @relation("AssignedCoordinator", fields: [participantId], references: [id])
+  assignedBy     CoreUser          @relation("CoordinatorAssignedBy", fields: [assignedById], references: [id])
+
+  @@unique([coordinatorId, participantId])
+  @@map("crm_coordinator_assignments")
 }
 
 // ─────────────────────────────────────────────

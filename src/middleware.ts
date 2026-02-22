@@ -18,6 +18,8 @@ export const config = {
     '/reports/:path*',
     '/documents/:path*',
     '/settings/:path*',
+    '/coordinators/:path*',
+    '/coordinator/:path*',
     '/service-agreements/:path*',
   ],
 }
