@@ -70,6 +70,7 @@ const makeRule = (id: string, cronExpression: string) => ({
   executionCount: 0,
   createdAt: new Date(),
   updatedAt: new Date(),
+  deletedAt: null,
 })
 
 const SUCCESS_RESULT: RuleExecutionResult = {
@@ -189,7 +190,7 @@ describe('POST /api/automation/cron', () => {
     const rule = { ...makeRule('rule-003', ''), cronExpression: null }
     // Cast to satisfy the type — in practice findScheduledRules filters for SCHEDULE rules
     // but a SCHEDULE rule with a null cronExpression should be safely skipped.
-    mockFindScheduledRules.mockResolvedValueOnce([rule as ReturnType<typeof makeRule>])
+    mockFindScheduledRules.mockResolvedValueOnce([rule as unknown as ReturnType<typeof makeRule>])
 
     const req = makeRequest(VALID_SECRET)
     const res = await POST(req)
