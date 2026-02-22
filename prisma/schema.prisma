@@ -50,6 +50,8 @@ model CoreUser {
   createdCorrespondence CrmCorrespondence[] @relation("CreatedCorrespondence")
   managedAgreements    SaServiceAgreement[] @relation("AgreementManager")
 
+  createdTemplates     NotifEmailTemplate[] @relation("TemplateCreatedBy")
+
   @@map("core_users")
 }
 
@@ -163,6 +165,8 @@ model CrmParticipant {
   claims            ClmClaim[]
   correspondence    CrmCorrespondence[]
   serviceAgreements SaServiceAgreement[]
+
+  sentEmails        NotifSentEmail[]
 
   @@index([ndisNumber])
   @@index([assignedToId])
@@ -326,6 +330,7 @@ model PlanPlan {
 
   budgetLines     PlanBudgetLine[]
   invoices        InvInvoice[]
+  fundingPeriods  PlanFundingPeriod[]
 
   @@index([participantId])
   @@index([status])
@@ -358,10 +363,47 @@ model PlanBudgetLine {
   updatedAt       DateTime @updatedAt
 
   invoiceLines    InvInvoiceLine[]
+  periodBudgets   PlanPeriodBudget[]
 
   @@unique([planId, categoryCode])
   @@index([planId])
   @@map("plan_budget_lines")
+}
+
+// ─────────────────────────────────────────────
+// PLAN FUNDING PERIODS — S33 Non-Standard Periods (REQ-035)
+// Logic deferred until Nicole confirms S33 details (DEC-003)
+// ─────────────────────────────────────────────
+
+model PlanFundingPeriod {
+  id        String   @id @default(cuid())
+  planId    String
+  startDate DateTime
+  endDate   DateTime
+  label     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  plan          PlanPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  periodBudgets PlanPeriodBudget[]
+
+  @@map("plan_funding_periods")
+}
+
+model PlanPeriodBudget {
+  id              String   @id @default(cuid())
+  fundingPeriodId String
+  budgetLineId    String
+  allocatedCents  Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  fundingPeriod PlanFundingPeriod @relation(fields: [fundingPeriodId], references: [id], onDelete: Cascade)
+  budgetLine    PlanBudgetLine    @relation(fields: [budgetLineId], references: [id])
+
+  @@unique([fundingPeriodId, budgetLineId])
+  @@map("plan_period_budgets")
 }
 
 // ─────────────────────────────────────────────
@@ -917,3 +959,69 @@ model SaRateLine {
   @@map("sa_rate_lines")
 }
 
+// ─────────────────────────────────────────────
+// EMAIL TEMPLATES MODULE — REQ-032
+// Customisable templates with merge fields,
+// fixed/variable attachments, form links.
+// WS5 — AWS SES sending.
+// ─────────────────────────────────────────────
+
+enum EmailTemplateType {
+  WELCOME_PACK
+  SERVICE_AGREEMENT
+  INVOICE_NOTIFICATION
+  CLAIM_STATUS
+  BUDGET_REPORT
+  APPROVAL_REQUEST
+  CUSTOM
+}
+
+model NotifEmailTemplate {
+  id                          String            @id @default(cuid())
+  name                        String            @unique
+  type                        EmailTemplateType
+  subject                     String
+  bodyHtml                    String            @db.Text
+  bodyText                    String?           @db.Text
+  mergeFields                 Json              @default("[]") // array of field names like ["participantName", "providerName"]
+  fixedAttachmentIds          Json              @default("[]") // array of DocDocument IDs
+  supportsVariableAttachment  Boolean           @default(false)
+  variableAttachmentDescription String?
+  includesFormLink            Boolean           @default(false)
+  formLinkUrl                 String?
+  isActive                    Boolean           @default(true)
+  createdById                 String
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
+
+  createdBy   CoreUser         @relation("TemplateCreatedBy", fields: [createdById], references: [id])
+  sentEmails  NotifSentEmail[]
+
+  @@map("notif_email_templates")
+}
+
+model NotifSentEmail {
+  id              String       @id @default(cuid())
+  templateId      String?
+  toEmail         String
+  toName          String?
+  subject         String
+  bodyHtml        String       @db.Text
+  sesMessageId    String?
+  status          NotifStatus  // reuse existing enum
+  errorMessage    String?
+  sentAt          DateTime?
+  participantId   String?
+  attachmentKeys  Json         @default("[]") // S3 keys of attachments sent
+  triggeredById   String?
+  createdAt       DateTime     @default(now())
+
+  template        NotifEmailTemplate? @relation(fields: [templateId], references: [id])
+  participant     CrmParticipant?     @relation(fields: [participantId], references: [id])
+
+  @@index([templateId])
+  @@index([participantId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notif_sent_emails")
+}

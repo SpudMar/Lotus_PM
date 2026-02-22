@@ -9,6 +9,7 @@ import { prisma } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 import type { AutoCondition, AutoAction, TriggerContext, RuleExecutionResult } from './types'
 import { sendSmsToStaffByRole } from '@/lib/modules/notifications/notifications'
+import { sendTemplatedEmail } from '@/lib/modules/notifications/email-send'
 
 // ─── Condition evaluation ─────────────────────────────────────────────────────
 
@@ -106,6 +107,44 @@ async function executeAction(action: AutoAction, context: TriggerContext): Promi
       case 'NOTIFY_STAFF': {
         const message = interpolateTemplate(action.params.message, context)
         await sendSmsToStaffByRole(action.params.notifyRole, message)
+        return true
+      }
+
+      case 'SEND_EMAIL': {
+        const recipientType = action.params.recipientType
+        let recipientEmail: string | undefined
+
+        if (recipientType === 'custom') {
+          recipientEmail = action.params.customEmail
+        } else if (recipientType === 'participant') {
+          const participantId =
+            typeof context['participantId'] === 'string' ? context['participantId'] : undefined
+          if (participantId) {
+            const participant = await prisma.crmParticipant.findUnique({
+              where: { id: participantId },
+              select: { email: true },
+            })
+            recipientEmail = participant?.email ?? undefined
+          }
+        }
+        // 'staff' type: not resolved here — would require a specific user ID in context
+        // Skipped gracefully if no email resolved
+
+        if (!recipientEmail) return true // no recipient to send to — skip silently
+
+        const mergeValues: Record<string, string> = {}
+        for (const [k, v] of Object.entries(context)) {
+          if (v !== null && v !== undefined) {
+            mergeValues[k] = String(v)
+          }
+        }
+
+        await sendTemplatedEmail({
+          templateId: action.params.templateId,
+          recipientEmail,
+          mergeFieldValues: mergeValues,
+          triggeredById: undefined,
+        })
         return true
       }
 

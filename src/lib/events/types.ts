@@ -20,6 +20,8 @@ export type LotusEvent =
   | ServiceAgreementCreatedEvent
   | ServiceAgreementActivatedEvent
   | ServiceAgreementTerminatedEvent
+  | EmailSentEvent
+  | EmailDeliveryFailedEvent
 
 interface BaseEvent {
   eventBusName: 'lotus-pm-events'
@@ -185,5 +187,30 @@ export interface ServiceAgreementTerminatedEvent extends BaseEvent {
     participantId: string
     providerId: string
     terminatedAt: string
+  }
+}
+
+export interface EmailSentEvent extends BaseEvent {
+  source: 'lotus-pm.emails'
+  detailType: 'lotus-pm.emails.sent'
+  detail: {
+    sentEmailId: string
+    templateId: string | null
+    toEmail: string
+    participantId: string | null
+    sesMessageId: string | null
+    sentAt: string
+  }
+}
+
+export interface EmailDeliveryFailedEvent extends BaseEvent {
+  source: 'lotus-pm.emails'
+  detailType: 'lotus-pm.emails.delivery-failed'
+  detail: {
+    sentEmailId: string
+    templateId: string | null
+    toEmail: string
+    errorMessage: string
+    failedAt: string
   }
 }

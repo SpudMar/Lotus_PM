@@ -23,6 +23,7 @@
     "@aws-sdk/client-eventbridge": "^3.600.0",
     "@aws-sdk/client-s3": "^3.600.0",
     "@aws-sdk/client-ses": "^3.600.0",
+    "@aws-sdk/client-sesv2": "^3.995.0",
     "@aws-sdk/client-sqs": "^3.600.0",
     "@aws-sdk/client-textract": "^3.600.0",
     "@aws-sdk/s3-request-presigner": "^3.600.0",
