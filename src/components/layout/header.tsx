@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
-import { Bell, LogOut, User } from 'lucide-react'
+import { Bell, ChevronRight, LogOut, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -27,6 +28,66 @@ function getInitials(name: string): string {
     .join('')
     .toUpperCase()
     .slice(0, 2)
+}
+
+/** Map pathname segments to readable labels */
+const segmentLabels: Record<string, string> = {
+  dashboard: 'Dashboard',
+  participants: 'Participants',
+  providers: 'Providers',
+  plans: 'Plans',
+  invoices: 'Invoices',
+  review: 'Email Triage',
+  claims: 'Claims',
+  batches: 'Batches',
+  banking: 'Banking',
+  reports: 'Reports',
+  comms: 'Communications',
+  automation: 'Automation',
+  documents: 'Documents',
+  coordinators: 'Coordinators',
+  'service-agreements': 'Agreements',
+  settings: 'Settings',
+  'email-templates': 'Email Templates',
+  notifications: 'Notifications',
+}
+
+function Breadcrumbs(): React.JSX.Element {
+  const pathname = usePathname()
+  const segments = pathname.split('/').filter(Boolean)
+
+  if (segments.length === 0) return <div />
+
+  const crumbs = segments.map((seg, i) => {
+    const href = '/' + segments.slice(0, i + 1).join('/')
+    const label = segmentLabels[seg] ?? seg.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    const isLast = i === segments.length - 1
+    // Skip UUID-like segments (detail pages) — show as "Details"
+    const isId = /^[0-9a-f-]{20,}$/i.test(seg) || /^c[a-z0-9]{20,}$/i.test(seg)
+    const displayLabel = isId ? 'Details' : label
+
+    return { href, label: displayLabel, isLast }
+  })
+
+  return (
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm">
+      {crumbs.map((crumb, i) => (
+        <span key={crumb.href} className="flex items-center gap-1">
+          {i > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground/50" />}
+          {crumb.isLast ? (
+            <span className="font-medium text-foreground">{crumb.label}</span>
+          ) : (
+            <Link
+              href={crumb.href}
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {crumb.label}
+            </Link>
+          )}
+        </span>
+      ))}
+    </nav>
+  )
 }
 
 export function Header(): React.JSX.Element {
@@ -53,7 +114,6 @@ export function Header(): React.JSX.Element {
     void fetchCount()
     const interval = setInterval(() => void fetchCount(), 60_000)
 
-    // Refresh immediately when the notifications page marks items read/dismissed
     const handleChange = () => void fetchCount()
     window.addEventListener('lotus:notifications:changed', handleChange)
 
@@ -65,9 +125,9 @@ export function Header(): React.JSX.Element {
   }, [session])
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background px-6">
-      <div />
-      <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-card/80 px-6 backdrop-blur-sm">
+      <Breadcrumbs />
+      <div className="flex items-center gap-3">
         {session?.user && (
           <>
             <Button variant="ghost" size="icon" asChild className="relative">
@@ -85,7 +145,7 @@ export function Header(): React.JSX.Element {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-xs">
+                  <AvatarFallback className="bg-primary text-xs text-primary-foreground">
                     {getInitials(session.user.name)}
                   </AvatarFallback>
                 </Avatar>

@@ -224,15 +224,13 @@ export async function approveInvoice(id: string, userId: string, planId?: string
     after: { status: 'APPROVED' },
   })
 
-  // Fire-and-forget: trigger automation rules for invoice approval
+  // Fire-and-forget: don't block the caller on automation failures
   void processEvent('lotus-pm.invoices.approved', {
     invoiceId: id,
-    approvedBy: userId,
     amountCents: invoice.totalCents,
-    status: 'APPROVED',
-  }).catch(() => {
-    // Automation failures should not block invoice operations
-  })
+    approvedBy: userId,
+    approvedAt: new Date().toISOString(),
+  }).catch(() => {/* automation failures must not affect main flow */})
 
   return invoice
 }
@@ -256,15 +254,12 @@ export async function rejectInvoice(id: string, userId: string, reason: string) 
     after: { status: 'REJECTED', reason },
   })
 
-  // Fire-and-forget: trigger automation rules for invoice rejection
+  // Fire-and-forget: don't block the caller on automation failures
   void processEvent('lotus-pm.invoices.rejected', {
     invoiceId: id,
     rejectedBy: userId,
     reason,
-    status: 'REJECTED',
-  }).catch(() => {
-    // Automation failures should not block invoice operations
-  })
+  }).catch(() => {/* automation failures must not affect main flow */})
 
   return invoice
 }
