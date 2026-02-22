@@ -122,7 +122,7 @@ describe('listServiceAgreements', () => {
       })
     )
     expect(result).toHaveLength(1)
-    expect(result[0].agreementRef).toBe('SA-20260223-ABCD')
+    expect(result[0]!.agreementRef).toBe('SA-20260223-ABCD')
   })
 
   it('applies filters when provided', async () => {
@@ -216,7 +216,7 @@ describe('createServiceAgreement', () => {
       USER_ID
     )
 
-    const createCall = mockSA.create.mock.calls[0][0]
+    const createCall = mockSA.create.mock.calls[0]![0]
     expect(createCall.data.agreementRef).toMatch(/^SA-\d{8}-[A-Z0-9]{4}$/)
   })
 

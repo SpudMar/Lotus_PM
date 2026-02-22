@@ -13,7 +13,7 @@ import { processEvent } from '@/lib/modules/automation/engine'
 import type {
   CreateServiceAgreementInput,
   UpdateServiceAgreementInput,
-  ListServiceAgreementsFilters,
+  ListServiceAgreementsInput,
   CreateRateLineInput,
   UpdateRateLineInput,
 } from './validation'
@@ -47,7 +47,7 @@ async function generateUniqueRef(): Promise<string> {
 // ── List ───────────────────────────────────────────────────────────────────
 
 /** List service agreements, excluding soft-deleted records. */
-export async function listServiceAgreements(filters: ListServiceAgreementsFilters = {}) {
+export async function listServiceAgreements(filters: ListServiceAgreementsInput = {}) {
   const where = {
     deletedAt: null,
     ...(filters.participantId ? { participantId: filters.participantId } : {}),
