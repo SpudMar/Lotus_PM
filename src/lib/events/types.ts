@@ -25,6 +25,8 @@ export type LotusEvent =
   | FundQuarantineCreatedEvent
   | FundQuarantineReleasedEvent
   | FundQuarantineThresholdEvent
+  | CoordinatorAssignedEvent
+  | CoordinatorUnassignedEvent
 
 interface BaseEvent {
   eventBusName: 'lotus-pm-events'
@@ -248,5 +250,28 @@ export interface FundQuarantineThresholdEvent extends BaseEvent {
     budgetLineId: string
     providerId: string
     usedPercent: number
+  }
+}
+
+export interface CoordinatorAssignedEvent extends BaseEvent {
+  source: 'lotus-pm.crm'
+  detailType: 'lotus-pm.crm.coordinator-assigned'
+  detail: {
+    participantId: string
+    coordinatorId: string
+    assignmentId: string
+    assignedById: string
+    organisation?: string
+  }
+}
+
+export interface CoordinatorUnassignedEvent extends BaseEvent {
+  source: 'lotus-pm.crm'
+  detailType: 'lotus-pm.crm.coordinator-unassigned'
+  detail: {
+    participantId: string
+    coordinatorId: string
+    assignmentId: string
+    deactivatedById: string
   }
 }

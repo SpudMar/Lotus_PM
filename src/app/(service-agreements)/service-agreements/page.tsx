@@ -100,9 +100,9 @@ export default async function ServiceAgreementsPage({
               <TableRow key={a.id}>
                 <TableCell className="font-mono text-sm font-medium">{a.agreementRef}</TableCell>
                 <TableCell>
-                  {a.participant.firstName} {a.participant.lastName}
+                  {a.participant?.firstName} {a.participant?.lastName}
                 </TableCell>
-                <TableCell>{a.provider.name}</TableCell>
+                <TableCell>{a.provider?.name}</TableCell>
                 <TableCell>
                   <Badge variant={statusVariant(a.status)}>{a.status}</Badge>
                 </TableCell>

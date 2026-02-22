@@ -35,6 +35,7 @@ jest.mock('@/lib/modules/automation/engine', () => ({
 // ── Imports (after mocks) ──────────────────────────────────────────────────
 
 import { prisma } from '@/lib/db'
+import { processEvent } from '@/lib/modules/automation/engine'
 import {
   listQuarantines,
   getQuarantine,
@@ -364,8 +365,7 @@ describe('drawDown', () => {
   })
 
   it('emits threshold event when usedCents reaches 80 percent', async () => {
-    const { processEvent } = require('@/lib/modules/automation/engine') as { processEvent: jest.Mock }
-    processEvent.mockClear()
+    jest.mocked(processEvent).mockClear()
 
     mockFQ.findUnique.mockResolvedValue(
       makeQuarantine({ quarantinedCents: 100000, usedCents: 70000, status: 'ACTIVE' }) as never
