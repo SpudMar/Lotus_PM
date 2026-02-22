@@ -41,11 +41,13 @@ RUN addgroup --system --gid 1001 nodejs && \
 # Copy Prisma schema + migration files (needed for prisma migrate deploy)
 COPY --from=builder /app/prisma ./prisma
 
-# Copy Prisma CLI and engines so we can run migrations on startup
-# prisma/  — CLI package
+# Copy Prisma CLI and engines so we can run migrations on startup.
+# .bin/prisma is a symlink → ../prisma/build/index.js; Docker COPY dereferences
+# symlinks, so copying via .bin/ breaks __dirname resolution and the CLI can't
+# find prisma_schema_build_bg.wasm.  Copy the full packages instead and invoke
+# the CLI directly as: node ./node_modules/prisma/build/index.js (see entrypoint.sh)
+# prisma/  — CLI + prisma_schema_build_bg.wasm (in build/)
 # @prisma/ — engines (query, migration, schema, introspection)
-# Copy all prisma* files from .bin/ (includes CLI + prisma_schema_build_bg.wasm)
-COPY --from=builder /app/node_modules/.bin/prisma* ./node_modules/.bin/
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 

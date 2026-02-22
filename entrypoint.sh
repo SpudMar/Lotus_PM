@@ -13,7 +13,9 @@ set -e
 export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 
 echo "Running Prisma migrations..."
-./node_modules/.bin/prisma migrate deploy
+# Call prisma/build/index.js directly (not via .bin/ symlink) so that
+# __dirname resolves to node_modules/prisma/build/ where the .wasm file lives.
+node ./node_modules/prisma/build/index.js migrate deploy
 
 echo "Starting Lotus PM..."
 exec node server.js
