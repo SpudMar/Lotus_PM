@@ -11,7 +11,7 @@ This file contains all locked decisions, requirements, and conventions for the L
 **Name:** Lotus PM
 **Type:** NDIS Plan Management System
 **Business:** Family-owned Plan Management business (Australia)
-**Status:** Phase 2 — Claims & Payments
+**Status:** Phase 3B complete — all 7 workstreams merged. Staging deployed to AWS ap-southeast-2.
 **Repository:** `lotus-pm` (private GitHub)
 **Branch Convention:** `claude/<session-id>` for agent branches, `feat/<module>` for feature branches
 **Production URL:** `https://planmanager.lotusassist.com.au`
@@ -120,6 +120,15 @@ Every decision below is locked. Do not suggest alternatives without a clear reas
 9. ✅ **Automation Engine** — rules, triggers, scheduled tasks — **COMPLETE (built ahead of schedule)**
 10. **Documents** — templates, forms, file management
 11. **Participant App** — React Native, WCAG 2.1 AA, accessible design
+
+### Phase 3B — Nicole's Requirements ✅ COMPLETE (all 7 workstreams merged, PRs #14–#21)
+- ✅ WS1: Service Agreements — PR #15 — SaServiceAgreement + SaRateLine models, CRUD, UI
+- ✅ WS2: Fund Quarantining — PR #17 — FqQuarantine model, earmark budget per provider
+- ✅ WS3: S33 Funding Periods — PR #14 — PlanFundingPeriod + PlanPeriodBudget models (14 tests)
+- ✅ WS4: Support Coordinator — PR #16 — SUPPORT_COORDINATOR role, scoped access, CrmCoordinatorAssignment
+- ✅ WS5: Email Templates + SES — PR #18 — NotifEmailTemplate + NotifSentEmail, SES client, SEND_EMAIL action
+- ✅ WS6: WordPress Webhook — PR #19 — `/api/webhooks/service-agreement`, DRAFT participant + SA from WP form
+- ✅ WS7: Participant Approval — PR #21 — opt-in approval (APP/EMAIL/SMS), signed JWT tokens (HMAC-SHA256, 72h expiry)
 
 ---
 
@@ -259,13 +268,13 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 
 ## CURRENT PHASE STATUS
 
-**Active Phase:** Phase 2 complete. Phase 3 Documents + Xero integration merged. RBAC overhaul (DIRECTOR → GLOBAL_ADMIN) in PR #8.
+**Active Phase:** Phase 3B COMPLETE — all 7 workstreams merged (PRs #14–#21). Staging fully deployed to ap-southeast-2 (PR #22).
 
-**Current test count:** 278/278 tests passing.
+**Current test count:** 619/619 tests passing.
 
 **Dev server:** `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`, Tailwind v4 requires Turbopack)
 
-**DB migrations state:** 8 migrations. Last: `20260221200001_rename_director_to_global_admin`. Role enum renamed from `DIRECTOR` to `GLOBAL_ADMIN`.
+**DB migrations state:** 19 migrations. Last: `20260223070000_ws7_participant_approval`.
 
 **Staff phone numbers:** Global Admin (`director@lotusassist.com.au`) and Plan Manager (`pm@lotusassist.com.au`) both have `phone = +61411941699` in DB for SMS testing.
 
@@ -381,6 +390,36 @@ When PACE B2B API credentials arrive, the following can be automated incremental
 
 ---
 
+### Staging Deployment — ap-southeast-2 ✅ LIVE (PR #22)
+
+All 6 CDK stacks CREATE_COMPLETE in ap-southeast-2 (Sydney). Deployed 22 Feb 2026.
+
+| Stack | Status | Notes |
+|-------|--------|-------|
+| `lotus-pm-staging-vpc` | ✅ CREATE_COMPLETE | VPC, subnets, NAT gateway, SGs |
+| `lotus-pm-staging-database` | ✅ CREATE_COMPLETE | RDS PostgreSQL 16 db.t3.micro |
+| `lotus-pm-staging-storage` | ✅ CREATE_COMPLETE | S3 buckets, SQS queues, EventBridge, SES |
+| `lotus-pm-staging-cache` | ✅ CREATE_COMPLETE | ElastiCache Redis cache.t3.micro |
+| `lotus-pm-staging-app` | ✅ CREATE_COMPLETE | ECS Fargate (nginx scaffold), ALB, CloudFront |
+| `lotus-pm-staging-monitoring` | ✅ CREATE_COMPLETE | CloudWatch dashboard, SNS alarms |
+
+**Endpoints:**
+- CloudFront: `d2iv01jt8w4gxn.cloudfront.net` (point DNS CNAME here)
+- ALB: `lotus-pm-staging-489597421.ap-southeast-2.elb.amazonaws.com`
+- RDS: `lotus-pm-staging.cbsk4oomy587.ap-southeast-2.rds.amazonaws.com`
+- Redis: `master.lotus-pm-staging.u1gfqu.apse2.cache.amazonaws.com`
+
+**Current scaffold state:** ECS task runs nginx on port 80. Real app image not yet deployed.
+**Next steps before app is live:**
+1. Build + push real Docker image to ECR; update ECS task definition
+2. Re-enable circuit breaker + health check in `app-stack.ts` once real image is deployed
+3. Run `prisma migrate deploy` against staging RDS
+4. Attach ACM cert for `staging.planmanager.lotusassist.com.au` → switch ALB to port 443
+5. Point DNS CNAME to CloudFront domain
+6. SES: verify `lotusassist.com.au`, add DKIM records, add MX record, activate receipt rule set
+
+---
+
 ## KEY FILES — QUICK REFERENCE
 
 | File | Purpose |
@@ -478,6 +517,14 @@ npm run type-check      # TypeScript check without building
 cd infrastructure && cdk deploy --context environment=staging
 cd infrastructure && cdk diff --context environment=staging
 
+# CDK gotchas (learned from staging deploy):
+#   - All description/roleName strings must be ASCII only — em-dashes (—) cause IAM/EC2/CFn errors
+#   - RDS instance class in config.ts must be 't3' NOT 'db.t3' (CDK's InstanceType.of() adds db. prefix)
+#   - AWS free tier blocks RDS entirely — account must exit free tier before any RDS deploy
+#   - RDS secret keys from CDK: host, port, username, password, dbname (NOT 'dbUrl')
+#   - ApplicationLoadBalancedFargateService requires desiredCount >= 1; disable circuit breaker for scaffold
+#   - Scaffold container: use nginx on port 80 (not amazonlinux — it has no HTTP server)
+
 # GitHub
 gh issue list           # See open issues
 gh pr list              # See open PRs
@@ -486,5 +533,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 21 February 2026 — Phase 2 complete, Documents + Xero merged, RBAC overhaul (DIRECTOR→GLOBAL_ADMIN) in PR #8. 278/278 tests. PM is the primary daily user with full operational access. Only Global Admin-exclusive permission: staff management.*
+*Last updated: 22 February 2026 — Phase 3B complete (all 7 WSs merged, PRs #14–#21). 619/619 tests. 19 migrations. Staging live in ap-southeast-2 (PR #22). CDK scaffolding uses nginx on port 80 — real app image not yet deployed.*
 *All decisions in this file were made deliberately. Update with care.*
