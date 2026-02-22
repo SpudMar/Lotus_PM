@@ -4,9 +4,10 @@
  * REQ-035: S33 plans have non-standard funding periods — schema must support
  * split periods within a plan year.
  *
- * DEC-003 OPEN: Full S33-specific business logic is deferred until Nicole
- * confirms whether all plans or only S33 plans are affected, and what PACE
- * shows. This module provides only basic CRUD stubs.
+ * DEC-003 RESOLVED (22 Feb 2026): S33/PACE plans only. Periods are irregular
+ * (monthly, quarterly, bi-monthly, bi-annual, annual — can be mixed within one
+ * plan). Plans run up to 5 years. PACE shows the period breakdown.
+ * This module provides basic CRUD stubs; full logic can be added when prioritised.
  */
 
 import { prisma } from '@/lib/db'
