@@ -49,6 +49,8 @@ model CoreUser {
   uploadedDocuments    DocDocument[]    @relation("UploadedDocuments")
   createdCorrespondence CrmCorrespondence[] @relation("CreatedCorrespondence")
 
+  createdTemplates     NotifEmailTemplate[] @relation("TemplateCreatedBy")
+
   @@map("core_users")
 }
 
@@ -160,6 +162,8 @@ model CrmParticipant {
   notifications     NotifNotification[]
   claims            ClmClaim[]
   correspondence    CrmCorrespondence[]
+
+  sentEmails        NotifSentEmail[]
 
   @@index([ndisNumber])
   @@index([assignedToId])
@@ -889,4 +893,71 @@ model XeroConnection {
 
   @@index([isActive])
   @@map("xero_connections")
+}
+
+// ─────────────────────────────────────────────
+// EMAIL TEMPLATES MODULE — REQ-032
+// Customisable templates with merge fields,
+// fixed/variable attachments, form links.
+// WS5 — AWS SES sending.
+// ─────────────────────────────────────────────
+
+enum EmailTemplateType {
+  WELCOME_PACK
+  SERVICE_AGREEMENT
+  INVOICE_NOTIFICATION
+  CLAIM_STATUS
+  BUDGET_REPORT
+  APPROVAL_REQUEST
+  CUSTOM
+}
+
+model NotifEmailTemplate {
+  id                          String            @id @default(cuid())
+  name                        String            @unique
+  type                        EmailTemplateType
+  subject                     String
+  bodyHtml                    String            @db.Text
+  bodyText                    String?           @db.Text
+  mergeFields                 Json              @default("[]") // array of field names like ["participantName", "providerName"]
+  fixedAttachmentIds          Json              @default("[]") // array of DocDocument IDs
+  supportsVariableAttachment  Boolean           @default(false)
+  variableAttachmentDescription String?
+  includesFormLink            Boolean           @default(false)
+  formLinkUrl                 String?
+  isActive                    Boolean           @default(true)
+  createdById                 String
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
+
+  createdBy   CoreUser         @relation("TemplateCreatedBy", fields: [createdById], references: [id])
+  sentEmails  NotifSentEmail[]
+
+  @@map("notif_email_templates")
+}
+
+model NotifSentEmail {
+  id              String       @id @default(cuid())
+  templateId      String?
+  toEmail         String
+  toName          String?
+  subject         String
+  bodyHtml        String       @db.Text
+  sesMessageId    String?
+  status          NotifStatus  // reuse existing enum
+  errorMessage    String?
+  sentAt          DateTime?
+  participantId   String?
+  attachmentKeys  Json         @default("[]") // S3 keys of attachments sent
+  triggeredById   String?
+  createdAt       DateTime     @default(now())
+
+  template        NotifEmailTemplate? @relation(fields: [templateId], references: [id])
+  participant     CrmParticipant?     @relation(fields: [participantId], references: [id])
+
+  @@index([templateId])
+  @@index([participantId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notif_sent_emails")
 }
