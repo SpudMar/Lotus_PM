@@ -44,7 +44,8 @@ COPY --from=builder /app/prisma ./prisma
 # Copy Prisma CLI and engines so we can run migrations on startup
 # prisma/  — CLI package
 # @prisma/ — engines (query, migration, schema, introspection)
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+# Copy all prisma* files from .bin/ (includes CLI + prisma_schema_build_bg.wasm)
+COPY --from=builder /app/node_modules/.bin/prisma* ./node_modules/.bin/
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
