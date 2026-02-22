@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
+import { processEvent } from '@/lib/modules/automation/engine'
 import type { z } from 'zod'
 import type { createPaymentSchema } from './validation'
 
@@ -301,6 +302,25 @@ export async function reconcilePayments(paymentIds: string[], userId: string) {
     resourceId: paymentIds[0] ?? 'bulk',
     after: { paymentIds, claimIds },
   })
+
+  // Fire-and-forget: one event per reconciled payment
+  const reconciledPayments = await prisma.bnkPayment.findMany({
+    where: { id: { in: paymentIds } },
+    select: {
+      id: true,
+      amountCents: true,
+      claim: { select: { invoice: { select: { provider: { select: { id: true } } } } } },
+    },
+  })
+  const processedAt = now.toISOString()
+  for (const payment of reconciledPayments) {
+    void processEvent('lotus-pm.banking.payment-processed', {
+      paymentId: payment.id,
+      providerId: payment.claim.invoice.provider?.id ?? '',
+      amountCents: payment.amountCents,
+      processedAt,
+    }).catch(() => {/* automation failures must not affect main flow */})
+  }
 
   return { reconciled: paymentIds.length }
 }
