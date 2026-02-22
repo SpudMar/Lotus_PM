@@ -57,9 +57,15 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        // For dev: accept any password when NEXTAUTH_SECRET is set
-        // Production will use Cognito OAuth exclusively
-        if (process.env.NODE_ENV === 'development') {
+        // Allow credentials login in dev, or when explicitly enabled via env var
+        // (used for staging before Cognito OAuth is configured).
+        // Production with Cognito will set ALLOW_CREDENTIALS_AUTH=false and
+        // add the Cognito provider instead.
+        const allowCredentials =
+          process.env.NODE_ENV === 'development' ||
+          process.env.ALLOW_CREDENTIALS_AUTH === 'true'
+
+        if (allowCredentials) {
           await prisma.coreUser.update({
             where: { id: user.id },
             data: { lastLoginAt: new Date() },
