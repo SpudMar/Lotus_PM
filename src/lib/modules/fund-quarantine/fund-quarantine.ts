@@ -107,13 +107,13 @@ export async function createQuarantine(data: CreateQuarantineInput, createdById:
 
   const quarantine = await prisma.fqQuarantine.create({
     data: {
-      serviceAgreementId: data.serviceAgreementId ?? null,
+      serviceAgreementId: data.serviceAgreementId,
       budgetLineId: data.budgetLineId,
       providerId: data.providerId,
-      supportItemCode: data.supportItemCode ?? null,
+      supportItemCode: data.supportItemCode,
       quarantinedCents: data.quarantinedCents,
-      fundingPeriodId: data.fundingPeriodId ?? null,
-      notes: data.notes ?? null,
+      fundingPeriodId: data.fundingPeriodId,
+      notes: data.notes,
       createdById,
     },
   })
@@ -344,7 +344,7 @@ export async function autoCreateFromServiceAgreement(
         serviceAgreementId,
         budgetLineId: budgetLine.id,
         providerId: sa.providerId,
-        supportItemCode: rateLine.supportItemCode ?? undefined,
+        supportItemCode: rateLine.supportItemCode === null ? undefined : rateLine.supportItemCode,
         quarantinedCents,
         createdById: userId,
       },
