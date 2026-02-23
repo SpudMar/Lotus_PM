@@ -129,6 +129,8 @@ Every decision below is locked. Do not suggest alternatives without a clear reas
 - ✅ WS5: Email Templates + SES — PR #18 — NotifEmailTemplate + NotifSentEmail, SES client, SEND_EMAIL action
 - ✅ WS6: WordPress Webhook — PR #19 — `/api/webhooks/service-agreement`, DRAFT participant + SA from WP form
 - ✅ WS7: Participant Approval — PR #21 — opt-in approval (APP/EMAIL/SMS), signed JWT tokens (HMAC-SHA256, 72h expiry)
+- ✅ Coordinator CRUD — PR #32 — create/edit/deactivate coordinators via dialog (PLAN_MANAGER+), 13 new tests
+- ✅ Coordinator detail page — PR #33 — `/coordinators/[id]` with Overview + Notes & Correspondence tabs, `coordinatorId` on `CrmCorrespondence`, list names clickable, 9 new tests
 
 ---
 
@@ -271,11 +273,11 @@ Decisions deferred until a specific trigger event. Do not resolve these unilater
 
 **Active Phase:** Phase 3B COMPLETE — all 7 workstreams merged (PRs #14–#21). Staging fully deployed to ap-southeast-2 (PR #22).
 
-**Current test count:** 626/626 tests passing (35 test suites).
+**Current test count:** 648/648 tests passing (35 test suites).
 
 **Dev server:** `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`, Tailwind v4 requires Turbopack)
 
-**DB migrations state:** 19 migrations. Last: `20260223070000_ws7_participant_approval`.
+**DB migrations state:** 20 migrations. Last: `20260223080000_add_coordinator_to_correspondence`.
 
 **Staff phone numbers:** Global Admin (`director@lotusassist.com.au`) and Plan Manager (`pm@lotusassist.com.au`) both have `phone = +61411941699` in DB for SMS testing.
 
@@ -537,5 +539,5 @@ gh pr create            # Create a PR
 
 ---
 
-*Last updated: 23 February 2026 — 626/626 tests, 35 suites. Automation engine fully live (PRs #29–#31): UI brand refresh (green/Jakarta), processEvent wiring, cron runner. Next: deploy real app image to ECS, Documents module, Participant App.*
+*Last updated: 23 February 2026 — 648/648 tests, 35 suites. Coordinator CRUD (PR #32) + detail page with correspondence tabs (PR #33) complete. Provider auto-matching verified (invoices.ts:184-188). Next: Documents module UI, ECS real image deploy, Participant App.*
 *All decisions in this file were made deliberately. Update with care.*
