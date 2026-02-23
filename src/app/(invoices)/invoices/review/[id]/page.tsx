@@ -35,11 +35,22 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Save, CheckCircle, XCircle, Flag, Plus, Trash2, FileWarning, AlertCircle, AlertTriangle, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, Save, CheckCircle, XCircle, Flag, Plus, Trash2, FileWarning, AlertCircle, AlertTriangle, ShieldAlert, Mail, Upload, Zap } from 'lucide-react'
 import { formatDateAU } from '@/lib/shared/dates'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+interface BudgetLineRef {
+  id: string
+  categoryCode: string
+  categoryName: string
+  allocatedCents: number
+  spentCents: number
+  reservedCents: number
+  saCommittedCents: number
+  remainingCents: number
+}
 
 interface InvoiceLine {
   id?: string
@@ -51,6 +62,8 @@ interface InvoiceLine {
   unitPriceCents: number
   totalCents: number
   gstCents: number
+  budgetLineId?: string | null
+  budgetLine?: { id: string; categoryCode: string; allocatedCents: number; spentCents: number } | null
   // Pattern-learning fields -- WS-F4
   suggestedItemCode?: string | null
   suggestedConfidence?: number | null
@@ -66,13 +79,21 @@ interface Invoice {
   status: string
   sourceEmail: string | null
   aiConfidence: number | null
+  matchConfidence: number | null
+  matchMethod: string | null
+  ingestSource: string | null
   s3Key: string | null
   participantId: string | null
   providerId: string | null
   planId: string | null
   participant: { id: string; firstName: string; lastName: string; ndisNumber: string } | null
   provider: { id: string; name: string; abn: string } | null
-  plan: { id: string; startDate: string; endDate: string } | null
+  plan: {
+    id: string
+    startDate: string
+    endDate: string
+    budgetLines?: { id: string; categoryCode: string; categoryName: string; allocatedCents: number; spentCents: number }[]
+  } | null
   lines: InvoiceLine[]
 }
 
@@ -119,6 +140,47 @@ interface ActiveFlag {
 
 type FormLine = InvoiceLine
 
+// ── Match confidence helpers ───────────────────────────────────────────────────
+
+type MatchTier = 'verified' | 'needs-verify' | 'no-match'
+
+function getMatchTier(confidence: number | null, method: string | null): MatchTier {
+  if (confidence === null || confidence === undefined || method === 'NONE' || method === null) return 'no-match'
+  if (confidence >= 0.9) return 'verified'
+  return 'needs-verify'
+}
+
+function getMatchTierStyles(tier: MatchTier): { dot: string; bg: string; text: string; badge: string } {
+  switch (tier) {
+    case 'verified':
+      return { dot: 'bg-green-500', bg: 'bg-green-50 border-green-200', text: 'text-green-700', badge: 'bg-green-100 text-green-800 border-green-300' }
+    case 'needs-verify':
+      return { dot: 'bg-amber-500', bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800 border-amber-300' }
+    case 'no-match':
+      return { dot: 'bg-red-500', bg: 'bg-red-50 border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-800 border-red-300' }
+  }
+}
+
+function getMatchMethodLabel(method: string | null): string {
+  switch (method) {
+    case 'ABN_EXACT': return 'ABN match'
+    case 'EMAIL_EXACT': return 'Email match'
+    case 'EMAIL_DOMAIN': return 'Email domain'
+    case 'HISTORICAL': return 'Historical'
+    case 'NDIS_NUMBER': return 'NDIS# match'
+    case 'MANUAL': return 'Manual'
+    default: return 'No match'
+  }
+}
+
+function getMatchTierLabel(tier: MatchTier): string {
+  switch (tier) {
+    case 'verified': return 'Verified'
+    case 'needs-verify': return 'Verify'
+    case 'no-match': return 'Assign'
+  }
+}
+
 // ── Empty line template ────────────────────────────────────────────────────────
 
 function emptyLine(): FormLine {
@@ -131,7 +193,58 @@ function emptyLine(): FormLine {
     unitPriceCents: 0,
     totalCents: 0,
     gstCents: 0,
+    budgetLineId: null,
   }
+}
+
+// ── Attention items helper ─────────────────────────────────────────────────────
+
+interface AttentionItem {
+  label: string
+  severity: 'warning' | 'error'
+}
+
+function computeAttentionItems(
+  invoice: Invoice,
+  lines: FormLine[],
+  selectedParticipantId: string,
+  selectedPlanId: string,
+): AttentionItem[] {
+  const items: AttentionItem[] = []
+
+  // Provider match quality
+  if (!invoice.providerId && !invoice.provider) {
+    items.push({ label: 'No provider assigned', severity: 'error' })
+  } else if (invoice.matchConfidence !== null && invoice.matchConfidence < 1.0 && invoice.ingestSource === 'EMAIL') {
+    const pct = Math.round(invoice.matchConfidence * 100)
+    items.push({ label: `Provider matched by ${getMatchMethodLabel(invoice.matchMethod).toLowerCase()} (${pct}%) -- please verify`, severity: 'warning' })
+  }
+
+  // Participant
+  if (!selectedParticipantId) {
+    items.push({ label: 'No participant assigned', severity: 'error' })
+  }
+
+  // Lines missing support codes
+  const missingCodes = lines.filter((l) => !l.supportItemCode).length
+  if (missingCodes > 0) {
+    items.push({ label: `${missingCodes} line item${missingCodes > 1 ? 's' : ''} missing support codes`, severity: 'warning' })
+  }
+
+  // Lines missing budget links (only if a plan is selected)
+  if (selectedPlanId) {
+    const missingBudget = lines.filter((l) => !l.budgetLineId).length
+    if (missingBudget > 0) {
+      items.push({ label: `${missingBudget} line item${missingBudget > 1 ? 's' : ''} missing budget line links`, severity: 'warning' })
+    }
+  }
+
+  // Low AI confidence
+  if (invoice.aiConfidence !== null && invoice.aiConfidence < 0.7) {
+    items.push({ label: `Low AI extraction confidence (${Math.round(invoice.aiConfidence * 100)}%)`, severity: 'warning' })
+  }
+
+  return items
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -164,6 +277,9 @@ export default function InvoiceReviewDetailPage({
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [lines, setLines] = useState<FormLine[]>([])
+
+  // Budget lines for the selected plan
+  const [budgetLines, setBudgetLines] = useState<BudgetLineRef[]>([])
 
   // Dropdowns
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -255,16 +371,28 @@ export default function InvoiceReviewDetailPage({
       .catch(() => null)
   }, [selectedParticipantId])
 
+  // Load budget lines when plan changes
+  useEffect(() => {
+    if (!selectedPlanId) {
+      setBudgetLines([])
+      return
+    }
+    void fetch(`/api/plans/${selectedPlanId}/budget-lines`)
+      .then(r => r.json())
+      .then((j: { data: BudgetLineRef[] }) => setBudgetLines(j.data ?? []))
+      .catch(() => setBudgetLines([]))
+  }, [selectedPlanId])
+
   // Load active flags whenever participant or provider changes
   useEffect(() => {
-    const params = new URLSearchParams()
-    if (selectedParticipantId) params.set('participantId', selectedParticipantId)
-    if (selectedProviderId) params.set('providerId', selectedProviderId)
+    const flagParams = new URLSearchParams()
+    if (selectedParticipantId) flagParams.set('participantId', selectedParticipantId)
+    if (selectedProviderId) flagParams.set('providerId', selectedProviderId)
     if (!selectedParticipantId && !selectedProviderId) {
       setActiveFlags([])
       return
     }
-    void fetch(`/api/crm/flags?${params.toString()}`)
+    void fetch(`/api/crm/flags?${flagParams.toString()}`)
       .then(r => r.json())
       .then((j: { data: ActiveFlag[] }) => setActiveFlags(j.data ?? []))
       .catch(() => null)
@@ -291,6 +419,7 @@ export default function InvoiceReviewDetailPage({
         unitPriceCents: l.unitPriceCents,
         totalCents: l.totalCents,
         gstCents: l.gstCents,
+        budgetLineId: l.budgetLineId || undefined,
       })),
     }
   }
@@ -394,28 +523,37 @@ export default function InvoiceReviewDetailPage({
 
   // ── Line item helpers ───────────────────────────────────────────────────────
 
-  function updateLine(idx: number, field: keyof FormLine, value: string | number): void {
+  function updateLine(idx: number, field: keyof FormLine, value: string | number | null): void {
     setLines((prev) => {
       const updated = [...prev]
       const line = { ...(updated[idx] as FormLine) }
       if (field === 'quantity') {
-        line.quantity = typeof value === 'string' ? parseFloat(value) || 0 : value
+        line.quantity = typeof value === 'string' ? parseFloat(value) || 0 : (value ?? 0) as number
       } else if (field === 'unitPriceCents') {
-        line.unitPriceCents = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : value)
+        line.unitPriceCents = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : (value ?? 0) as number)
       } else if (field === 'totalCents') {
-        line.totalCents = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : value)
+        line.totalCents = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : (value ?? 0) as number)
       } else if (field === 'gstCents') {
-        line.gstCents = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : value)
+        line.gstCents = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : (value ?? 0) as number)
+      } else if (field === 'budgetLineId') {
+        line.budgetLineId = value === null || value === '' ? null : String(value)
       } else if (field === 'supportItemCode' || field === 'supportItemName' || field === 'categoryCode' || field === 'serviceDate') {
-        line[field] = String(value)
+        line[field] = String(value ?? '')
       }
-      // Auto-calculate total from qty × unit price (if both are set)
+      // Auto-calculate total from qty * unit price (if both are set)
       if (field === 'quantity' || field === 'unitPriceCents') {
         line.totalCents = Math.round(line.quantity * line.unitPriceCents)
       }
       updated[idx] = line
       return updated
     })
+  }
+
+  function applySuggestedCode(idx: number): void {
+    const line = lines[idx]
+    if (line?.suggestedItemCode) {
+      updateLine(idx, 'supportItemCode', line.suggestedItemCode)
+    }
   }
 
   function addLine(): void {
@@ -434,11 +572,14 @@ export default function InvoiceReviewDetailPage({
   const hasBlockingFlags = blockingFlags.length > 0
   const canApprove = isEditable && !!selectedParticipantId && (!hasBlockingFlags || flagsAcknowledged)
 
+  // Attention items computation
+  const attentionItems = invoice ? computeAttentionItems(invoice, lines, selectedParticipantId, selectedPlanId) : []
+
   if (loading) {
     return (
       <DashboardShell>
         <div className="flex h-64 items-center justify-center text-muted-foreground">
-          Loading invoice…
+          Loading invoice...
         </div>
       </DashboardShell>
     )
@@ -458,6 +599,17 @@ export default function InvoiceReviewDetailPage({
     )
   }
 
+  // Match card values
+  const isEmailIngested = invoice.ingestSource === 'EMAIL'
+  const providerTier = isEmailIngested ? getMatchTier(invoice.matchConfidence, invoice.matchMethod) : 'verified'
+  const providerStyles = getMatchTierStyles(providerTier)
+  const participantTier: MatchTier = invoice.participantId ? 'verified' : 'no-match'
+  const participantStyles = getMatchTierStyles(participantTier)
+  const aiTier: MatchTier = invoice.aiConfidence !== null
+    ? (invoice.aiConfidence >= 0.7 ? 'verified' : 'needs-verify')
+    : 'no-match'
+  const aiStyles = getMatchTierStyles(aiTier)
+
   return (
     <DashboardShell>
       <PageHeader
@@ -475,7 +627,7 @@ export default function InvoiceReviewDetailPage({
               <>
                 <Button variant="outline" onClick={() => void handleSaveDraft()} disabled={saving}>
                   <Save className="mr-2 h-4 w-4" aria-hidden="true" />
-                  {saving ? 'Saving…' : 'Save Draft'}
+                  {saving ? 'Saving...' : 'Save Draft'}
                 </Button>
                 <Button
                   variant="outline"
@@ -499,7 +651,7 @@ export default function InvoiceReviewDetailPage({
                   title={!selectedParticipantId ? 'Assign a participant before approving' : undefined}
                 >
                   <CheckCircle className="mr-2 h-4 w-4" aria-hidden="true" />
-                  {actionLoading === 'approve' ? 'Approving…' : 'Approve'}
+                  {actionLoading === 'approve' ? 'Approving...' : 'Approve'}
                 </Button>
               </>
             )}
@@ -518,7 +670,7 @@ export default function InvoiceReviewDetailPage({
           {blockingFlags.map((flag, idx) => (
             <Alert key={idx} variant="destructive">
               <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-              <AlertTitle>Blocking Flag — Approval Restricted</AlertTitle>
+              <AlertTitle>Blocking Flag -- Approval Restricted</AlertTitle>
               <AlertDescription>{flag.reason}</AlertDescription>
             </Alert>
           ))}
@@ -551,13 +703,129 @@ export default function InvoiceReviewDetailPage({
         </div>
       )}
 
+      {/* ── Step 2: Auto-Match Results Card ──────────────────────────────── */}
+      <Card data-testid="match-confidence-card">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Zap className="h-4 w-4" aria-hidden="true" />
+            Auto-Match Results
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!isEmailIngested ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Upload className="h-4 w-4" aria-hidden="true" />
+              <span>Manually uploaded -- no auto-match performed</span>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Source email */}
+              <div className="flex items-start gap-2">
+                <Mail className="mt-0.5 h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Source</p>
+                  <p className="text-sm font-medium truncate">{invoice.sourceEmail ?? 'Unknown'}</p>
+                </div>
+              </div>
+
+              {/* Provider match */}
+              <div className="flex items-start gap-2">
+                <span className={`mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ${providerStyles.dot}`} aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Provider</p>
+                  {invoice.provider ? (
+                    <>
+                      <p className="text-sm font-medium truncate">{invoice.provider.name}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${providerStyles.badge}`}>
+                          {getMatchMethodLabel(invoice.matchMethod)}
+                        </Badge>
+                        <span className={`text-xs font-medium ${providerStyles.text}`}>
+                          {invoice.matchConfidence !== null ? `${Math.round(invoice.matchConfidence * 100)}%` : '--'}
+                        </span>
+                        <span className={`text-xs ${providerStyles.text}`}>
+                          {getMatchTierLabel(providerTier)}
+                          {providerTier === 'needs-verify' && ' \u26A0'}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm font-medium text-red-600">Not matched -- assign manually</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Participant match */}
+              <div className="flex items-start gap-2">
+                <span className={`mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ${participantStyles.dot}`} aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Participant</p>
+                  {invoice.participant ? (
+                    <>
+                      <p className="text-sm font-medium truncate">
+                        {invoice.participant.firstName} {invoice.participant.lastName}
+                      </p>
+                      <span className={`text-xs ${participantStyles.text}`}>
+                        NDIS# match - Verified
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-red-600">Not matched</p>
+                      <span className="text-xs text-red-600">Assign manually {'\u26A0'}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Extraction confidence */}
+              <div className="flex items-start gap-2">
+                <span className={`mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ${aiStyles.dot}`} aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">AI Extraction</p>
+                  {invoice.aiConfidence !== null ? (
+                    <>
+                      <p className="text-sm font-medium">{Math.round(invoice.aiConfidence * 100)}%</p>
+                      {invoice.aiConfidence < 0.7 && (
+                        <span className="text-xs text-amber-600">Low {'\u26A0'}</span>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">N/A</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Step 3: Attention-Needed Summary Banner ──────────────────────── */}
+      {attentionItems.length > 0 && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-900" data-testid="attention-banner">
+          <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />
+          <AlertTitle className="text-amber-800">
+            {attentionItems.length} item{attentionItems.length !== 1 ? 's' : ''} need{attentionItems.length === 1 ? 's' : ''} review
+          </AlertTitle>
+          <AlertDescription>
+            <ul className="mt-1 list-disc list-inside space-y-0.5 text-amber-700">
+              {attentionItems.map((item, idx) => (
+                <li key={idx} className={item.severity === 'error' ? 'text-red-700 font-medium' : ''}>
+                  {item.label}
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* ── Validation errors from approval attempt ──────────────────────── */}
       {validationResult !== null && (
         <div className="space-y-2">
           {validationResult.errors.length > 0 && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" aria-hidden="true" />
-              <AlertTitle>Approval Blocked — Validation Errors</AlertTitle>
+              <AlertTitle>Approval Blocked -- Validation Errors</AlertTitle>
               <AlertDescription>
                 <ul className="mt-1 list-disc list-inside space-y-1">
                   {validationResult.errors.map((e, idx) => (
@@ -607,7 +875,7 @@ export default function InvoiceReviewDetailPage({
           <div className="rounded-lg border bg-muted/30 overflow-hidden" style={{ height: '70vh' }}>
             {pdfLoading ? (
               <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-                Loading PDF…
+                Loading PDF...
               </div>
             ) : pdfUrl ? (
               <iframe
@@ -623,12 +891,6 @@ export default function InvoiceReviewDetailPage({
               </div>
             )}
           </div>
-          {invoice.aiConfidence !== null && (
-            <p className="text-xs text-muted-foreground">
-              AI extraction confidence:{' '}
-              <span className="font-medium">{Math.round(invoice.aiConfidence * 100)}%</span>
-            </p>
-          )}
         </div>
 
         {/* ── Right: Edit Form ───────────────────────────────────────────── */}
@@ -722,12 +984,12 @@ export default function InvoiceReviewDetailPage({
                   disabled={!isEditable}
                 >
                   <SelectTrigger id="participant-select">
-                    <SelectValue placeholder="Select participant…" />
+                    <SelectValue placeholder="Select participant..." />
                   </SelectTrigger>
                   <SelectContent>
                     {participants.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.firstName} {p.lastName} — {p.ndisNumber}
+                        {p.firstName} {p.lastName} -- {p.ndisNumber}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -742,7 +1004,7 @@ export default function InvoiceReviewDetailPage({
                   disabled={!isEditable}
                 >
                   <SelectTrigger id="provider-select">
-                    <SelectValue placeholder="Select provider…" />
+                    <SelectValue placeholder="Select provider..." />
                   </SelectTrigger>
                   <SelectContent>
                     {providers.map((p) => (
@@ -763,12 +1025,12 @@ export default function InvoiceReviewDetailPage({
                     disabled={!isEditable}
                   >
                     <SelectTrigger id="plan-select">
-                      <SelectValue placeholder="Select plan…" />
+                      <SelectValue placeholder="Select plan..." />
                     </SelectTrigger>
                     <SelectContent>
                       {plans.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
-                          {formatDateAU(new Date(p.startDate))} – {formatDateAU(new Date(p.endDate))}{' '}
+                          {formatDateAU(new Date(p.startDate))} - {formatDateAU(new Date(p.endDate))}{' '}
                           <Badge variant="outline" className="ml-1 text-xs">{p.status}</Badge>
                         </SelectItem>
                       ))}
@@ -801,131 +1063,175 @@ export default function InvoiceReviewDetailPage({
                       <TableHead className="text-xs">Qty</TableHead>
                       <TableHead className="text-xs">Unit price</TableHead>
                       <TableHead className="text-xs">Total</TableHead>
+                      <TableHead className="text-xs">Budget line</TableHead>
                       {isEditable && <TableHead className="w-8" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {lines.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={isEditable ? 7 : 6} className="py-4 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={isEditable ? 8 : 7} className="py-4 text-center text-sm text-muted-foreground">
                           No line items. Add support items above.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      lines.map((line, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="p-1">
-                            {isEditable ? (
-                              <div className="flex flex-col gap-0.5">
-                                <Input
-                                  value={line.supportItemCode}
-                                  onChange={(e) => updateLine(idx, 'supportItemCode', e.target.value)}
-                                  className="h-7 text-xs font-mono w-32"
-                                  placeholder="01_011_…"
-                                  aria-label="Support item code"
-                                />
-                                {line.suggestedItemCode && !line.supportItemCode && (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
-                                    title="Suggested based on previous invoices from this provider"
-                                  >
-                                    <span className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">
-                                      Suggested: {line.suggestedItemCode}
-                                    </span>
-                                    {line.suggestedConfidence !== null && line.suggestedConfidence !== undefined && (
-                                      <span>({Math.round(line.suggestedConfidence * 100)}% match)</span>
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="flex flex-col gap-0.5">
-                                <span className="text-xs font-mono">{line.supportItemCode}</span>
-                                {line.suggestedItemCode && !line.supportItemCode && (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    Suggested: <span className="font-mono">{line.suggestedItemCode}</span>
-                                    {line.suggestedConfidence !== null && line.suggestedConfidence !== undefined && (
-                                      <> ({Math.round(line.suggestedConfidence * 100)}% match)</>
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="p-1">
-                            {isEditable ? (
-                              <Input
-                                value={line.supportItemName}
-                                onChange={(e) => updateLine(idx, 'supportItemName', e.target.value)}
-                                className="h-7 text-xs w-44"
-                                placeholder="Description"
-                                aria-label="Support item name"
-                              />
-                            ) : (
-                              <span className="text-xs">{line.supportItemName}</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="p-1">
-                            {isEditable ? (
-                              <Input
-                                type="date"
-                                value={line.serviceDate}
-                                onChange={(e) => updateLine(idx, 'serviceDate', e.target.value)}
-                                className="h-7 text-xs w-32"
-                                aria-label="Service date"
-                              />
-                            ) : (
-                              <span className="text-xs">{formatDateAU(new Date(line.serviceDate))}</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="p-1">
-                            {isEditable ? (
-                              <Input
-                                type="number"
-                                value={line.quantity}
-                                onChange={(e) => updateLine(idx, 'quantity', e.target.value)}
-                                className="h-7 text-xs w-16"
-                                min="0"
-                                step="0.5"
-                                aria-label="Quantity"
-                              />
-                            ) : (
-                              <span className="text-xs">{line.quantity}</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="p-1">
-                            {isEditable ? (
-                              <Input
-                                type="number"
-                                value={centsToDollars(line.unitPriceCents).toFixed(2)}
-                                onChange={(e) => updateLine(idx, 'unitPriceCents', dollarsToCents(parseFloat(e.target.value) || 0))}
-                                className="h-7 text-xs w-24"
-                                min="0"
-                                step="0.01"
-                                aria-label="Unit price"
-                              />
-                            ) : (
-                              <span className="text-xs">{formatAUD(line.unitPriceCents)}</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="p-1 text-xs font-mono">
-                            {formatAUD(line.totalCents)}
-                          </TableCell>
-                          {isEditable && (
+                      lines.map((line, idx) => {
+                        const isMissingCode = !line.supportItemCode
+                        const hasSuggestion = !!line.suggestedItemCode
+
+                        return (
+                          <TableRow
+                            key={idx}
+                            className={isMissingCode ? 'border-l-4 border-l-amber-400 bg-amber-50/50' : ''}
+                          >
                             <TableCell className="p-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-destructive"
-                                onClick={() => removeLine(idx)}
-                                aria-label="Remove line"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                              {isEditable ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <Input
+                                    value={line.supportItemCode}
+                                    onChange={(e) => updateLine(idx, 'supportItemCode', e.target.value)}
+                                    className={`h-7 text-xs font-mono w-32 ${isMissingCode ? 'border-amber-400' : ''}`}
+                                    placeholder="01_011_..."
+                                    aria-label="Support item code"
+                                  />
+                                  {hasSuggestion && isMissingCode && (
+                                    <button
+                                      type="button"
+                                      onClick={() => applySuggestedCode(idx)}
+                                      className="inline-flex items-center gap-1 rounded-md bg-blue-100 hover:bg-blue-200 border border-blue-300 px-1.5 py-0.5 text-[10px] text-blue-800 font-medium transition-colors cursor-pointer w-fit"
+                                      title="Click to apply this suggested code"
+                                    >
+                                      <span>Use: </span>
+                                      <span className="font-mono">{line.suggestedItemCode}</span>
+                                      {line.suggestedConfidence !== null && line.suggestedConfidence !== undefined && (
+                                        <span className="text-blue-600">({Math.round(line.suggestedConfidence * 100)}%)</span>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-xs font-mono">{line.supportItemCode || '--'}</span>
+                                  {hasSuggestion && isMissingCode && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      Suggested: <span className="font-mono">{line.suggestedItemCode}</span>
+                                      {line.suggestedConfidence !== null && line.suggestedConfidence !== undefined && (
+                                        <> ({Math.round(line.suggestedConfidence * 100)}% match)</>
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </TableCell>
-                          )}
-                        </TableRow>
-                      ))
+                            <TableCell className="p-1">
+                              {isEditable ? (
+                                <Input
+                                  value={line.supportItemName}
+                                  onChange={(e) => updateLine(idx, 'supportItemName', e.target.value)}
+                                  className="h-7 text-xs w-44"
+                                  placeholder="Description"
+                                  aria-label="Support item name"
+                                />
+                              ) : (
+                                <span className="text-xs">{line.supportItemName}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="p-1">
+                              {isEditable ? (
+                                <Input
+                                  type="date"
+                                  value={line.serviceDate}
+                                  onChange={(e) => updateLine(idx, 'serviceDate', e.target.value)}
+                                  className="h-7 text-xs w-32"
+                                  aria-label="Service date"
+                                />
+                              ) : (
+                                <span className="text-xs">{formatDateAU(new Date(line.serviceDate))}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="p-1">
+                              {isEditable ? (
+                                <Input
+                                  type="number"
+                                  value={line.quantity}
+                                  onChange={(e) => updateLine(idx, 'quantity', e.target.value)}
+                                  className="h-7 text-xs w-16"
+                                  min="0"
+                                  step="0.5"
+                                  aria-label="Quantity"
+                                />
+                              ) : (
+                                <span className="text-xs">{line.quantity}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="p-1">
+                              {isEditable ? (
+                                <Input
+                                  type="number"
+                                  value={centsToDollars(line.unitPriceCents).toFixed(2)}
+                                  onChange={(e) => updateLine(idx, 'unitPriceCents', dollarsToCents(parseFloat(e.target.value) || 0))}
+                                  className="h-7 text-xs w-24"
+                                  min="0"
+                                  step="0.01"
+                                  aria-label="Unit price"
+                                />
+                              ) : (
+                                <span className="text-xs">{formatAUD(line.unitPriceCents)}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="p-1 text-xs font-mono">
+                              {formatAUD(line.totalCents)}
+                            </TableCell>
+                            <TableCell className="p-1">
+                              {isEditable ? (
+                                selectedPlanId && budgetLines.length > 0 ? (
+                                  <Select
+                                    value={line.budgetLineId ?? ''}
+                                    onValueChange={(val) => updateLine(idx, 'budgetLineId', val === '__none__' ? null : val)}
+                                  >
+                                    <SelectTrigger className="h-7 text-xs w-44" aria-label="Budget line">
+                                      <SelectValue placeholder="Select..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__none__">
+                                        <span className="text-muted-foreground">None</span>
+                                      </SelectItem>
+                                      {budgetLines.map((bl) => (
+                                        <SelectItem key={bl.id} value={bl.id}>
+                                          {bl.categoryCode} - {bl.categoryName} ({formatAUD(bl.remainingCents)} left)
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground italic">
+                                    {selectedPlanId ? 'No budget lines' : 'Select plan first'}
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-xs">
+                                  {line.budgetLine
+                                    ? `${line.budgetLine.categoryCode}`
+                                    : '--'}
+                                </span>
+                              )}
+                            </TableCell>
+                            {isEditable && (
+                              <TableCell className="p-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-destructive"
+                                  onClick={() => removeLine(idx)}
+                                  aria-label="Remove line"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        )
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -956,7 +1262,7 @@ export default function InvoiceReviewDetailPage({
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={3}
-              placeholder="e.g. Provider not registered, duplicate invoice, incorrect amounts…"
+              placeholder="e.g. Provider not registered, duplicate invoice, incorrect amounts..."
               aria-required="true"
             />
           </div>
@@ -967,7 +1273,7 @@ export default function InvoiceReviewDetailPage({
               onClick={() => void handleReject()}
               disabled={!rejectReason.trim() || actionLoading === 'reject'}
             >
-              {actionLoading === 'reject' ? 'Rejecting…' : 'Reject invoice'}
+              {actionLoading === 'reject' ? 'Rejecting...' : 'Reject invoice'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -989,7 +1295,7 @@ export default function InvoiceReviewDetailPage({
               value={flagNote}
               onChange={(e) => setFlagNote(e.target.value)}
               rows={3}
-              placeholder="e.g. Needs clarification on provider ABN, awaiting participant confirmation…"
+              placeholder="e.g. Needs clarification on provider ABN, awaiting participant confirmation..."
             />
           </div>
           <DialogFooter>
@@ -999,7 +1305,7 @@ export default function InvoiceReviewDetailPage({
               disabled={actionLoading === 'flag'}
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
-              {actionLoading === 'flag' ? 'Saving…' : 'Save & Flag'}
+              {actionLoading === 'flag' ? 'Saving...' : 'Save & Flag'}
             </Button>
           </DialogFooter>
         </DialogContent>
