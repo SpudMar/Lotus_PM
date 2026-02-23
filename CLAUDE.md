@@ -99,8 +99,8 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | Notifications | ✅ | In-app + ClickSend SMS live. Bell badge, unread count. |
 | Automation Engine | ✅ | Rules, event triggers, cron runner (`POST /api/automation/cron`, CRON_SECRET auth) |
 | Xero Integration | ✅ | OAuth2 flow, invoice→bill sync, settings page |
-| NDIS Price Guide | 🔄 | **WS-F1** — schema + XLSX importer planned. Catalogue: `/Users/Spud/Downloads/NDIS-Support Catalogue-2025-26 -v1.1.xlsx` |
-| Flag/Hold System | 🔄 | **WS-F3** — CrmFlag model (ADVISORY/BLOCKING severity). Any role creates; PM+ resolves. |
+| NDIS Price Guide | ✅ | **PR #34** — `NdisPriceGuideVersion` + `NdisSupportItem`, XLSX importer (`xlsx` pkg), `validateLineItemPrice()`, `PricingRegion` on participant, Settings UI (Price Guide tab) |
+| Flag/Hold System | ✅ | **PR #35** — `CrmFlag` (ADVISORY/BLOCKING), `createFlag()`/`resolveFlag()`/`getActiveFlags()`, banners + Flags tab on participant page, invoice approval gate |
 | Invoice Validation | 🔄 | **WS-F2** — wire 8 checks into `approveInvoice()`. Needs WS-F1 + WS-F3 first. |
 | SA Budget Allocation | 🔄 | **WS-F6** — SaBudgetAllocation (partial allocs, internal tracking only — PACE deprecated SBs) |
 | Pattern Learning | 🔄 | **WS-F4** — InvItemPattern model; suggest support codes from history |
@@ -111,8 +111,8 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 
 ## CURRENT STATE
 
-- **648/648 tests** (35 suites) | **20 migrations** | Last merged: PR #33
-- Last migration: `20260223080000_add_coordinator_to_correspondence`
+- **683/683 tests** (37 suites) | **22 migrations** | Last merged: PR #35
+- Last migrations: `20260224010000_price_guide_pricing_region`, `20260224020000_crm_flags`
 - Dev server: `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`)
 - Staff SMS test numbers: `+61411941699` (director@ and pm@)
 - `CRON_SECRET` needed in `.env.local` + GitHub Actions secrets to activate cron
@@ -154,6 +154,14 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 
 ---
 
+## AGENT GOTCHAS (learned from Wave 1)
+
+- **Schema not persisted**: Agents run `prisma migrate dev` (generates SQL) but often don't save
+  the changes back to `schema.prisma`. Always verify `schema.prisma` has the new models before merging — if missing, add from the migration SQL and run `prisma generate`.
+- **Shared local repo**: Two parallel agents in the same repo dir cross-contaminate working trees. One agent's uncommitted files leak into the other's commit. At merge time: check each PR's schema diff carefully, resolve conflicts manually, re-run `prisma generate` to validate.
+
+---
+
 ## CDK GOTCHAS (learned from staging deploy)
 
 - Description/roleName strings must be **ASCII only** — em-dashes cause IAM/CloudFormation errors
@@ -188,5 +196,5 @@ gh run view <id> --log-failed
 
 ---
 
-*Last updated: 23 February 2026 — 648/648 tests, 20 migrations. PRs #32–33 complete (coordinator CRUD + detail pages). Finance engine gap plan approved (WS-F1 to WS-F6). Full plan: `/Users/Spud/.claude/plans/distributed-riding-wilkes.md`. Next: Wave 1 — WS-F1 (Price Guide) + WS-F3 (Flags) in parallel.*
+*Last updated: 23 February 2026 — 683/683 tests, 22 migrations. PRs #34–35 merged (WS-F1 Price Guide + WS-F3 Flags). Wave 1 complete. Next: WS-F2 Invoice Validation Hardening. Full finance engine plan: `/Users/Spud/.claude/plans/distributed-riding-wilkes.md`.*
 *All decisions in this file were made deliberately. Update with care.*
