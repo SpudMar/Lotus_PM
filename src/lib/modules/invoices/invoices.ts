@@ -90,6 +90,11 @@ export async function createInvoice(input: CreateInput, userId: string) {
       subtotalCents: input.subtotalCents,
       gstCents: input.gstCents,
       totalCents: input.totalCents,
+      // Optional fields for manual upload
+      ...(input.s3Key ? { s3Key: input.s3Key } : {}),
+      ...(input.s3Bucket ? { s3Bucket: input.s3Bucket } : {}),
+      ...(input.ingestSource ? { ingestSource: input.ingestSource } : {}),
+      ...(input.status ? { status: input.status } : {}),
       lines: input.lines
         ? {
             create: input.lines.map((line) => ({
