@@ -51,6 +51,9 @@ interface InvoiceLine {
   unitPriceCents: number
   totalCents: number
   gstCents: number
+  // Pattern-learning fields -- WS-F4
+  suggestedItemCode?: string | null
+  suggestedConfidence?: number | null
 }
 
 interface Invoice {
@@ -813,15 +816,40 @@ export default function InvoiceReviewDetailPage({
                         <TableRow key={idx}>
                           <TableCell className="p-1">
                             {isEditable ? (
-                              <Input
-                                value={line.supportItemCode}
-                                onChange={(e) => updateLine(idx, 'supportItemCode', e.target.value)}
-                                className="h-7 text-xs font-mono w-32"
-                                placeholder="01_011_…"
-                                aria-label="Support item code"
-                              />
+                              <div className="flex flex-col gap-0.5">
+                                <Input
+                                  value={line.supportItemCode}
+                                  onChange={(e) => updateLine(idx, 'supportItemCode', e.target.value)}
+                                  className="h-7 text-xs font-mono w-32"
+                                  placeholder="01_011_…"
+                                  aria-label="Support item code"
+                                />
+                                {line.suggestedItemCode && !line.supportItemCode && (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+                                    title="Suggested based on previous invoices from this provider"
+                                  >
+                                    <span className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">
+                                      Suggested: {line.suggestedItemCode}
+                                    </span>
+                                    {line.suggestedConfidence !== null && line.suggestedConfidence !== undefined && (
+                                      <span>({Math.round(line.suggestedConfidence * 100)}% match)</span>
+                                    )}
+                                  </span>
+                                )}
+                              </div>
                             ) : (
-                              <span className="text-xs font-mono">{line.supportItemCode}</span>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-xs font-mono">{line.supportItemCode}</span>
+                                {line.suggestedItemCode && !line.supportItemCode && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    Suggested: <span className="font-mono">{line.suggestedItemCode}</span>
+                                    {line.suggestedConfidence !== null && line.suggestedConfidence !== undefined && (
+                                      <> ({Math.round(line.suggestedConfidence * 100)}% match)</>
+                                    )}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </TableCell>
                           <TableCell className="p-1">
