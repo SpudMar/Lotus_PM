@@ -19,6 +19,7 @@ import {
   Mail,
   UserCheck,
   Handshake,
+  Layers,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -58,6 +59,7 @@ const navGroups: NavGroup[] = [
       { title: 'Email Triage', href: '/invoices/review', icon: Mail, permission: 'invoices:read', showTriageBadge: true },
       { title: 'Claims', href: '/claims', icon: CreditCard, permission: 'claims:read' },
       { title: 'Banking', href: '/banking', icon: Landmark, permission: 'banking:read' },
+      { title: 'Payment Batches', href: '/banking/batches', icon: Layers, permission: 'banking:read' },
       { title: 'Reports', href: '/reports', icon: BarChart3, permission: 'reports:read' },
     ],
   },

@@ -62,6 +62,7 @@ model CoreUser {
   flagsCreated         CrmFlag[]            @relation("FlagCreatedBy")
   flagsResolved        CrmFlag[]            @relation("FlagResolvedBy")
   importedPriceGuides  NdisPriceGuideVersion[] @relation("PriceGuideImportedBy")
+  paymentBatches       BnkPaymentBatch[]        @relation("BatchCreatedBy")
 
   @@map("core_users")
 }
@@ -717,6 +718,10 @@ model BnkPayment {
   abaFileId     String?
   abaFile       BnkAbaFile? @relation(fields: [abaFileId], references: [id])
 
+  // Batch grouping
+  batchId       String?
+  batch         BnkPaymentBatch? @relation(fields: [batchId], references: [id])
+
   amountCents   Int
   bsb           String
   accountNumber String
@@ -758,9 +763,31 @@ model BnkAbaFile {
 
   createdAt     DateTime   @default(now())
 
+  // Batch grouping
+  batchId       String?
+  batch         BnkPaymentBatch? @relation(fields: [batchId], references: [id])
+
   payments      BnkPayment[]
 
   @@map("bnk_aba_files")
+}
+
+model BnkPaymentBatch {
+  id            String       @id @default(cuid())
+  description   String?
+  scheduledDate DateTime?    // intended payment run date
+  generatedAt   DateTime?    // when ABA file was created
+  uploadedAt    DateTime?    // when user confirms it was uploaded to bank
+  confirmedAt   DateTime?    // when bank confirms payments processed
+  createdAt     DateTime     @default(now())
+  createdById   String
+  createdBy     CoreUser     @relation("BatchCreatedBy", fields: [createdById], references: [id])
+  payments      BnkPayment[]
+  abaFiles      BnkAbaFile[]
+
+  @@index([createdAt])
+  @@index([createdById])
+  @@map("bnk_payment_batches")
 }
 
 // ─────────────────────────────────────────────
@@ -1252,3 +1279,4 @@ model NdisSupportItem {
   @@index([categoryCodePace])
   @@map("ndis_support_items")
 }
+
