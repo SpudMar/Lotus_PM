@@ -11,6 +11,9 @@ import {
   unassignCoordinator,
   getParticipantCoordinator,
   getCoordinatorParticipants,
+  createCoordinator,
+  updateCoordinator,
+  deactivateCoordinator,
 } from '../coordinators'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -20,6 +23,9 @@ jest.mock('@/lib/db', () => ({
     coreUser: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
     },
     crmParticipant: {
       findFirst: jest.fn(),
@@ -30,6 +36,7 @@ jest.mock('@/lib/db', () => ({
       findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     coreAuditLog: {
       create: jest.fn(),
@@ -53,7 +60,13 @@ function makeCoordinator(overrides: Record<string, unknown> = {}) {
     id: 'coord-001',
     name: 'Sarah Mitchell',
     email: 'sarah@lotusassist.com.au',
+    phone: null,
     role: 'SUPPORT_COORDINATOR',
+    isActive: true,
+    mfaEnabled: false,
+    lastLoginAt: null,
+    createdAt: new Date('2026-02-22T10:00:00Z'),
+    updatedAt: new Date('2026-02-22T10:00:00Z'),
     deletedAt: null,
     ...overrides,
   }
@@ -354,5 +367,235 @@ describe('getCoordinatorParticipants', () => {
     mockPrisma.crmCoordinatorAssignment.findMany.mockResolvedValue([])
     const result = await getCoordinatorParticipants('coord-001')
     expect(result).toEqual([])
+  })
+})
+
+// ── New CRUD Tests ─────────────────────────────────────────────────────────────
+
+describe('createCoordinator', () => {
+  const input = {
+    name: 'Jane Doe',
+    email: 'jane@example.com',
+    phone: '0412345678',
+    password: 'securepassword123',
+  }
+
+  test('creates a new coordinator and returns the created user', async () => {
+    const created = makeCoordinator({ id: 'coord-new', name: 'Jane Doe', email: 'jane@example.com', phone: '0412345678' })
+    mockPrisma.coreUser.findFirst.mockResolvedValue(null) // no duplicate
+    mockPrisma.coreUser.create.mockResolvedValue(created)
+
+    const result = await createCoordinator(input, 'admin-001')
+
+    expect(mockPrisma.coreUser.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { email: 'jane@example.com', deletedAt: null },
+      })
+    )
+    expect(mockPrisma.coreUser.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          name: 'Jane Doe',
+          email: 'jane@example.com',
+          phone: '0412345678',
+          role: 'SUPPORT_COORDINATOR',
+        }),
+      })
+    )
+    expect(result).toEqual(created)
+  })
+
+  test('creates coordinator with no phone when phone is omitted', async () => {
+    const inputNoPhone = { name: 'Jane Doe', email: 'jane@example.com', password: 'securepassword123' }
+    const created = makeCoordinator({ id: 'coord-new', name: 'Jane Doe', email: 'jane@example.com', phone: null })
+    mockPrisma.coreUser.findFirst.mockResolvedValue(null)
+    mockPrisma.coreUser.create.mockResolvedValue(created)
+
+    await createCoordinator(inputNoPhone, 'admin-001')
+
+    expect(mockPrisma.coreUser.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ phone: null }),
+      })
+    )
+  })
+
+  test('throws when email is already in use', async () => {
+    mockPrisma.coreUser.findFirst.mockResolvedValue(makeCoordinator()) // existing user
+
+    await expect(createCoordinator(input, 'admin-001')).rejects.toThrow('Email already in use')
+    expect(mockPrisma.coreUser.create).not.toHaveBeenCalled()
+  })
+
+  test('writes audit log after creation', async () => {
+    const created = makeCoordinator({ id: 'coord-new' })
+    mockPrisma.coreUser.findFirst.mockResolvedValue(null)
+    mockPrisma.coreUser.create.mockResolvedValue(created)
+
+    await createCoordinator(input, 'admin-001')
+
+    expect(mockPrisma.coreAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'admin-001',
+          action: 'coordinator.created',
+          resource: 'CoreUser',
+          resourceId: 'coord-new',
+        }),
+      })
+    )
+  })
+})
+
+describe('updateCoordinator', () => {
+  test('updates coordinator fields and returns updated user', async () => {
+    const existing = makeCoordinator()
+    const updated = makeCoordinator({ name: 'Sarah M. Updated', email: 'updated@lotusassist.com.au' })
+    mockPrisma.coreUser.findFirst
+      .mockResolvedValueOnce(existing) // find coordinator
+      .mockResolvedValueOnce(null) // no email conflict
+    mockPrisma.coreUser.update.mockResolvedValue(updated)
+
+    const result = await updateCoordinator(
+      'coord-001',
+      { name: 'Sarah M. Updated', email: 'updated@lotusassist.com.au' },
+      'admin-001'
+    )
+
+    expect(mockPrisma.coreUser.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'coord-001' },
+        data: expect.objectContaining({
+          name: 'Sarah M. Updated',
+          email: 'updated@lotusassist.com.au',
+        }),
+      })
+    )
+    expect(result).toEqual(updated)
+  })
+
+  test('throws when coordinator not found', async () => {
+    mockPrisma.coreUser.findFirst.mockResolvedValue(null)
+
+    await expect(
+      updateCoordinator('no-such-id', { name: 'New Name' }, 'admin-001')
+    ).rejects.toThrow('Coordinator not found')
+    expect(mockPrisma.coreUser.update).not.toHaveBeenCalled()
+  })
+
+  test('throws when new email is already in use by another user', async () => {
+    const existing = makeCoordinator()
+    const otherUser = makeCoordinator({ id: 'coord-other', email: 'taken@lotusassist.com.au' })
+    mockPrisma.coreUser.findFirst
+      .mockResolvedValueOnce(existing) // find coordinator
+      .mockResolvedValueOnce(otherUser) // email conflict
+
+    await expect(
+      updateCoordinator('coord-001', { email: 'taken@lotusassist.com.au' }, 'admin-001')
+    ).rejects.toThrow('Email already in use')
+    expect(mockPrisma.coreUser.update).not.toHaveBeenCalled()
+  })
+
+  test('does not check email conflict when email is unchanged', async () => {
+    const existing = makeCoordinator()
+    const updated = makeCoordinator()
+    mockPrisma.coreUser.findFirst.mockResolvedValueOnce(existing) // find coordinator only
+    mockPrisma.coreUser.update.mockResolvedValue(updated)
+
+    await updateCoordinator(
+      'coord-001',
+      { email: 'sarah@lotusassist.com.au' }, // same email
+      'admin-001'
+    )
+
+    // findFirst called once (for coordinator), not again for conflict check
+    expect(mockPrisma.coreUser.findFirst).toHaveBeenCalledTimes(1)
+  })
+
+  test('writes audit log with before/after data', async () => {
+    const existing = makeCoordinator()
+    const updated = makeCoordinator({ name: 'New Name' })
+    mockPrisma.coreUser.findFirst.mockResolvedValueOnce(existing)
+    mockPrisma.coreUser.update.mockResolvedValue(updated)
+
+    await updateCoordinator('coord-001', { name: 'New Name' }, 'admin-001')
+
+    expect(mockPrisma.coreAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'admin-001',
+          action: 'coordinator.updated',
+          resource: 'CoreUser',
+          resourceId: 'coord-001',
+          before: expect.objectContaining({ name: 'Sarah Mitchell' }),
+        }),
+      })
+    )
+  })
+})
+
+describe('deactivateCoordinator', () => {
+  test('soft-deletes the coordinator and deactivates all assignments', async () => {
+    const existing = makeCoordinator()
+    mockPrisma.coreUser.findFirst.mockResolvedValue(existing)
+    mockPrisma.coreUser.update.mockResolvedValue({ ...existing, deletedAt: new Date() })
+    mockPrisma.crmCoordinatorAssignment.updateMany.mockResolvedValue({ count: 2 })
+
+    const result = await deactivateCoordinator('coord-001', 'admin-001')
+
+    expect(mockPrisma.coreUser.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'coord-001' },
+        data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+      })
+    )
+    expect(mockPrisma.crmCoordinatorAssignment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { coordinatorId: 'coord-001', isActive: true },
+        data: expect.objectContaining({ isActive: false, deactivatedAt: expect.any(Date) }),
+      })
+    )
+    expect(result).toEqual({ success: true })
+  })
+
+  test('throws when coordinator not found', async () => {
+    mockPrisma.coreUser.findFirst.mockResolvedValue(null)
+
+    await expect(deactivateCoordinator('no-such-id', 'admin-001')).rejects.toThrow(
+      'Coordinator not found'
+    )
+    expect(mockPrisma.coreUser.update).not.toHaveBeenCalled()
+  })
+
+  test('writes audit log with deactivated action', async () => {
+    const existing = makeCoordinator()
+    mockPrisma.coreUser.findFirst.mockResolvedValue(existing)
+    mockPrisma.coreUser.update.mockResolvedValue({ ...existing, deletedAt: new Date() })
+    mockPrisma.crmCoordinatorAssignment.updateMany.mockResolvedValue({ count: 0 })
+
+    await deactivateCoordinator('coord-001', 'admin-001')
+
+    expect(mockPrisma.coreAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'admin-001',
+          action: 'coordinator.deactivated',
+          resource: 'CoreUser',
+          resourceId: 'coord-001',
+        }),
+      })
+    )
+  })
+
+  test('deactivates assignments even when coordinator has none (count = 0)', async () => {
+    const existing = makeCoordinator()
+    mockPrisma.coreUser.findFirst.mockResolvedValue(existing)
+    mockPrisma.coreUser.update.mockResolvedValue({ ...existing, deletedAt: new Date() })
+    mockPrisma.crmCoordinatorAssignment.updateMany.mockResolvedValue({ count: 0 })
+
+    const result = await deactivateCoordinator('coord-001', 'admin-001')
+
+    expect(mockPrisma.crmCoordinatorAssignment.updateMany).toHaveBeenCalled()
+    expect(result).toEqual({ success: true })
   })
 })
