@@ -94,7 +94,7 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | Plan Management | ✅ | Plans, budgets, S33 funding periods, fund quarantining, service agreements |
 | Invoice Processing | ✅ | Upload, Textract extraction, approval workflow, email ingest |
 | Claims & Payments | ✅ | Portal Mode — manual submit + outcome recording |
-| Banking | ✅ | ABA file generation, reconciliation. **Batching improvements planned (WS-F5)** |
+| Banking | ✅ | ABA file generation, reconciliation. **PR #37** — `BnkPaymentBatch`, batch lifecycle (create→ABA→upload→confirm), 7 API routes, Batches UI |
 | Reporting | ✅ | Dashboard, financial, NDIS compliance, budget utilisation |
 | Notifications | ✅ | In-app + ClickSend SMS live. Bell badge, unread count. |
 | Automation Engine | ✅ | Rules, event triggers, cron runner (`POST /api/automation/cron`, CRON_SECRET auth) |
@@ -111,8 +111,8 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 
 ## CURRENT STATE
 
-- **694/694 tests** (38 suites) | **22 migrations** | Last merged: PR #36
-- Last migrations: `20260224010000_price_guide_pricing_region`, `20260224020000_crm_flags`
+- **725/725 tests** (39 suites) | **23 migrations** | Last merged: PR #37
+- Last migrations: `20260224020000_crm_flags`, `20260224030000_bnk_payment_batch`
 - Dev server: `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`)
 - Staff SMS test numbers: `+61411941699` (director@ and pm@)
 - `CRON_SECRET` needed in `.env.local` + GitHub Actions secrets to activate cron
@@ -196,5 +196,5 @@ gh run view <id> --log-failed
 
 ---
 
-*Last updated: 23 February 2026 — 694/694 tests, 22 migrations. PRs #34–36 merged (WS-F1 Price Guide + WS-F3 Flags + WS-F2 Invoice Validation). Waves 1+2 complete. Next: Wave 3 — WS-F5 ABA Batching + WS-F6 SA Budget Allocation (parallel). Full finance engine plan: `/Users/Spud/.claude/plans/distributed-riding-wilkes.md`.*
+*Last updated: 23 February 2026 — 725/725 tests, 23 migrations. PRs #34–37 merged (WS-F1 Price Guide + WS-F3 Flags + WS-F2 Invoice Validation + WS-F5 ABA Batching). Wave 3 in progress — WS-F6 SA Budget Allocation agent running. Next: merge WS-F6, then WS-F4 Pattern Learning + Documents UI. Full finance engine plan: `/Users/Spud/.claude/plans/distributed-riding-wilkes.md`.*
 *All decisions in this file were made deliberately. Update with care.*
