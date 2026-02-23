@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requirePermission } from '@/lib/auth/session'
 import { getInvoice, approveInvoice, rejectInvoice, updateInvoice, ValidationFailedError } from '@/lib/modules/invoices/invoices'
 import { recordProviderEmailMatch } from '@/lib/modules/invoices/auto-match'
+import { recordPattern } from '@/lib/modules/invoices/item-matcher'
 import { approveInvoiceSchema, rejectInvoiceSchema, updateInvoiceSchema } from '@/lib/modules/invoices/validation'
 import { z } from 'zod'
 
@@ -42,10 +43,38 @@ export async function PUT(
     const invoice = await updateInvoice(id, input, session.user.id)
 
     // Learning loop: if a provider was set and the invoice has a sender email,
-    // teach the system about this email→provider association (fire-and-forget).
+    // teach the system about this email->provider association (fire-and-forget).
     if (input.providerId && invoice.sourceEmail) {
       void recordProviderEmailMatch(input.providerId, invoice.sourceEmail).catch(() => {
         // Non-blocking: learning loop failure must not affect the save response
+      })
+    }
+
+    // Pattern learning: record support item codes confirmed by this PM save.
+    // Only record when all required IDs are present on the invoice.
+    // Fire-and-forget — pattern recording must never block the save response.
+    if (
+      input.lines &&
+      input.lines.length > 0 &&
+      invoice.providerId &&
+      invoice.participantId
+    ) {
+      const providerId = invoice.providerId
+      const participantId = invoice.participantId
+
+      void Promise.all(
+        input.lines
+          .filter((line) => line.supportItemCode && line.categoryCode)
+          .map((line) =>
+            recordPattern(
+              providerId,
+              participantId,
+              line.categoryCode,
+              line.supportItemCode
+            )
+          )
+      ).catch(() => {
+        // Non-blocking: pattern learning failure must not affect the save response
       })
     }
 

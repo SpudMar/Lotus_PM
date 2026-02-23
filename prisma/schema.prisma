@@ -193,6 +193,7 @@ model CrmParticipant {
   sentEmails        NotifSentEmail[]
   coordinatorAssignments CrmCoordinatorAssignment[] @relation("AssignedCoordinator")
   flags             CrmFlag[]
+  itemPatterns      InvItemPattern[]
 
   @@index([ndisNumber])
   @@index([assignedToId])
@@ -229,6 +230,7 @@ model CrmProvider {
   serviceAgreements SaServiceAgreement[]
   quarantines       FqQuarantine[]
   flags             CrmFlag[]
+  itemPatterns      InvItemPattern[]
 
   @@index([abn])
   @@map("crm_providers")
@@ -583,6 +585,11 @@ model InvInvoiceLine {
   // Validation
   isPriceGuideCompliant Boolean   @default(true)
   priceGuideMaxCents    Int?      // Max allowed per price guide
+
+  // Pattern-learning suggestion -- WS-F4
+  suggestedItemCode   String?  // system suggestion
+  suggestedConfidence Float?   // 0.0-1.0
+  userOverrideCode    String?  // if PM chose differently from suggestion
 
   claimLines      ClmClaimLine[]
 
@@ -1307,4 +1314,27 @@ model SaBudgetAllocation {
   @@index([budgetLineId])
   @@index([serviceAgreementId])
   @@map("sa_budget_allocations")
+}
+
+// --------------------------------------------------
+// INVOICE ITEM PATTERN LEARNING -- WS-F4
+// Tracks observed support code usage per provider/participant/category
+// to suggest codes when invoices arrive without them.
+// --------------------------------------------------
+
+model InvItemPattern {
+  id            String   @id @default(cuid())
+  providerId    String
+  provider      CrmProvider      @relation(fields: [providerId], references: [id])
+  participantId String?  // null = applies to all participants for this provider
+  participant   CrmParticipant?  @relation(fields: [participantId], references: [id])
+  categoryCode  String
+  itemNumber    String
+  occurrences   Int      @default(1)
+  lastSeenAt    DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([providerId, participantId, categoryCode, itemNumber])
+  @@index([providerId, categoryCode])
+  @@map("inv_item_patterns")
 }
