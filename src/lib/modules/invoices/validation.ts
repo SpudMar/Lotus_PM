@@ -9,6 +9,11 @@ export const createInvoiceSchema = z.object({
   subtotalCents: z.number().int().min(0),
   gstCents: z.number().int().min(0).default(0),
   totalCents: z.number().int().min(1, 'Total must be greater than zero'),
+  // Optional fields for manual upload
+  s3Key: z.string().min(1).optional(),
+  s3Bucket: z.string().min(1).optional(),
+  ingestSource: z.enum(['EMAIL', 'MANUAL', 'API']).optional(),
+  status: z.enum(['RECEIVED', 'PENDING_REVIEW']).optional(),
   lines: z.array(
     z.object({
       supportItemCode: z.string().min(1),
