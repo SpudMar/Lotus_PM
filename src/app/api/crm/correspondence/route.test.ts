@@ -38,6 +38,7 @@ function makeEntry(overrides: Record<string, unknown> = {}) {
     toAddress: null,
     participantId: null,
     providerId: null,
+    coordinatorId: null,
     invoiceId: 'inv-001',
     documentId: null,
     createdById: null,
@@ -220,5 +221,126 @@ describe('POST /api/crm/correspondence', () => {
       expect.objectContaining({ type: 'PHONE_CALL', providerId: 'prov-001' }),
       'user-001'
     )
+  })
+})
+
+// ── coordinatorId filter/create support ───────────────────────────────────────
+
+describe('GET /api/crm/correspondence with coordinatorId', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('passes coordinatorId filter to listCorrespondence', async () => {
+    mockRequirePermission.mockResolvedValue(mockSession as never)
+    mockList.mockResolvedValue({ data: [], total: 0 })
+
+    const req = new NextRequest(
+      'http://localhost/api/crm/correspondence?coordinatorId=coord-001'
+    )
+    const res = await GET(req)
+
+    expect(res.status).toBe(200)
+    expect(mockList).toHaveBeenCalledWith(
+      expect.objectContaining({ coordinatorId: 'coord-001' })
+    )
+  })
+
+  it('returns filtered results when coordinatorId is set', async () => {
+    mockRequirePermission.mockResolvedValue(mockSession as never)
+    const entries = [
+      makeEntry({ coordinatorId: 'coord-001', type: 'NOTE' as const }),
+    ]
+    mockList.mockResolvedValue({ data: entries, total: 1 })
+
+    const req = new NextRequest(
+      'http://localhost/api/crm/correspondence?coordinatorId=coord-001&pageSize=100'
+    )
+    const res = await GET(req)
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as { data: unknown[]; total: number }
+    expect(body.data).toHaveLength(1)
+    expect(body.total).toBe(1)
+  })
+})
+
+describe('POST /api/crm/correspondence with coordinatorId', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('creates entry with coordinatorId linked', async () => {
+    mockRequirePermission.mockResolvedValue(mockSession as never)
+    const created = makeEntry({ type: 'NOTE', coordinatorId: 'coord-001', createdById: 'user-001' })
+    mockCreate.mockResolvedValue(created)
+
+    const req = new NextRequest('http://localhost/api/crm/correspondence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'NOTE',
+        body: 'Spoke with support coordinator about review timeline.',
+        coordinatorId: 'clbxxxxxxxxxxxxxxxxxxxxxxx',
+      }),
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(201)
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'NOTE',
+        coordinatorId: 'clbxxxxxxxxxxxxxxxxxxxxxxx',
+      }),
+      'user-001'
+    )
+  })
+
+  it('returns 400 when coordinatorId is not a valid cuid', async () => {
+    mockRequirePermission.mockResolvedValue(mockSession as never)
+
+    const req = new NextRequest('http://localhost/api/crm/correspondence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'NOTE',
+        body: 'Test note.',
+        coordinatorId: 'not-a-valid-cuid',
+      }),
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(400)
+    const body = await res.json() as { code: string }
+    expect(body.code).toBe('VALIDATION_ERROR')
+  })
+
+  it('creates entry without coordinatorId when not provided', async () => {
+    mockRequirePermission.mockResolvedValue(mockSession as never)
+    const created = makeEntry({ type: 'PHONE_CALL', createdById: 'user-001' })
+    mockCreate.mockResolvedValue(created)
+
+    const req = new NextRequest('http://localhost/api/crm/correspondence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'PHONE_CALL',
+        body: 'Called participant to discuss plan.',
+        participantId: 'part-001',
+      }),
+    })
+    const res = await POST(req)
+
+    expect(res.status).toBe(201)
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'PHONE_CALL',
+        participantId: 'part-001',
+      }),
+      'user-001'
+    )
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const callArg = mockCreate.mock.calls[0]![0] as { coordinatorId?: unknown }
+    expect(callArg.coordinatorId).toBeUndefined()
   })
 })

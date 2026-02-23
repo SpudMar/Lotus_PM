@@ -17,6 +17,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
+import Link from 'next/link'
 import { UserCheck, Plus, Pencil, UserX } from 'lucide-react'
 
 interface CoordinatorRow {
@@ -223,7 +224,12 @@ export default function CoordinatorsPage(): React.JSX.Element {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <UserCheck className="text-muted-foreground h-4 w-4" />
-                        {coordinator.name}
+                        <Link
+                          href={`/coordinators/${coordinator.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {coordinator.name}
+                        </Link>
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{coordinator.email}</TableCell>
