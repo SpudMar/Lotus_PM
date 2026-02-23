@@ -2,20 +2,16 @@
 
 **READ THIS FIRST IN EVERY SESSION.**
 
-This file contains all locked decisions, requirements, and conventions for the Lotus PM project. Do not make decisions that contradict anything here without explicit user confirmation and updating this file.
+Locked decisions, requirements, and current state for Lotus PM.
+For coding conventions, patterns, depth control, and what-not-to-do: read `docs/AGENT_BRIEF.md`.
 
 ---
 
 ## PROJECT OVERVIEW
 
-**Name:** Lotus PM
-**Type:** NDIS Plan Management System
-**Business:** Family-owned Plan Management business (Australia)
-**Status:** Phase 3B complete — all 7 workstreams merged. Staging deployed to AWS ap-southeast-2.
-**Repository:** `lotus-pm` (private GitHub)
-**Branch Convention:** `claude/<session-id>` for agent branches, `feat/<module>` for feature branches
-**Production URL:** `https://planmanager.lotusassist.com.au`
-**Staging URL:** `https://staging.planmanager.lotusassist.com.au`
+**Name:** Lotus PM | **Type:** NDIS Plan Management System
+**Repository:** `lotus-pm` (private GitHub) | **Branch convention:** `claude/<session-id>`
+**Production:** `https://planmanager.lotusassist.com.au` | **Staging:** `https://staging.planmanager.lotusassist.com.au`
 
 ---
 
@@ -31,7 +27,7 @@ This file contains all locked decisions, requirements, and conventions for the L
 | REQ-006 | Current scale: 500–2,000 active participants | Scale |
 | REQ-007 | Invoice volume: 2,000–10,000 per month — AI processing is critical | Scale |
 | REQ-008 | Primary bank: CBA (Commonwealth Bank) | Integration |
-| REQ-009 | PRODA/PACE integration (B2B OAuth2/JWT auth). PACE is the NDIA source of truth for participant plans, funding, budgets, support items, claims, and outcomes. App runs fully in **Portal Mode** (manual PACE portal + data entry) now. B2B API is a future automation layer, not a prerequisite. | Integration |
+| REQ-009 | PRODA/PACE B2B OAuth2/JWT auth. App runs fully in **Portal Mode** now. B2B is future automation, not prerequisite. | Integration |
 | REQ-010 | Data retention: 7 years incidents, 5 years payments/invoices | Compliance |
 | REQ-011 | Australian data sovereignty — ALL data stays in Australia (AWS ap-southeast-2) | Compliance |
 | REQ-012 | WCAG 2.1 AA minimum for participant-facing app | Accessibility |
@@ -47,380 +43,89 @@ This file contains all locked decisions, requirements, and conventions for the L
 | REQ-022 | Current Entiprius cost: $5,000/month ($60,000/year) | Financial |
 | REQ-023 | Xero accounting integration (two-way sync: invoices, payments, reconciliation) | Integration |
 | REQ-024 | Invoices arrive via shared email inbox | Workflow |
-| REQ-025 | Roles: Global Admin (PM + user management), Plan Managers (primary daily user), Assistants (data entry) | Security |
-| REQ-026 | PRODA/PACE B2B API access — application in progress (Nicole, 20 Feb 2026). Not blocking — app is fully operational in Portal Mode. B2B will automate data exchange when available. | Integration |
-| REQ-027 | When B2B is available, target PACE B2B APIs (current system) — NOT legacy myNDIS APIs | Integration |
-| REQ-028 | ABA files for payments now; must not preclude future payment provider API (e.g. Monoova). Where feasible, keep payment logic provider-agnostic without adding complexity | Architecture |
+| REQ-025 | Roles: Global Admin, Plan Manager, Assistant, Support Coordinator, Participant | Security |
+| REQ-026 | PRODA/PACE B2B API access — application submitted 20 Feb 2026, awaiting response. Not blocking. | Integration |
+| REQ-027 | When B2B is available, use PACE B2B APIs — NOT legacy myNDIS APIs | Integration |
+| REQ-028 | ABA files for payments now; keep payment logic provider-agnostic for future API (e.g. Monoova) | Architecture |
 
 ---
 
 ## TECH STACK — LOCKED
 
-Every decision below is locked. Do not suggest alternatives without a clear reason.
-
 | Layer | Technology | Notes |
 |-------|-----------|-------|
 | Framework | **Next.js 14+ (App Router)** | Full-stack. Frontend + API in one codebase. |
-| Language | **TypeScript (strict mode)** | `strict: true`, `noUncheckedIndexedAccess: true`. No `any` types. |
-| Database | **PostgreSQL via AWS RDS** | ACID compliance for financial data. Managed. |
-| ORM | **Prisma** | Type-safe. Auto-generates types. Migration management. |
+| Language | **TypeScript (strict mode)** | `strict: true`, `noUncheckedIndexedAccess: true`. No `any`. |
+| Database | **PostgreSQL via AWS RDS** | ACID for financial data. |
+| ORM | **Prisma** | Type-safe. Migration management. |
 | Auth | **NextAuth.js + AWS Cognito** | Managed auth. RBAC. MFA. |
-| Invoice AI | **AWS Textract + custom extraction logic** | In ap-southeast-2. NDIS-specific post-processing. |
-| File Storage | **AWS S3** | Invoices, documents. Server-side encryption mandatory. |
-| Email | **AWS SES** | Send notifications. Receive invoice emails. |
-| App Hosting | **AWS ECS Fargate** | Managed containers. No servers to maintain. |
-| Participant App | **React Native (Expo)** | Cross-platform iOS/Android. Shares React knowledge. |
+| Invoice AI | **AWS Textract** | ap-southeast-2. NDIS-specific post-processing. |
+| File Storage | **AWS S3** | Server-side encryption mandatory. |
+| Email | **AWS SES** | Send + receive invoice emails. |
+| App Hosting | **AWS ECS Fargate** | Managed containers. |
+| Participant App | **React Native (Expo)** | Cross-platform iOS/Android. |
 | Events | **AWS EventBridge** | Custom bus: `lotus-pm-events`. Module decoupling. |
-| Queues | **AWS SQS** | Invoice processing queue, notification queue. |
-| Cache | **Redis (AWS ElastiCache)** | Sessions, rate limiting, frequently accessed data. |
-| Accounting | **Xero API** | Two-way sync. Invoices, payments, reconciliation. |
-| CDN | **AWS CloudFront** | Fast page loads. SSL termination. |
-| Monitoring | **AWS CloudWatch + Sentry** | CloudWatch for AWS metrics. Sentry for app errors. Sentry US region OK for dev/staging (no real client data). See OPEN DECISION POINTS for production/sandpit action. |
-| IaC | **AWS CDK (TypeScript)** | All infrastructure defined as code. Never manual console changes. |
-| CI/CD | **GitHub Actions** | Run on every PR. Block merge if any check fails. |
-| UI Components | **shadcn/ui + Tailwind CSS** | Accessible, customisable components. |
-| Validation | **Zod** | Schema validation everywhere. No raw input processing. |
+| Accounting | **Xero API** | Two-way sync. OAuth2 built. |
+| UI Components | **shadcn/ui + Tailwind CSS** | Accessible, customisable. |
+| Validation | **Zod** | Schema validation everywhere. |
+| IaC | **AWS CDK (TypeScript)** | All infra as code. Never manual console. |
+| CI/CD | **GitHub Actions** | Block merge if any check fails. |
 
 ---
 
 ## RBAC — ROLE DEFINITIONS
 
-| Role | DB Value | Access Level | Notes |
-|------|----------|-------------|-------|
-| **Global Admin** | `GLOBAL_ADMIN` | Everything a PM can do + user management | Acts as PM when covering leave. Creates/deletes staff accounts. The only exclusive permissions are `staff:read` and `staff:write`. |
-| **Plan Manager** | `PLAN_MANAGER` | **The primary daily user** — full operational authority | Full access to ALL operational features: invoicing, claims, payments, banking, reports (including financial), documents, automation rules, Xero integration, notifications. No restrictions on any plan management task. |
-| **Assistant** | `ASSISTANT` | Data entry + limited review | Create/edit participants, providers, plans. Upload invoices. View claims (read-only). Can see flagged/warning items and add comments, but **cannot approve** flagged items — PM or Global Admin must approve. No banking access. |
-| **Participant** | `PARTICIPANT` | Own data only | Via mobile app. Budget, invoice status, messages, documents. |
-
-**Important:** The Plan Manager is the everyday operator. Do NOT gate operational features behind Global Admin — PM must be able to do everything except manage staff accounts.
-
-### Flag/Review Workflow
-- Assistants doing data entry may encounter warnings (e.g., provider bank detail changes, duplicate entries, budget overspend alerts)
-- Assistants can **view** the warning and **add a comment** explaining context
-- Only Plan Manager or Global Admin can **approve/resolve** a flagged item
-- This ensures quality control without blocking the Assistant from doing their data entry work
+| Role | DB Value | Access |
+|------|----------|--------|
+| Global Admin | `GLOBAL_ADMIN` | Everything PM can do + `staff:read`/`staff:write`. Only exclusive perms are staff management. |
+| Plan Manager | `PLAN_MANAGER` | **Primary daily user.** Full operational access to ALL features. NEVER gate operational tasks behind Global Admin. |
+| Assistant | `ASSISTANT` | Data entry. View flagged items + add comments. Cannot approve flagged items. |
+| Support Coordinator | `SUPPORT_COORDINATOR` | External. Read-only access to assigned participants only. |
+| Participant | `PARTICIPANT` | Own data only, via mobile app. |
 
 ---
 
-## MODULE PRIORITY ORDER
+## MODULE STATUS
 
-### Priority 1 (MVP — Phase 1) ✅ COMPLETE
-1. ✅ **Core Platform** — auth, users, RBAC, audit logging
-2. ✅ **CRM** — participants, providers, communication log
-3. ✅ **Plan Management** — plans, budgets, categories, spending tracking
-4. ✅ **Invoice Processing** — upload, extraction, validation, approval workflow
-
-### Priority 2 (Phase 2) — ACTIVE
-5. **Claims & Payments** — Full manual workflow (Portal Mode). Bulk claiming, status tracking, batch operations. ✅ COMPLETE — PACE B2B API will add automation when available (not blocking).
-6. **Banking** — ABA file generation (CBA format), bank reconciliation ✅ COMPLETE — future payment provider API (REQ-028)
-7. **Reporting** — dashboards, financial reports, NDIS compliance reports ✅ COMPLETE
-8. **Notifications** — email (SES), in-app, SMS (SNS) ✅ COMPLETE
-
-### Priority 3 (Phase 3–4)
-9. ✅ **Automation Engine** — rules, triggers, scheduled tasks — **COMPLETE (built ahead of schedule)**
-10. **Documents** — templates, forms, file management
-11. **Participant App** — React Native, WCAG 2.1 AA, accessible design
-
-### Phase 3B — Nicole's Requirements ✅ COMPLETE (all 7 workstreams merged, PRs #14–#21)
-- ✅ WS1: Service Agreements — PR #15 — SaServiceAgreement + SaRateLine models, CRUD, UI
-- ✅ WS2: Fund Quarantining — PR #17 — FqQuarantine model, earmark budget per provider
-- ✅ WS3: S33 Funding Periods — PR #14 — PlanFundingPeriod + PlanPeriodBudget models (14 tests)
-- ✅ WS4: Support Coordinator — PR #16 — SUPPORT_COORDINATOR role, scoped access, CrmCoordinatorAssignment
-- ✅ WS5: Email Templates + SES — PR #18 — NotifEmailTemplate + NotifSentEmail, SES client, SEND_EMAIL action
-- ✅ WS6: WordPress Webhook — PR #19 — `/api/webhooks/service-agreement`, DRAFT participant + SA from WP form
-- ✅ WS7: Participant Approval — PR #21 — opt-in approval (APP/EMAIL/SMS), signed JWT tokens (HMAC-SHA256, 72h expiry)
-- ✅ Coordinator CRUD — PR #32 — create/edit/deactivate coordinators via dialog (PLAN_MANAGER+), 13 new tests
-- ✅ Coordinator detail page — PR #33 — `/coordinators/[id]` with Overview + Notes & Correspondence tabs, `coordinatorId` on `CrmCorrespondence`, list names clickable, 9 new tests
+| Module | Status | Notes |
+|--------|--------|-------|
+| Core Platform | ✅ | Auth, RBAC, audit logging |
+| CRM | ✅ | Participants, providers, coordinators with detail pages + correspondence |
+| Plan Management | ✅ | Plans, budgets, S33 funding periods, fund quarantining, service agreements |
+| Invoice Processing | ✅ | Upload, Textract extraction, approval workflow, email ingest |
+| Claims & Payments | ✅ | Portal Mode — manual submit + outcome recording |
+| Banking | ✅ | ABA file generation, reconciliation |
+| Reporting | ✅ | Dashboard, financial, NDIS compliance, budget utilisation |
+| Notifications | ✅ | In-app + ClickSend SMS live. Bell badge, unread count. |
+| Automation Engine | ✅ | Rules, event triggers, cron runner (`POST /api/automation/cron`, CRON_SECRET auth) |
+| Xero Integration | ✅ | OAuth2 flow, invoice→bill sync, settings page |
+| Documents | 🔄 | Backend built (`storage.ts`, `documents.ts`) — UI needed |
+| Participant App | 🔄 | `participant-app/` scaffold exists — not started |
 
 ---
 
-## PROJECT STRUCTURE
+## CURRENT STATE
 
-```
-lotus-pm/
-├── CLAUDE.md                    ← YOU ARE HERE
-├── prisma/
-│   └── schema.prisma            # All tables, module-prefixed
-├── src/
-│   ├── app/                     # Next.js App Router
-│   │   ├── (auth)/              # Login, register, MFA
-│   │   ├── (dashboard)/         # Main PM dashboard
-│   │   ├── (crm)/               # CRM pages
-│   │   ├── (plans)/             # Plan management
-│   │   ├── (invoices)/          # Invoice processing
-│   │   ├── (claims)/            # Claims & payments
-│   │   ├── (banking)/           # Banking & reconciliation
-│   │   ├── (reports)/           # Reporting & analytics
-│   │   ├── (settings)/          # System settings
-│   │   └── api/                 # API routes (one dir per module)
-│   ├── lib/
-│   │   ├── modules/             # Business logic (isolated per module)
-│   │   │   ├── core/
-│   │   │   ├── crm/
-│   │   │   ├── plans/
-│   │   │   ├── invoices/
-│   │   │   ├── claims/
-│   │   │   ├── banking/
-│   │   │   ├── automation/
-│   │   │   ├── reports/
-│   │   │   ├── notifications/
-│   │   │   └── documents/
-│   │   ├── events/              # EventBridge event definitions
-│   │   ├── db/                  # Prisma client singleton
-│   │   ├── auth/                # Auth utilities, RBAC helpers
-│   │   └── shared/              # Date formatting, currency, NDIS utilities
-│   ├── components/
-│   │   ├── ui/                  # shadcn/ui components
-│   │   ├── layout/              # Navigation, sidebar, page layouts
-│   │   └── accessibility/       # WCAG-specific components
-│   └── types/                   # TypeScript type definitions
-├── participant-app/             # React Native (Expo) — separate codebase
-├── infrastructure/              # AWS CDK stacks
-├── docs/                        # Documentation
-│   ├── BUSINESS_CASE.md
-│   └── PHASE_0_EXECUTION_PLAN.md
-├── tests/                       # E2E and integration tests
-├── scripts/                     # seed.ts, migrate.ts, etc.
-├── docker-compose.yml
-├── .github/workflows/           # GitHub Actions CI/CD
-└── .env.example                 # Template — never commit .env.local
-```
+- **648/648 tests** (35 suites) | **20 migrations** | Last merged: PR #33
+- Last migration: `20260223080000_add_coordinator_to_correspondence`
+- Dev server: `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`)
+- Staff SMS test numbers: `+61411941699` (director@ and pm@)
+- `CRON_SECRET` needed in `.env.local` + GitHub Actions secrets to activate cron
 
----
-
-## CODING CONVENTIONS
-
-### TypeScript
-- `strict: true` always
-- No `any` types — use `unknown` and type guards if needed
-- Explicit return types on all exported functions
-- Zod schemas for all external data (API inputs, email payloads, AI extraction results)
-
-### Database
-- All queries via Prisma — never raw SQL unless absolutely necessary and documented
-- Table names are module-prefixed: `crm_participants`, `inv_invoices`, `plan_budgets`
-- All financial amounts stored as integers (cents) — never floats
-- Soft deletes only — never hard delete participant, plan, or financial records
-- All sensitive data encrypted at application level before storage
-
-### API Routes
-- All `/api` routes must validate input with Zod before any processing
-- Authentication check at the start of every protected route
-- RBAC check after authentication
-- Return consistent error format: `{ error: string, code: string }`
-- Log all mutations to audit_log table
-
-### Events (EventBridge)
-- Modules communicate via events on `lotus-pm-events` bus — never by importing each other's internals
-- Event naming: `lotus-pm.<module>.<action>` (e.g., `lotus-pm.invoices.approved`)
-- All events must have a schema defined in `src/lib/events/`
-
-### Security
-- Never log PII (NDIS numbers, names, addresses) to CloudWatch
-- Never store credentials in code or environment files committed to Git
-- Use AWS Secrets Manager for all API keys and credentials in production
-- Rate limiting on all public-facing API routes
-
-### Testing
-- Every module must have unit tests in `src/lib/modules/<module>/*.test.ts`
-- Every API route must have at least one passing test
-- Business logic (validation, calculations) must have 100% test coverage
-- E2E tests for critical workflows: invoice approval, claim submission
-
----
-
-## ENVIRONMENT VARIABLES
-
-See `.env.example` for the full list. Required for development:
-- `DATABASE_URL` — local PostgreSQL
-- `NEXTAUTH_URL` — `http://localhost:3000`
-- `NEXTAUTH_SECRET` — generate with `openssl rand -base64 32`
-- AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=ap-southeast-2`)
-- `CLICKSEND_USERNAME` — ClickSend account username (set in `.env.local`)
-- `CLICKSEND_API_KEY` — ClickSend API key (set in `.env.local`)
-- `CLICKSEND_FROM` — SMS sender ID, default `LotusAssist` (max 11 chars alphanumeric)
-- `CRON_SECRET` — bearer token for `POST /api/automation/cron`. Generate: `openssl rand -base64 32`. Also add to GitHub Actions secrets (`Settings → Secrets → CRON_SECRET`) to activate the cron workflow.
-
----
-
-## EXTERNAL DEPENDENCIES & THEIR STATUS
-
-| Dependency | Owner | Status | Blocks |
-|-----------|-------|--------|--------|
-| AWS Account | Done | ✅ Account created 20 Feb 2026 | Nothing — unblocked |
-| Sentry Account | Done | ✅ Account created 20 Feb 2026 (US region — see DEC-001) | Nothing — unblocked |
-| GitHub setup | Done | ✅ Complete 21 Feb 2026 — main branch, protection rules, 6 labels | Phase 0 CI/CD |
-| PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | **Not blocking.** App fully operational in Portal Mode. B2B will automate: participant/plan sync, claim submission, outcome polling, price guide validation. |
-| CBA CommBiz API | TBD | Not needed for MVP — ABA files used directly. Future: evaluate Monoova or similar API provider | Nothing (ABA unblocked) |
-| Xero API credentials | Done | ✅ App "Lotus Plan Management" on developer.xero.com. OAuth2 integration built (21 Feb 2026). Credentials in `.env.local`. | Nothing — unblocked |
-| Domain name | Done | ✅ `planmanager.lotusassist.com.au` — subdomain on existing domain | Staging deployment |
-| Entiprius data export | TBD | Not started | Phase 3 migration |
+**Staging (ap-southeast-2) — all 6 CDK stacks CREATE_COMPLETE:**
+- CloudFront: `d2iv01jt8w4gxn.cloudfront.net`
+- ALB: `lotus-pm-staging-489597421.ap-southeast-2.elb.amazonaws.com`
+- RDS: `lotus-pm-staging.cbsk4oomy587.ap-southeast-2.rds.amazonaws.com`
+- ECS running nginx scaffold — real app image not yet deployed
 
 ---
 
 ## OPEN DECISION POINTS
 
-Decisions deferred until a specific trigger event. Do not resolve these unilaterally — review with the team at the trigger point.
-
-| ID | Decision | Trigger | Options | Notes |
-|----|----------|---------|---------|-------|
-| DEC-001 | Sentry data residency for production | Before first real participant data enters staging OR before compliance sandpit testing | (A) Keep Sentry US + implement strict PII scrubbing via `beforeSend` hook — grey area under Privacy Act; (B) Self-host Sentry on ECS Fargate in ap-southeast-2 — fully compliant, higher ops overhead; (C) Drop Sentry, use CloudWatch only — simplest, fully compliant | Dev/coding uses Sentry US freely (no client data). Decision only needed when real data is in play. REQ-011. |
-| DEC-002 | Payment provider API (replace ABA manual upload) | When payment volume makes manual ABA upload impractical, or when provider payment speed becomes a business requirement | (A) Monoova — purpose-built AU disbursements, NPP, ~$0.10–$0.15/txn at volume; (B) Split Payments — cheapest ~$0.10/txn, payment splitting model; (C) Zepto (Cuscal) — direct NPP access, strong rates; (D) CBA CommBiz API — existing relationship, higher cost ~$0.40/txn | REQ-028. Banking module already built with ABA. Payment business logic is provider-agnostic — adding an API provider later requires implementing the payment initiation + webhook handling, not rewriting business logic. |
-
----
-
-## CURRENT PHASE STATUS
-
-**Active Phase:** Phase 3B COMPLETE — all 7 workstreams merged (PRs #14–#21). Staging fully deployed to ap-southeast-2 (PR #22).
-
-**Current test count:** 648/648 tests passing (35 test suites).
-
-**Dev server:** `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`, Tailwind v4 requires Turbopack)
-
-**DB migrations state:** 20 migrations. Last: `20260223080000_add_coordinator_to_correspondence`.
-
-**Staff phone numbers:** Global Admin (`director@lotusassist.com.au`) and Plan Manager (`pm@lotusassist.com.au`) both have `phone = +61411941699` in DB for SMS testing.
-
----
-
-### Phase 0 — AI Development Infrastructure ✅ COMPLETE
-
-- [x] Prerequisites (AWS, GitHub, Node, Docker, AWS CLI)
-- [x] Step 1: GitHub repository setup (branch protection, labels, main branch)
-- [x] Step 2: CLAUDE.md
-- [x] Step 3: Claude Code configuration + MCP servers
-- [x] Step 4: Next.js project scaffolding (App Router, TypeScript strict, shadcn/ui, Tailwind)
-- [x] Step 5: Local Docker environment (Postgres 16, Redis 7, MailHog)
-- [x] Step 6: CI/CD pipeline (GitHub Actions — lint, type-check, test, build all green)
-- [x] Step 7: AWS CDK infrastructure — 6 stacks committed (VPC, RDS, S3/SQS/EventBridge, Redis/ElastiCache, ECS Fargate, CloudWatch/Monitoring)
-- [x] Step 8: Smoke test — `GET /api/health` returns `{"status":"ok","service":"lotus-pm"}`
-
-Branch protection updated: Required check name is `Lint, Type Check & Test` (matches `name:` field in ci.yml, not the job ID). `strict: true` — branch must be up-to-date with main. No review required (solo dev). `enforce_admins: false`.
-When concurrent PRs advance main while CI is running, the branch goes stale. Fix: `git merge main && git push` then wait for CI rerun. Or use `gh pr merge --auto` to let GitHub do it automatically once CI passes.
-
----
-
-### Phase 1 — MVP ✅ COMPLETE (merged to main @ 2ed4f22)
-
-All routes smoke-tested locally. CI green on every PR.
-
-| Module | Status | Notes |
-|--------|--------|-------|
-| Core Platform | ✅ | NextAuth.js credentials provider, JWT sessions, RBAC middleware (`src/middleware.ts`). Roles: Director, Plan Manager, Assistant. |
-| CRM | ✅ | Participant + Provider CRUD APIs with search. Seeded: 3 participants, 3 providers. |
-| Plan Management | ✅ | Plan + budget line management with spending tracking. Seeded: 2 plans with budget lines. |
-| Invoice Processing | ✅ | Full CRUD with approve/reject workflow, status tabs (All / Received / Pending Review / Approved / Rejected). Seeded: 4 invoices. |
-
-**Phase 1 UI smoke test results:**
-
-| Route | Result |
-|-------|--------|
-| `/login` | Login form renders, accepts credentials |
-| `/dashboard` | Redirects after login, shows "Welcome back, Sarah Mitchell". Stat cards show dashes — not yet wired to DB counts. |
-| `/participants` | 3 rows: Michael Thompson, Jessica Nguyen, David O'Brien |
-| `/providers` | 3 rows: Blue Mountains Allied Health, Metro Transport, Sunrise Support |
-| `/plans` | Budget lines with dollar amounts and spent tracking |
-| `/invoices` | Status tabs + 4 invoices |
-| Auth middleware | Unauthenticated API calls → `{"error":"Unauthorized","code":"UNAUTHORIZED"}` |
-
-**Seed data:** 3 users (Global Admin: director@lotusassist.com.au, PM: pm@lotusassist.com.au, Assistant: assistant@lotusassist.com.au), 3 participants, 3 providers, 2 plans (with budget lines), 4 invoices. Seed script is idempotent (uses upsert).
-
----
-
-### Phase 2 — Claims & Payments (ACTIVE — all modules complete in Portal Mode)
-
-All four Phase 2 modules are **fully operational without PACE B2B API**. Staff use the PACE portal directly (as they do today with Entiprius) and enter data into Lotus PM manually. This is the standard workflow — B2B API is a future automation enhancement.
-
-| Module | Status | Notes |
-|--------|--------|-------|
-| Claims & Payments | ✅ COMPLETE (Portal Mode) | Full CRUD, batch operations, manual submit + outcome recording. Staff submit claims via PACE portal, enter PRODA references and outcomes in Lotus PM. |
-| Banking | ✅ COMPLETE | ABA file generation (CBA format), payment management, reconciliation. Manual upload to bank. Future: payment provider API (REQ-028). |
-| Reporting | ✅ COMPLETE | Dashboard summary, financial reports (Director-only), NDIS 5-day compliance metrics, budget utilisation, provider payment summary. |
-| Notifications | ✅ COMPLETE | In-app notifications with bell icon + unread badge. Bell badge updates in real-time via custom DOM event (`lotus:notifications:changed`). Dashboard stat cards wired to live DB. Seed script fully idempotent (upsert). **ClickSend SMS delivery live** — `POST /api/notifications/sms`, `NOTIFY_STAFF` automation action sends real SMS. |
-
-#### Portal Mode vs B2B API Mode
-
-The app operates in **Portal Mode** — staff interact with the PACE portal manually and enter results into Lotus PM. This mirrors existing plan management workflows and is production-ready.
-
-**Portal Mode (current — fully operational):**
-- Staff create participants, plans, and budgets via manual data entry
-- Staff submit claims to NDIA via the PACE portal, then record the PRODA reference in Lotus PM
-- Staff check claim outcomes in the PACE portal, then record approved/rejected/partial in Lotus PM
-- Support item codes and prices entered manually from provider invoices
-- Budget allocations entered manually from PACE-approved plan letters
-
-**B2B API Mode (future — when PRODA access granted):**
-When PACE B2B API credentials arrive, the following can be automated incrementally:
-
-| Capability | What it replaces | Effort | Priority |
-|------------|-----------------|--------|----------|
-| Claim submission via API | Manual PACE portal entry + copy-paste PRODA ref | Medium | High |
-| Claim outcome polling | Manual outcome checking + data entry | Medium | High |
-| Participant plan/funding sync | Manual budget entry from plan letters | Low | Medium |
-| Support item + price guide validation | No current validation (prices accepted as-is) | Medium | Medium |
-| Participant lookup/verification | Manual NDIS number entry | Low | Low |
-
-**Architecture is ready for B2B:** Schema has `prodaPlanId`, `prodaClaimId`, `prodaBatchId`, `prodaReference` fields (all optional). Business logic is isolated in module functions. When B2B arrives, add a PACE API client (`src/lib/modules/claims/pace-client.ts`) and replace manual submission with API calls — no business logic rewrite needed.
-
-#### Remaining external dependencies (not blocking app operation):
-
-| Dependency | Owner | Status | Impact |
-|------------|-------|--------|--------|
-| PRODA/PACE B2B API access | Nicole (business) | Application emailed 20 Feb 2026 — awaiting response | Enables automation. Not blocking — app works in Portal Mode. |
-| Payment provider API (Monoova etc.) | TBD | Future — evaluate when volume justifies | ABA files working now. DEC-002. |
-| Xero OAuth2 integration | Done | ✅ OAuth2 flow built. Settings page at `/settings`. Connect Xero, sync approved invoices as bills. 46 Xero tests pass. | Nothing — unblocked |
-
----
-
-### Phase 3 — Automation Engine ✅ COMPLETE (merged to main @ 82fa06d, built ahead of Phase 2)
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| DB schema | ✅ | `AutoRule` + `AutoExecutionLog` models. Migration: `20260220200000_automation_engine`. |
-| Module: types | ✅ | `AutoCondition`, `AutoAction`, `TriggerContext`, `RuleExecutionResult` (`src/lib/modules/automation/types.ts`) |
-| Module: validation | ✅ | Zod schemas for create/update rules and all sub-types (`validation.ts`) |
-| Module: rules | ✅ | `listRules`, `getRuleById`, `createRule`, `updateRule`, `deleteRule`, `findRulesForEvent`, `findScheduledRules` (`rules.ts`) |
-| Module: engine | ✅ | `evaluateCondition`, `evaluateConditions`, `interpolateTemplate`, `executeAction`, `triggerRule`, `processEvent` (`engine.ts`) |
-| Actions implemented | ✅ | `LOG_COMM` (creates CrmCommLog with template interpolation), `NOTIFY_STAFF` (stubbed — wires to Phase 2 Notifications) |
-| API routes | ✅ | `GET/POST /api/automation/rules`, `GET/PUT/DELETE /api/automation/rules/[id]`, `POST /api/automation/rules/[id]/trigger` |
-| RBAC | ✅ | `automation:read` → Director, Plan Manager. `automation:write` → Director only. |
-| UI | ✅ | Table with toggle/test/delete, create dialog with trigger type, event, conditions, message template (`src/app/(automation)/automation/page.tsx`) |
-| Tests | ✅ | 27 passing (20 engine unit tests + 7 existing). All operators, template interpolation, multi-condition evaluation. |
-
-**Automation engine fully live (PRs #29–#31):**
-- ✅ `NOTIFY_STAFF` wired to ClickSend SMS.
-- ✅ `processEvent` wired (fire-and-forget) from: `approveInvoice`, `rejectInvoice`, `submitClaim`, `recordClaimOutcome`, `reconcilePayments`.
-- ✅ Cron runner: `POST /api/automation/cron` (CRON_SECRET bearer auth). GitHub Actions `.github/workflows/cron.yml` fires every 5 min against staging CloudFront endpoint. Add `CRON_SECRET` to GitHub Actions secrets to activate.
-
----
-
-### Staging Deployment — ap-southeast-2 ✅ LIVE (PR #22)
-
-All 6 CDK stacks CREATE_COMPLETE in ap-southeast-2 (Sydney). Deployed 22 Feb 2026.
-
-| Stack | Status | Notes |
-|-------|--------|-------|
-| `lotus-pm-staging-vpc` | ✅ CREATE_COMPLETE | VPC, subnets, NAT gateway, SGs |
-| `lotus-pm-staging-database` | ✅ CREATE_COMPLETE | RDS PostgreSQL 16 db.t3.micro |
-| `lotus-pm-staging-storage` | ✅ CREATE_COMPLETE | S3 buckets, SQS queues, EventBridge, SES |
-| `lotus-pm-staging-cache` | ✅ CREATE_COMPLETE | ElastiCache Redis cache.t3.micro |
-| `lotus-pm-staging-app` | ✅ CREATE_COMPLETE | ECS Fargate (nginx scaffold), ALB, CloudFront |
-| `lotus-pm-staging-monitoring` | ✅ CREATE_COMPLETE | CloudWatch dashboard, SNS alarms |
-
-**Endpoints:**
-- CloudFront: `d2iv01jt8w4gxn.cloudfront.net` (point DNS CNAME here)
-- ALB: `lotus-pm-staging-489597421.ap-southeast-2.elb.amazonaws.com`
-- RDS: `lotus-pm-staging.cbsk4oomy587.ap-southeast-2.rds.amazonaws.com`
-- Redis: `master.lotus-pm-staging.u1gfqu.apse2.cache.amazonaws.com`
-
-**Current scaffold state:** ECS task runs nginx on port 80. Real app image not yet deployed.
-**Next steps before app is live:**
-1. Build + push real Docker image to ECR; update ECS task definition
-2. Re-enable circuit breaker + health check in `app-stack.ts` once real image is deployed
-3. Run `prisma migrate deploy` against staging RDS
-4. Attach ACM cert for `staging.planmanager.lotusassist.com.au` → switch ALB to port 443
-5. Point DNS CNAME to CloudFront domain
-6. SES: verify `lotusassist.com.au`, add DKIM records, add MX record, activate receipt rule set
+| ID | Decision | Trigger | Notes |
+|----|----------|---------|-------|
+| DEC-001 | Sentry data residency for production | Before real participant data enters staging | (A) Sentry US + PII scrubbing; (B) Self-host on ECS; (C) CloudWatch only. Dev uses Sentry US freely. REQ-011. |
+| DEC-002 | Payment provider API (replace ABA) | When payment volume makes manual ABA impractical | (A) Monoova ~$0.10–0.15/txn; (B) Split Payments ~$0.10; (C) Zepto; (D) CBA CommBiz ~$0.40. REQ-028. |
 
 ---
 
@@ -429,115 +134,54 @@ All 6 CDK stacks CREATE_COMPLETE in ap-southeast-2 (Sydney). Deployed 22 Feb 202
 | File | Purpose |
 |------|---------|
 | `CLAUDE.md` | Project memory — read first every session |
+| `docs/AGENT_BRIEF.md` | Coding conventions, patterns, depth control — cloud agents read this |
 | `prisma/schema.prisma` | Full DB schema, all module tables |
 | `src/lib/auth/config.ts` | NextAuth config with RBAC |
 | `src/middleware.ts` | Route protection |
 | `src/lib/db/client.ts` | Prisma client singleton |
 | `src/lib/shared/currency.ts` | Financial amount utilities (cents, never floats) |
-| `src/lib/events/types.ts` | EventBridge event type definitions (9 event types) |
+| `src/lib/events/types.ts` | EventBridge event type definitions |
 | `src/lib/modules/automation/engine.ts` | Automation rule evaluator and executor |
-| `src/lib/modules/automation/rules.ts` | Automation CRUD and event lookup |
-| `src/app/api/automation/cron/route.ts` | Cron runner — CRON_SECRET auth, evaluates due SCHEDULE rules every 5 min |
-| `.github/workflows/cron.yml` | GitHub Actions schedule — POSTs to staging CloudFront every 5 min |
-| `src/app/(automation)/automation/page.tsx` | Automation UI — rule list, create, test, toggle |
-| `src/lib/modules/reports/reports.ts` | Reporting queries (dashboard, financial, compliance, budget) |
-| `src/app/(reports)/reports/page.tsx` | Reports UI — overview, compliance, budget, financial tabs |
-| `src/lib/modules/notifications/notifications.ts` | SMS delivery (`sendSms`, `sendSmsToStaffByRole`) + in-app helpers (`getUnreadCount`, `markAsRead`, etc.) |
-| `src/lib/modules/notifications/clicksend.ts` | ClickSend REST API v3 client — normalises AU numbers, graceful degradation if env vars missing |
-| `src/lib/modules/notifications/validation.ts` | Zod schemas for SMS (`sendSmsSchema`) and in-app notifications (`createNotificationSchema`) |
-| `src/app/api/notifications/sms/route.ts` | `POST /api/notifications/sms` — RBAC-protected SMS send + audit log |
-| `src/app/(notifications)/notifications/page.tsx` | Notifications UI — list, mark read, dismiss |
-| `src/lib/modules/xero/xero-auth.ts` | Xero OAuth2 helpers — `buildXeroAuthUrl`, `exchangeCodeForTokens`, `refreshXeroToken`, `getActiveXeroConnection` |
-| `src/lib/modules/xero/xero-client.ts` | Xero API client — contact find/create, invoice create/update |
-| `src/lib/modules/xero/xero-sync.ts` | Invoice → Xero bill sync — `syncInvoiceToXero`, `syncPendingInvoicesToXero` |
-| `src/lib/modules/xero/types.ts` | Xero TypeScript types (tokens, tenants, invoices, sync results) |
-| `src/app/api/xero/auth/route.ts` | `GET /api/xero/auth` — initiate OAuth2 flow (Director only) |
-| `src/app/api/xero/callback/route.ts` | `GET /api/xero/callback` — OAuth2 callback, store tokens |
-| `src/app/api/xero/status/route.ts` | `GET /api/xero/status` — connection status |
-| `src/app/api/xero/disconnect/route.ts` | `DELETE /api/xero/disconnect` — deactivate connection |
-| `src/app/api/xero/sync/route.ts` | `POST /api/xero/sync` — bulk sync approved invoices |
-| `src/app/api/xero/sync/[invoiceId]/route.ts` | `POST /api/xero/sync/[invoiceId]` — sync single invoice |
-| `src/app/(settings)/settings/page.tsx` | Settings UI — Xero connection status, connect/disconnect, trigger sync |
-| `infrastructure/lib/config.ts` | Environment configs (staging/production) |
-| `scripts/seed.ts` | Dev seed data (not idempotent — see Phase 1 notes) |
-| `docker-compose.yml` | Local Postgres 16, Redis 7, MailHog |
+| `src/app/api/automation/cron/route.ts` | Cron runner — CRON_SECRET auth |
+| `.github/workflows/cron.yml` | GH Actions schedule — POSTs to staging every 5 min |
 | `.github/workflows/ci.yml` | CI pipeline (lint, type-check, test, build) |
+| `infrastructure/lib/config.ts` | CDK environment configs |
 
 ---
 
-## KNOWN ISSUES & TECHNICAL DEBT
+## CDK GOTCHAS (learned from staging deploy)
 
-These are non-blocking observations recorded at end of Phase 1. Address opportunistically.
-
-| ID | Issue | Priority | Notes |
-|----|-------|----------|-------|
-| TD-001 | ~~Dashboard stat cards show dashes~~ | ✅ FIXED | Dashboard now fetches live from `GET /api/reports/dashboard` on mount |
-| TD-002 | ~~Seed script not idempotent~~ | ✅ FIXED | Seed now uses upsert throughout — safe to run multiple times |
-| TD-003 | Plans page shows budget lines as rows | Low | Consider grouping by plan for plan-level summary view |
-| TD-004 | 37 npm audit vulnerabilities | Medium | 3 low, 1 moderate, 33 high — mostly transitive dependencies. Run `npm audit` to review before staging deployment. |
-
----
-
-## WHAT NOT TO DO
-
-- **No microservices** — this is a modular monolith. Modules are code-separated, not service-separated.
-- **No raw SQL** — use Prisma. If Prisma can't do it, document why before using `$queryRaw`.
-- **No floats for money** — always integers (cents). Use utility in `src/lib/shared/currency.ts`.
-- **No `any` types** — TypeScript strict mode is non-negotiable.
-- **No hardcoded credentials** — not in code, not in commits, not in comments.
-- **No manual AWS console changes** — everything goes through CDK. Console is read-only.
-- **No pushing directly to `main`** — all changes via PR with passing CI checks.
-- **No skipping tests** — if you can't test it, that's a design problem, not a testing problem.
-- **No storing data outside AWS ap-southeast-2** — REQ-011, Australian data sovereignty.
-- **No legacy myNDIS APIs** — when B2B integration is built, use PACE B2B APIs only. REQ-027.
+- Description/roleName strings must be **ASCII only** — em-dashes cause IAM/CloudFormation errors
+- RDS instance class in config.ts must be `'t3'` not `'db.t3'` (CDK adds `db.` prefix internally)
+- AWS free tier blocks RDS entirely — account must exit free tier first
+- RDS secret keys from CDK: `host`, `port`, `username`, `password`, `dbname` (not `dbUrl`)
+- Scaffold: use nginx on port 80; disable circuit breaker; no secrets for placeholder container
 
 ---
 
 ## USEFUL COMMANDS
 
 ```bash
-# CRITICAL: nvm Node 24 is the default on this machine but sets omit=dev globally,
-# which silently skips devDependencies (TypeScript, jest, eslint, etc.).
-# ALWAYS prefix npm commands with the Node 20 PATH:
-export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-# Or use: npm install --include=dev
-# A project .npmrc with include=dev is also in place as a safety net.
+export PATH="/opt/homebrew/opt/node@20/bin:$PATH"  # ALWAYS first — nvm default (24) sets omit=dev
 
-# Start local development
-docker compose up -d && npm run dev
+# Dev
+docker compose up -d && node node_modules/.bin/next dev
 
-# Database operations
-npm run db:migrate      # Run new migrations
-npm run db:studio       # Open Prisma Studio (visual DB editor)
-npm run db:seed         # Seed with test data
+# DB
+npx prisma migrate deploy && npx prisma generate
+DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate  # no live DB
 
-# Testing
-npm run test            # Unit tests
-npm run test:watch      # Watch mode
-npm run test:e2e        # End-to-end tests (Playwright)
+# Test + type-check
+npm test
+npx tsc --noEmit
 
-# Type checking
-npm run type-check      # TypeScript check without building
-
-# Infrastructure
-cd infrastructure && cdk deploy --context environment=staging
-cd infrastructure && cdk diff --context environment=staging
-
-# CDK gotchas (learned from staging deploy):
-#   - All description/roleName strings must be ASCII only — em-dashes (—) cause IAM/EC2/CFn errors
-#   - RDS instance class in config.ts must be 't3' NOT 'db.t3' (CDK's InstanceType.of() adds db. prefix)
-#   - AWS free tier blocks RDS entirely — account must exit free tier before any RDS deploy
-#   - RDS secret keys from CDK: host, port, username, password, dbname (NOT 'dbUrl')
-#   - ApplicationLoadBalancedFargateService requires desiredCount >= 1; disable circuit breaker for scaffold
-#   - Scaffold container: use nginx on port 80 (not amazonlinux — it has no HTTP server)
-
-# GitHub
-gh issue list           # See open issues
-gh pr list              # See open PRs
-gh pr create            # Create a PR
+# gh CLI (use /opt/homebrew/bin/gh)
+export PATH="/opt/homebrew/bin:$PATH"
+gh pr list && gh pr merge <N> --repo SpudMar/Lotus_PM --merge --delete-branch
+gh run view <id> --log-failed
 ```
 
 ---
 
-*Last updated: 23 February 2026 — 648/648 tests, 35 suites. Coordinator CRUD (PR #32) + detail page with correspondence tabs (PR #33) complete. Provider auto-matching verified (invoices.ts:184-188). Next: Documents module UI, ECS real image deploy, Participant App.*
+*Last updated: 23 February 2026 — 648/648 tests, 20 migrations. PRs #32–33 complete (coordinator CRUD + detail pages). Next: Documents UI, ECS real image deploy, Participant App.*
 *All decisions in this file were made deliberately. Update with care.*
