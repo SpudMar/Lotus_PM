@@ -192,8 +192,6 @@ model CrmParticipant {
   coordinatorAssignments CrmCoordinatorAssignment[] @relation("AssignedCoordinator")
   flags             CrmFlag[]
 
-  flags             CrmFlag[]
-
   @@index([ndisNumber])
   @@index([assignedToId])
   @@map("crm_participants")
@@ -228,8 +226,6 @@ model CrmProvider {
   emails            CrmProviderEmail[]
   serviceAgreements SaServiceAgreement[]
   quarantines       FqQuarantine[]
-  flags             CrmFlag[]
-
   flags             CrmFlag[]
 
   @@index([abn])
