@@ -190,6 +190,7 @@ model CrmParticipant {
 
   sentEmails        NotifSentEmail[]
   coordinatorAssignments CrmCoordinatorAssignment[] @relation("AssignedCoordinator")
+  flags             CrmFlag[]
 
   flags             CrmFlag[]
 
@@ -227,6 +228,7 @@ model CrmProvider {
   emails            CrmProviderEmail[]
   serviceAgreements SaServiceAgreement[]
   quarantines       FqQuarantine[]
+  flags             CrmFlag[]
 
   flags             CrmFlag[]
 
@@ -1173,24 +1175,25 @@ enum FlagSeverity {
 model CrmFlag {
   id            String        @id @default(cuid())
   severity      FlagSeverity  @default(ADVISORY)
-  reason        String
+  reason        String        // free text description of the flag
 
   createdAt     DateTime      @default(now())
   createdById   String
   createdBy     CoreUser      @relation("FlagCreatedBy", fields: [createdById], references: [id])
 
+  // Attach to participant OR provider (exactly one must be set)
   participantId String?
   participant   CrmParticipant? @relation(fields: [participantId], references: [id])
-
   providerId    String?
   provider      CrmProvider?    @relation(fields: [providerId], references: [id])
 
+  // Resolution
   resolvedAt    DateTime?
   resolvedById  String?
   resolvedBy    CoreUser?     @relation("FlagResolvedBy", fields: [resolvedById], references: [id])
   resolveNote   String?
 
-  deletedAt     DateTime?
+  deletedAt     DateTime?     // soft delete
 
   @@index([participantId, resolvedAt])
   @@index([providerId, resolvedAt])
