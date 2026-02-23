@@ -103,6 +103,7 @@ const MOCK_PARTICIPANT = {
   emergencyContactRel: null,
   invoiceApprovalEnabled: false,
   invoiceApprovalMethod: null,
+  pricingRegion: "NON_REMOTE" as const,
   onboardedAt: new Date(),
   createdAt: new Date(),
   updatedAt: new Date(),

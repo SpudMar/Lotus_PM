@@ -28,6 +28,7 @@ describe('RBAC permissions', () => {
         'xero:read', 'xero:write', 'xero:sync',
         'coordinator:read', 'coordinator:write',
         'service-agreements:read', 'service-agreements:write',
+        'price-guide:read', 'price-guide:import',
       ]
       for (const perm of expectedPerms) {
         expect(hasPermission(role, perm as Permission)).toBe(true)
@@ -192,7 +193,7 @@ describe('RBAC permissions', () => {
       const pmPerms = getPermissionsForRole(ROLES.PLAN_MANAGER)
       const globalAdminPerms = getPermissionsForRole(ROLES.GLOBAL_ADMIN)
       expect(pmPerms.length).toBeLessThan(globalAdminPerms.length)
-      expect(globalAdminPerms.length - pmPerms.length).toBe(2)
+      expect(globalAdminPerms.length - pmPerms.length).toBe(3)
     })
   })
 })
