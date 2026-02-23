@@ -101,7 +101,7 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | Xero Integration | ✅ | OAuth2 flow, invoice→bill sync, settings page |
 | NDIS Price Guide | ✅ | **PR #34** — `NdisPriceGuideVersion` + `NdisSupportItem`, XLSX importer (`xlsx` pkg), `validateLineItemPrice()`, `PricingRegion` on participant, Settings UI (Price Guide tab) |
 | Flag/Hold System | ✅ | **PR #35** — `CrmFlag` (ADVISORY/BLOCKING), `createFlag()`/`resolveFlag()`/`getActiveFlags()`, banners + Flags tab on participant page, invoice approval gate |
-| Invoice Validation | 🔄 | **WS-F2** — wire 8 checks into `approveInvoice()`. Needs WS-F1 + WS-F3 first. |
+| Invoice Validation | ✅ | **PR #36** — `validateInvoiceForApproval()` (8 checks), wired into `approveInvoice()` with `force?` override, 422 API response, flag banners + error UI on review page |
 | SA Budget Allocation | 🔄 | **WS-F6** — SaBudgetAllocation (partial allocs, internal tracking only — PACE deprecated SBs) |
 | Pattern Learning | 🔄 | **WS-F4** — InvItemPattern model; suggest support codes from history |
 | Documents | 🔄 | Backend built (`storage.ts`, `documents.ts`) — UI needed |
@@ -111,7 +111,7 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 
 ## CURRENT STATE
 
-- **683/683 tests** (37 suites) | **22 migrations** | Last merged: PR #35
+- **694/694 tests** (38 suites) | **22 migrations** | Last merged: PR #36
 - Last migrations: `20260224010000_price_guide_pricing_region`, `20260224020000_crm_flags`
 - Dev server: `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`)
 - Staff SMS test numbers: `+61411941699` (director@ and pm@)
@@ -196,5 +196,5 @@ gh run view <id> --log-failed
 
 ---
 
-*Last updated: 23 February 2026 — 683/683 tests, 22 migrations. PRs #34–35 merged (WS-F1 Price Guide + WS-F3 Flags). Wave 1 complete. Next: WS-F2 Invoice Validation Hardening. Full finance engine plan: `/Users/Spud/.claude/plans/distributed-riding-wilkes.md`.*
+*Last updated: 23 February 2026 — 694/694 tests, 22 migrations. PRs #34–36 merged (WS-F1 Price Guide + WS-F3 Flags + WS-F2 Invoice Validation). Waves 1+2 complete. Next: Wave 3 — WS-F5 ABA Batching + WS-F6 SA Budget Allocation (parallel). Full finance engine plan: `/Users/Spud/.claude/plans/distributed-riding-wilkes.md`.*
 *All decisions in this file were made deliberately. Update with care.*
