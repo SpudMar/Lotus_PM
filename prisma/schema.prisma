@@ -59,6 +59,9 @@ model CoreUser {
 
   createdTemplates     NotifEmailTemplate[] @relation("TemplateCreatedBy")
   createdQuarantines   FqQuarantine[]       @relation("QuarantineCreatedBy")
+  flagsCreated         CrmFlag[]            @relation("FlagCreatedBy")
+  flagsResolved        CrmFlag[]            @relation("FlagResolvedBy")
+  importedPriceGuides  NdisPriceGuideVersion[] @relation("PriceGuideImportedBy")
 
   @@map("core_users")
 }
@@ -161,6 +164,9 @@ model CrmParticipant {
   onboardingStatus  ParticipantOnboardingStatus?
   ingestSource      CrmIngestSource?
 
+  // NDIS pricing region — WS-F1
+  pricingRegion     PricingRegion   @default(NON_REMOTE)
+
   // Invoice approval — WS7
   invoiceApprovalEnabled  Boolean         @default(false)
   invoiceApprovalMethod   ApprovalMethod?
@@ -184,6 +190,8 @@ model CrmParticipant {
 
   sentEmails        NotifSentEmail[]
   coordinatorAssignments CrmCoordinatorAssignment[] @relation("AssignedCoordinator")
+
+  flags             CrmFlag[]
 
   @@index([ndisNumber])
   @@index([assignedToId])
@@ -219,6 +227,8 @@ model CrmProvider {
   emails            CrmProviderEmail[]
   serviceAgreements SaServiceAgreement[]
   quarantines       FqQuarantine[]
+
+  flags             CrmFlag[]
 
   @@index([abn])
   @@map("crm_providers")
@@ -1148,4 +1158,98 @@ enum ParticipantApprovalStatus {
   REJECTED
   SKIPPED
   NOT_REQUIRED
+}
+
+// ─────────────────────────────────────────────
+// FLAGS MODULE — WS-F3
+// REQ-017: Flag/Hold system for participants and providers.
+// ─────────────────────────────────────────────
+
+enum FlagSeverity {
+  ADVISORY   // informational — shown as yellow banner, does NOT block invoice approval
+  BLOCKING   // shown as red banner — requires explicit PM acknowledgment before approval
+}
+
+model CrmFlag {
+  id            String        @id @default(cuid())
+  severity      FlagSeverity  @default(ADVISORY)
+  reason        String
+
+  createdAt     DateTime      @default(now())
+  createdById   String
+  createdBy     CoreUser      @relation("FlagCreatedBy", fields: [createdById], references: [id])
+
+  participantId String?
+  participant   CrmParticipant? @relation(fields: [participantId], references: [id])
+
+  providerId    String?
+  provider      CrmProvider?    @relation(fields: [providerId], references: [id])
+
+  resolvedAt    DateTime?
+  resolvedById  String?
+  resolvedBy    CoreUser?     @relation("FlagResolvedBy", fields: [resolvedById], references: [id])
+  resolveNote   String?
+
+  deletedAt     DateTime?
+
+  @@index([participantId, resolvedAt])
+  @@index([providerId, resolvedAt])
+  @@map("crm_flags")
+}
+
+// ─────────────────────────────────────────────
+// NDIS PRICE GUIDE MODULE — WS-F1
+// REQ-014: NDIS Price Guide 2025-26 compliance
+// ─────────────────────────────────────────────
+
+enum PricingRegion {
+  NON_REMOTE
+  REMOTE
+  VERY_REMOTE
+}
+
+model NdisPriceGuideVersion {
+  id            String    @id @default(cuid())
+  label         String
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  importedAt    DateTime  @default(now())
+  importedById  String
+  importedBy    CoreUser  @relation("PriceGuideImportedBy", fields: [importedById], references: [id])
+  items         NdisSupportItem[]
+
+  @@index([effectiveFrom])
+  @@map("ndis_price_guide_versions")
+}
+
+model NdisSupportItem {
+  id                      String                @id @default(cuid())
+  versionId               String
+  version                 NdisPriceGuideVersion @relation(fields: [versionId], references: [id])
+  itemNumber              String
+  name                    String
+  categoryCode            String
+  categoryCodePace        String
+  categoryName            String
+  categoryNamePace        String
+  registrationGroupNumber String
+  registrationGroupName   String
+  unitType                String
+  itemType                String?
+  quotable                Boolean               @default(false)
+  priceStandardCents      Int?
+  priceRemoteCents        Int?
+  priceVeryRemoteCents    Int?
+  allowNonFaceToFace      Boolean               @default(false)
+  allowProviderTravel     Boolean               @default(false)
+  allowShortNoticeCancel  Boolean               @default(false)
+  allowNdiaReports        Boolean               @default(false)
+  allowIrregularSil       Boolean               @default(false)
+  gstCode                 String?
+
+  @@unique([versionId, itemNumber])
+  @@index([itemNumber])
+  @@index([categoryCode])
+  @@index([categoryCodePace])
+  @@map("ndis_support_items")
 }

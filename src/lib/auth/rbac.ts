@@ -104,6 +104,10 @@ const PERMISSIONS = {
   // Service agreements — WS1: read for all staff + support coordinator; write for PM+
   'service-agreements:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER, ROLES.ASSISTANT, ROLES.SUPPORT_COORDINATOR],
   'service-agreements:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
+
+  // NDIS Price Guide — WS-F1: read for PM+; import for admin only
+  'price-guide:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
+  'price-guide:import': [ROLES.GLOBAL_ADMIN],
 } as const
 
 export type Permission = keyof typeof PERMISSIONS
