@@ -99,6 +99,18 @@ export class LotusPmAppStack extends cdk.Stack {
       resources: ['*'],
     }))
 
+    // Bedrock: AI invoice processing via AU-only inference profiles (data never leaves Australia)
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        'bedrock:InvokeModel',
+        'bedrock:InvokeModelWithResponseStream',
+      ],
+      resources: [
+        'arn:aws:bedrock:ap-southeast-2::foundation-model/anthropic.claude-haiku-*',
+        'arn:aws:bedrock:ap-southeast-2:*:inference-profile/au.anthropic.*',
+      ],
+    }))
+
     // SES: send emails (REQ-024)
     taskRole.addToPolicy(new iam.PolicyStatement({
       actions: ['ses:SendEmail', 'ses:SendRawEmail'],
@@ -173,6 +185,8 @@ export class LotusPmAppStack extends cdk.Stack {
         NEXTAUTH_URL: `https://d2iv01jt8w4gxn.cloudfront.net`,
         PORT: '3000',
         HOSTNAME: '0.0.0.0',
+        // Bedrock AI invoice processing -- AU-only inference profile
+        BEDROCK_MODEL_ID: 'au.anthropic.claude-haiku-4-5-20251001-v1:0',
       },
       // Secrets injected from Secrets Manager at container startup
       // entrypoint.sh constructs DATABASE_URL from these individual fields
