@@ -1,11 +1,16 @@
 import { prisma } from '@/lib/db'
 import { processEvent } from '@/lib/modules/automation/engine'
-import type { AssignCoordinatorInput } from './coordinators.validation'
+import type {
+  AssignCoordinatorInput,
+  CreateCoordinatorInput,
+  UpdateCoordinatorInput,
+} from './coordinators.validation'
+import type { CoreUser } from '@prisma/client'
 
 export async function listCoordinators() {
   return prisma.coreUser.findMany({
     where: { role: 'SUPPORT_COORDINATOR', deletedAt: null },
-    select: { id: true, name: true, email: true, role: true },
+    select: { id: true, name: true, email: true, role: true, phone: true },
     orderBy: { name: 'asc' },
   })
 }
@@ -151,4 +156,122 @@ export async function getCoordinatorParticipants(coordinatorId: string) {
     },
     orderBy: { assignedAt: 'desc' },
   })
+}
+
+// ── CRUD: Create ────────────────────────────────────────────────────────────
+
+/**
+ * Creates a new Support Coordinator user.
+ * The `password` field in the input is validated for strength but not stored
+ * (CoreUser has no password column — authentication is handled via NextAuth
+ * CredentialsProvider or Cognito OAuth). The password value is accepted by the
+ * API for forward-compatibility and UX consistency, but discarded here.
+ */
+export async function createCoordinator(
+  input: CreateCoordinatorInput,
+  userId: string
+): Promise<Omit<CoreUser, 'isActive' | 'mfaEnabled' | 'lastLoginAt'>> {
+  const existing = await prisma.coreUser.findFirst({
+    where: { email: input.email, deletedAt: null },
+  })
+  if (existing) throw new Error('Email already in use')
+
+  const created = await prisma.coreUser.create({
+    data: {
+      name: input.name,
+      email: input.email,
+      phone: input.phone ?? null,
+      role: 'SUPPORT_COORDINATOR',
+    },
+  })
+
+  await prisma.coreAuditLog.create({
+    data: {
+      userId,
+      action: 'coordinator.created',
+      resource: 'CoreUser',
+      resourceId: created.id,
+      after: { name: created.name, email: created.email },
+    },
+  })
+
+  return created
+}
+
+// ── CRUD: Update ────────────────────────────────────────────────────────────
+
+export async function updateCoordinator(
+  id: string,
+  input: UpdateCoordinatorInput,
+  userId: string
+): Promise<CoreUser> {
+  const coordinator = await prisma.coreUser.findFirst({
+    where: { id, role: 'SUPPORT_COORDINATOR', deletedAt: null },
+  })
+  if (!coordinator) throw new Error('Coordinator not found')
+
+  if (input.email && input.email !== coordinator.email) {
+    const conflict = await prisma.coreUser.findFirst({
+      where: { email: input.email, deletedAt: null, NOT: { id } },
+    })
+    if (conflict) throw new Error('Email already in use')
+  }
+
+  const before = { name: coordinator.name, email: coordinator.email, phone: coordinator.phone }
+
+  const updated = await prisma.coreUser.update({
+    where: { id },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.email !== undefined ? { email: input.email } : {}),
+      ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    },
+  })
+
+  await prisma.coreAuditLog.create({
+    data: {
+      userId,
+      action: 'coordinator.updated',
+      resource: 'CoreUser',
+      resourceId: id,
+      before,
+      after: { name: updated.name, email: updated.email, phone: updated.phone },
+    },
+  })
+
+  return updated
+}
+
+// ── CRUD: Deactivate ────────────────────────────────────────────────────────
+
+export async function deactivateCoordinator(
+  id: string,
+  userId: string
+): Promise<{ success: true }> {
+  const coordinator = await prisma.coreUser.findFirst({
+    where: { id, role: 'SUPPORT_COORDINATOR', deletedAt: null },
+  })
+  if (!coordinator) throw new Error('Coordinator not found')
+
+  await prisma.coreUser.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  })
+
+  await prisma.crmCoordinatorAssignment.updateMany({
+    where: { coordinatorId: id, isActive: true },
+    data: { isActive: false, deactivatedAt: new Date() },
+  })
+
+  await prisma.coreAuditLog.create({
+    data: {
+      userId,
+      action: 'coordinator.deactivated',
+      resource: 'CoreUser',
+      resourceId: id,
+      after: { deletedAt: new Date().toISOString() },
+    },
+  })
+
+  return { success: true }
 }
