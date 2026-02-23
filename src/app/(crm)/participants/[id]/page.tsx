@@ -34,10 +34,14 @@ import {
   StickyNote,
   Plus,
   Receipt,
+  AlertTriangle,
+  Flag,
+  CheckCircle2,
 } from 'lucide-react'
 import { formatDateAU, formatDateTimeAU } from '@/lib/shared/dates'
 import { formatNdisNumber } from '@/lib/shared/ndis'
 import { formatAUD } from '@/lib/shared/currency'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,6 +85,21 @@ interface Participant {
   invoices: { id: string; invoiceNumber: string; totalCents: number; status: string; receivedAt: string }[]
   invoiceApprovalEnabled?: boolean
   invoiceApprovalMethod?: 'APP' | 'EMAIL' | 'SMS' | null
+}
+
+// ── Flag types ───────────────────────────────────────────────────────────────
+
+type FlagSeverity = 'ADVISORY' | 'BLOCKING'
+
+interface CrmFlag {
+  id: string
+  severity: FlagSeverity
+  reason: string
+  createdBy: { firstName: string; lastName: string }
+  createdAt: string
+  resolvedAt: string | null
+  resolvedBy: { firstName: string; lastName: string } | null
+  resolveNote: string | null
 }
 
 // ── Correspondence icon/label helpers ─────────────────────────────────────────
@@ -145,6 +164,18 @@ export default function ParticipantDetailPage({
   const [approvalSaving, setApprovalSaving] = useState(false)
   const [approvalLoaded, setApprovalLoaded] = useState(false)
 
+  // Flag state
+  const [flags, setFlags] = useState<CrmFlag[]>([])
+  const [flagsLoading, setFlagsLoading] = useState(false)
+  const [showRaiseFlagDialog, setShowRaiseFlagDialog] = useState(false)
+  const [flagSeverity, setFlagSeverity] = useState<FlagSeverity>('ADVISORY')
+  const [flagReason, setFlagReason] = useState('')
+  const [flagSaving, setFlagSaving] = useState(false)
+  const [showResolveFlagDialog, setShowResolveFlagDialog] = useState(false)
+  const [resolvingFlagId, setResolvingFlagId] = useState<string | null>(null)
+  const [resolveNote, setResolveNote] = useState('')
+  const [resolveLoading, setResolveLoading] = useState(false)
+
   // ── Load data ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -182,6 +213,64 @@ export default function ParticipantDetailPage({
       })
       .catch(() => null)
   }, [id])
+
+  // ── Flags ────────────────────────────────────────────────────────────────────────────
+
+  function loadFlags(): void {
+    setFlagsLoading(true)
+    void fetch(`/api/crm/flags?participantId=${id}&includeResolved=true&limit=50`)
+      .then((r) => r.json())
+      .then((j: { flags: CrmFlag[] }) => setFlags(j.flags))
+      .catch(() => null)
+      .finally(() => setFlagsLoading(false))
+  }
+
+  useEffect(() => {
+    loadFlags()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  async function handleRaiseFlag(): Promise<void> {
+    if (!flagReason.trim()) return
+    setFlagSaving(true)
+    try {
+      await fetch('/api/crm/flags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ severity: flagSeverity, reason: flagReason, participantId: id }),
+      })
+      setShowRaiseFlagDialog(false)
+      setFlagReason('')
+      setFlagSeverity('ADVISORY')
+      loadFlags()
+    } finally {
+      setFlagSaving(false)
+    }
+  }
+
+  function handleOpenResolve(flagId: string): void {
+    setResolvingFlagId(flagId)
+    setResolveNote('')
+    setShowResolveFlagDialog(true)
+  }
+
+  async function handleResolveFlag(): Promise<void> {
+    if (!resolvingFlagId || !resolveNote.trim()) return
+    setResolveLoading(true)
+    try {
+      await fetch(`/api/crm/flags/${resolvingFlagId}/resolve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: resolveNote }),
+      })
+      setShowResolveFlagDialog(false)
+      setResolvingFlagId(null)
+      setResolveNote('')
+      loadFlags()
+    } finally {
+      setResolveLoading(false)
+    }
+  }
 
   async function handleSaveApprovalPreferences(): Promise<void> {
     setApprovalSaving(true)
@@ -306,6 +395,33 @@ export default function ParticipantDetailPage({
         </div>
       )}
 
+      {/* ── Active flag banners ───────────────────────────────────────────────────────── */}
+      {flags.filter(f => !f.resolvedAt).map(f => (
+        <Alert
+          key={f.id}
+          className={f.severity === 'BLOCKING'
+            ? 'border-red-300 bg-red-50 text-red-900'
+            : 'border-yellow-300 bg-yellow-50 text-yellow-900'}
+        >
+          <AlertTriangle
+            className={`h-4 w-4 ${f.severity === 'BLOCKING' ? 'text-red-600' : 'text-yellow-600'}`}
+            aria-hidden="true"
+          />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>
+              <span className="font-medium">{f.severity === 'BLOCKING' ? 'Blocking flag: ' : 'Advisory flag: '}</span>
+              {f.reason}
+            </span>
+            <button
+              className="text-xs underline shrink-0 opacity-70 hover:opacity-100"
+              onClick={() => handleOpenResolve(f.id)}
+            >
+              Resolve
+            </button>
+          </AlertDescription>
+        </Alert>
+      ))}
+
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -323,6 +439,14 @@ export default function ParticipantDetailPage({
           </TabsTrigger>
           <TabsTrigger value="approval">
             Invoice Approval
+          </TabsTrigger>
+          <TabsTrigger value="flags">
+            Flags
+            {flags.filter(f => !f.resolvedAt).length > 0 && (
+              <Badge variant="destructive" className="ml-1.5 text-xs">
+                {flags.filter(f => !f.resolvedAt).length}
+              </Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -554,6 +678,74 @@ export default function ParticipantDetailPage({
             </CardContent>
           </Card>
         </TabsContent>
+        {/* ── Flags tab ──────────────────────────────────────────────────────────────── */}
+        <TabsContent value="flags" className="mt-4">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">
+              Flags placed on this participant. Blocking flags prevent invoice approval until resolved.
+            </p>
+            <Button size="sm" onClick={() => setShowRaiseFlagDialog(true)}>
+              <Flag className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Raise flag
+            </Button>
+          </div>
+          {flagsLoading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">Loading flags…</div>
+          ) : flags.length === 0 ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">No flags.</div>
+          ) : (
+            <div className="rounded-md border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="px-4 py-2 text-left font-medium">Severity</th>
+                    <th className="px-4 py-2 text-left font-medium">Reason</th>
+                    <th className="px-4 py-2 text-left font-medium">Raised by</th>
+                    <th className="px-4 py-2 text-left font-medium">Raised at</th>
+                    <th className="px-4 py-2 text-left font-medium">Resolved by</th>
+                    <th className="px-4 py-2 text-left font-medium">Resolved at</th>
+                    <th className="px-4 py-2 text-left font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {flags.map((f) => (
+                    <tr key={f.id} className="border-b last:border-0">
+                      <td className="px-4 py-2">
+                        <Badge
+                          variant={f.severity === 'BLOCKING' ? 'destructive' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {f.severity}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-2 max-w-xs truncate">{f.reason}</td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {f.createdBy.firstName} {f.createdBy.lastName}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {formatDateAU(new Date(f.createdAt))}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {f.resolvedBy ? `${f.resolvedBy.firstName} ${f.resolvedBy.lastName}` : '—'}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {f.resolvedAt ? formatDateAU(new Date(f.resolvedAt)) : '—'}
+                      </td>
+                      <td className="px-4 py-2">
+                        {!f.resolvedAt && (
+                          <Button size="sm" variant="outline" onClick={() => handleOpenResolve(f.id)}>
+                            <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                            Resolve
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* ── Add note dialog ──────────────────────────────────────────────────── */}
@@ -611,6 +803,83 @@ export default function ParticipantDetailPage({
               disabled={!noteBody.trim() || noteSaving}
             >
               {noteSaving ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* ── Raise flag dialog ────────────────────────────────────────────────────── */}
+      <Dialog open={showRaiseFlagDialog} onOpenChange={setShowRaiseFlagDialog}>
+        <DialogContent aria-describedby="raise-flag-desc">
+          <DialogHeader>
+            <DialogTitle>Raise a flag</DialogTitle>
+            <p id="raise-flag-desc" className="text-sm text-muted-foreground">
+              Flags are visible to all staff and shown on invoices linked to this participant.
+            </p>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="flag-severity">Severity</Label>
+              <Select value={flagSeverity} onValueChange={(v) => setFlagSeverity(v as FlagSeverity)}>
+                <SelectTrigger id="flag-severity">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ADVISORY">Advisory (informational, does not block approval)</SelectItem>
+                  <SelectItem value="BLOCKING">Blocking (requires PM acknowledgment to approve)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="flag-reason">Reason <span aria-hidden="true">*</span></Label>
+              <Textarea
+                id="flag-reason"
+                value={flagReason}
+                onChange={(e) => setFlagReason(e.target.value)}
+                rows={3}
+                placeholder="Describe the reason for this flag…"
+                aria-required="true"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRaiseFlagDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => void handleRaiseFlag()}
+              disabled={!flagReason.trim() || flagSaving}
+            >
+              {flagSaving ? 'Saving…' : 'Raise flag'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Resolve flag dialog ─────────────────────────────────────────────────────── */}
+      <Dialog open={showResolveFlagDialog} onOpenChange={setShowResolveFlagDialog}>
+        <DialogContent aria-describedby="resolve-flag-desc">
+          <DialogHeader>
+            <DialogTitle>Resolve flag</DialogTitle>
+            <p id="resolve-flag-desc" className="text-sm text-muted-foreground">
+              Provide a resolution note explaining why this flag has been cleared.
+            </p>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="resolve-note">Resolution note <span aria-hidden="true">*</span></Label>
+            <Textarea
+              id="resolve-note"
+              value={resolveNote}
+              onChange={(e) => setResolveNote(e.target.value)}
+              rows={3}
+              placeholder="Explain how this flag was resolved…"
+              aria-required="true"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowResolveFlagDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => void handleResolveFlag()}
+              disabled={!resolveNote.trim() || resolveLoading}
+            >
+              {resolveLoading ? 'Resolving…' : 'Resolve flag'}
             </Button>
           </DialogFooter>
         </DialogContent>
