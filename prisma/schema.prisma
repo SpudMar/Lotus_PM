@@ -55,6 +55,8 @@ model CoreUser {
   coordinatorAssignments CrmCoordinatorAssignment[] @relation("CoordinatorAssignments")
   coordinatorAssignedBy  CrmCoordinatorAssignment[] @relation("CoordinatorAssignedBy")
 
+  coordinatorCorrespondence CrmCorrespondence[] @relation("CoordinatorCorrespondence")
+
   createdTemplates     NotifEmailTemplate[] @relation("TemplateCreatedBy")
   createdQuarantines   FqQuarantine[]       @relation("QuarantineCreatedBy")
 
@@ -296,6 +298,9 @@ model CrmCorrespondence {
   providerId    String?
   provider      CrmProvider?         @relation(fields: [providerId], references: [id])
 
+  coordinatorId String?
+  coordinator   CoreUser?            @relation("CoordinatorCorrespondence", fields: [coordinatorId], references: [id])
+
   invoiceId     String?
   invoice       InvInvoice?          @relation(fields: [invoiceId], references: [id])
 
@@ -310,6 +315,7 @@ model CrmCorrespondence {
 
   @@index([participantId, createdAt])
   @@index([providerId, createdAt])
+  @@index([coordinatorId, createdAt])
   @@index([invoiceId])
   @@map("crm_correspondence")
 }

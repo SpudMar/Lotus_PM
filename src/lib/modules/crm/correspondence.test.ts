@@ -47,6 +47,7 @@ function makeEntry(overrides: Record<string, unknown> = {}) {
     toAddress: null,
     participantId: 'part-001',
     providerId: null,
+    coordinatorId: null,
     invoiceId: 'inv-001',
     documentId: null,
     createdById: null,
@@ -306,5 +307,87 @@ describe('linkCorrespondenceToProvider', () => {
       data: { providerId: 'prov-002' },
     })
     expect(result).toEqual(updated)
+  })
+})
+
+// ── coordinatorId support ─────────────────────────────────────────────────────
+
+describe('listCorrespondence with coordinatorId filter', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('filters by coordinatorId and returns only matching entries', async () => {
+    const entries = [makeEntry({ coordinatorId: 'coord-001' })]
+    mockPrisma.crmCorrespondence.findMany.mockResolvedValue(entries)
+    mockPrisma.crmCorrespondence.count.mockResolvedValue(1)
+
+    const result = await listCorrespondence({ coordinatorId: 'coord-001' })
+
+    expect(mockPrisma.crmCorrespondence.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ coordinatorId: 'coord-001' }),
+      })
+    )
+    expect(result.data).toHaveLength(1)
+    expect(result.total).toBe(1)
+  })
+
+  it('does not include coordinatorId in where clause when not provided', async () => {
+    mockPrisma.crmCorrespondence.findMany.mockResolvedValue([])
+    mockPrisma.crmCorrespondence.count.mockResolvedValue(0)
+
+    await listCorrespondence({ participantId: 'part-001' })
+
+    const whereArg = mockPrisma.crmCorrespondence.findMany.mock.calls[0][0].where as Record<string, unknown>
+    expect(whereArg).not.toHaveProperty('coordinatorId')
+  })
+})
+
+describe('createCorrespondence with coordinatorId', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('persists coordinatorId when provided', async () => {
+    const created = makeEntry({ type: 'NOTE', coordinatorId: 'coord-001', createdById: 'user-001' })
+    mockPrisma.crmCorrespondence.create.mockResolvedValue(created)
+
+    await createCorrespondence(
+      {
+        type: 'NOTE',
+        body: 'Called coordinator re participant review.',
+        coordinatorId: 'coord-001',
+      },
+      'user-001'
+    )
+
+    expect(mockPrisma.crmCorrespondence.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          coordinatorId: 'coord-001',
+          type: 'NOTE',
+          createdById: 'user-001',
+        }),
+      })
+    )
+  })
+
+  it('sets coordinatorId to undefined when not provided', async () => {
+    const created = makeEntry({ type: 'NOTE', createdById: 'user-001' })
+    mockPrisma.crmCorrespondence.create.mockResolvedValue(created)
+
+    await createCorrespondence(
+      {
+        type: 'NOTE',
+        body: 'General note with no coordinator.',
+      },
+      'user-001'
+    )
+
+    const createCall = mockPrisma.crmCorrespondence.create.mock.calls[0][0] as {
+      data: { coordinatorId: unknown }
+    }
+    expect(createCall.data.coordinatorId).toBeUndefined()
   })
 })

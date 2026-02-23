@@ -16,6 +16,7 @@ const correspondenceTypeSchema = z.enum([
 const listQuerySchema = z.object({
   participantId: z.string().optional(),
   providerId: z.string().optional(),
+  coordinatorId: z.string().optional(),
   invoiceId: z.string().optional(),
   type: correspondenceTypeSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -30,6 +31,7 @@ const createCorrespondenceSchema = z.object({
   toAddress: z.string().max(255).optional(),
   participantId: z.string().optional(),
   providerId: z.string().optional(),
+  coordinatorId: z.string().cuid().optional(),
   invoiceId: z.string().optional(),
   documentId: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),

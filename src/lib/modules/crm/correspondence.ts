@@ -17,6 +17,7 @@ import type { CorrespondenceType, Prisma } from '@prisma/client'
 export interface ListCorrespondenceFilters {
   participantId?: string
   providerId?: string
+  coordinatorId?: string
   invoiceId?: string
   type?: CorrespondenceType
   page?: number
@@ -31,6 +32,7 @@ export interface CreateCorrespondenceInput {
   toAddress?: string
   participantId?: string
   providerId?: string
+  coordinatorId?: string
   invoiceId?: string
   documentId?: string
   metadata?: Record<string, unknown>
@@ -56,6 +58,7 @@ export async function listCorrespondence(filters: ListCorrespondenceFilters) {
   const where: Prisma.CrmCorrespondenceWhereInput = {
     ...(participantId ? { participantId } : {}),
     ...(providerId ? { providerId } : {}),
+    ...(filters.coordinatorId ? { coordinatorId: filters.coordinatorId } : {}),
     ...(invoiceId ? { invoiceId } : {}),
     ...(type ? { type } : {}),
   }
@@ -126,6 +129,7 @@ export async function createCorrespondence(
       toAddress: input.toAddress,
       participantId: input.participantId,
       providerId: input.providerId,
+      coordinatorId: input.coordinatorId,
       invoiceId: input.invoiceId,
       documentId: input.documentId,
       createdById,
