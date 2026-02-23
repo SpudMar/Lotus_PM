@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { processEvent } from '@/lib/modules/automation/engine'
+import { validateInvoiceForApproval } from './invoice-validation'
+import type { InvoiceValidationResult } from './invoice-validation'
 import type { z } from 'zod'
 import type { createInvoiceSchema, updateInvoiceSchema } from './validation'
 
@@ -205,7 +207,30 @@ export async function updateInvoice(id: string, input: UpdateInput, userId: stri
   return invoice
 }
 
-export async function approveInvoice(id: string, userId: string, planId?: string) {
+export class ValidationFailedError extends Error {
+  code = 'VALIDATION_FAILED' as const
+  validation: InvoiceValidationResult
+
+  constructor(validation: InvoiceValidationResult) {
+    super('Invoice failed validation')
+    this.name = 'ValidationFailedError'
+    this.validation = validation
+  }
+}
+
+export async function approveInvoice(
+  id: string,
+  userId: string,
+  planId?: string,
+  force?: boolean
+): Promise<ReturnType<typeof prisma.invInvoice.update>> {
+  // Run all validation checks before approving
+  const validationResult = await validateInvoiceForApproval(id)
+
+  if (validationResult.errors.length > 0 && force !== true) {
+    throw new ValidationFailedError(validationResult)
+  }
+
   const invoice = await prisma.invInvoice.update({
     where: { id },
     data: {
@@ -214,14 +239,37 @@ export async function approveInvoice(id: string, userId: string, planId?: string
       approvedAt: new Date(),
       planId: planId ?? undefined,
     },
+    include: {
+      lines: { include: { budgetLine: true } },
+    },
   })
+
+  // Increment spentCents on budget lines for all approved invoice lines
+  const budgetLineUpdates = new Map<string, number>()
+  for (const line of invoice.lines) {
+    if (line.budgetLineId !== null) {
+      const current = budgetLineUpdates.get(line.budgetLineId) ?? 0
+      budgetLineUpdates.set(line.budgetLineId, current + line.totalCents)
+    }
+  }
+
+  for (const [budgetLineId, amountCents] of budgetLineUpdates) {
+    await prisma.planBudgetLine.update({
+      where: { id: budgetLineId },
+      data: { spentCents: { increment: amountCents } },
+    })
+  }
 
   await createAuditLog({
     userId,
     action: 'invoice.approved',
     resource: 'invoice',
     resourceId: id,
-    after: { status: 'APPROVED' },
+    after: {
+      status: 'APPROVED',
+      ...(force === true ? { forced: true } : {}),
+      validationWarnings: validationResult.warnings.map((w) => w.code),
+    },
   })
 
   // Fire-and-forget: don't block the caller on automation failures

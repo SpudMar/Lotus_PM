@@ -32,8 +32,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Save, CheckCircle, XCircle, Flag, Plus, Trash2, FileWarning } from 'lucide-react'
+import { ArrowLeft, Save, CheckCircle, XCircle, Flag, Plus, Trash2, FileWarning, AlertCircle, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { formatDateAU } from '@/lib/shared/dates'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
 
@@ -89,6 +91,27 @@ interface Plan {
   startDate: string
   endDate: string
   status: string
+}
+
+// ── Validation types ─────────────────────────────────────────────────────────
+
+interface ValidationIssue {
+  code: string
+  message: string
+  lineId?: string
+}
+
+interface ValidationResult {
+  valid: boolean
+  errors: ValidationIssue[]
+  warnings: ValidationIssue[]
+}
+
+interface ActiveFlag {
+  id: string
+  severity: 'ADVISORY' | 'BLOCKING'
+  reason: string
+  createdBy: { id: string; name: string }
 }
 
 type FormLine = InvoiceLine
@@ -149,6 +172,11 @@ export default function InvoiceReviewDetailPage({
   const [rejectReason, setRejectReason] = useState('')
   const [showFlagDialog, setShowFlagDialog] = useState(false)
   const [flagNote, setFlagNote] = useState('')
+
+  // Validation & flags
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+  const [activeFlags, setActiveFlags] = useState<ActiveFlag[]>([])
+  const [flagsAcknowledged, setFlagsAcknowledged] = useState(false)
 
   // ── Data loading ──────────────────────────────────────────────────────────────
 
@@ -224,6 +252,21 @@ export default function InvoiceReviewDetailPage({
       .catch(() => null)
   }, [selectedParticipantId])
 
+  // Load active flags whenever participant or provider changes
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (selectedParticipantId) params.set('participantId', selectedParticipantId)
+    if (selectedProviderId) params.set('providerId', selectedProviderId)
+    if (!selectedParticipantId && !selectedProviderId) {
+      setActiveFlags([])
+      return
+    }
+    void fetch(`/api/crm/flags?${params.toString()}`)
+      .then(r => r.json())
+      .then((j: { data: ActiveFlag[] }) => setActiveFlags(j.data ?? []))
+      .catch(() => null)
+  }, [selectedParticipantId, selectedProviderId])
+
   // ── Form helpers ────────────────────────────────────────────────────────────
 
   function buildPayload() {
@@ -265,8 +308,9 @@ export default function InvoiceReviewDetailPage({
     }
   }
 
-  async function handleApprove(): Promise<void> {
+  async function handleApprove(force = false): Promise<void> {
     setActionLoading('approve')
+    setValidationResult(null)
     try {
       // Save draft first, then approve
       await fetch(`/api/invoices/${id}`, {
@@ -277,10 +321,18 @@ export default function InvoiceReviewDetailPage({
       const res = await fetch(`/api/invoices/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve', planId: selectedPlanId || undefined }),
+        body: JSON.stringify({ action: 'approve', planId: selectedPlanId || undefined, force }),
       })
       if (res.ok) {
         router.push('/invoices/review')
+        return
+      }
+      if (res.status === 422) {
+        const json = await res.json() as { code: string; validation: ValidationResult }
+        if (json.code === 'VALIDATION_FAILED') {
+          setValidationResult(json.validation)
+          return
+        }
       }
     } finally {
       setActionLoading(null)
@@ -374,7 +426,10 @@ export default function InvoiceReviewDetailPage({
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const isEditable = invoice?.status === 'RECEIVED' || invoice?.status === 'PENDING_REVIEW'
-  const canApprove = isEditable && !!selectedParticipantId
+  const blockingFlags = activeFlags.filter((f) => f.severity === 'BLOCKING')
+  const advisoryFlags = activeFlags.filter((f) => f.severity === 'ADVISORY')
+  const hasBlockingFlags = blockingFlags.length > 0
+  const canApprove = isEditable && !!selectedParticipantId && (!hasBlockingFlags || flagsAcknowledged)
 
   if (loading) {
     return (
@@ -453,6 +508,92 @@ export default function InvoiceReviewDetailPage({
           </div>
         }
       />
+
+      {/* ── BLOCKING flag banners ────────────────────────────────────────── */}
+      {blockingFlags.length > 0 && (
+        <div className="space-y-2">
+          {blockingFlags.map((flag, idx) => (
+            <Alert key={idx} variant="destructive">
+              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              <AlertTitle>Blocking Flag — Approval Restricted</AlertTitle>
+              <AlertDescription>{flag.reason}</AlertDescription>
+            </Alert>
+          ))}
+          {isEditable && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+              <Checkbox
+                id="flags-acknowledged"
+                checked={flagsAcknowledged}
+                onCheckedChange={(v) => setFlagsAcknowledged(v === true)}
+                aria-label="Acknowledge blocking flags to enable approval"
+              />
+              <label htmlFor="flags-acknowledged" className="text-sm cursor-pointer">
+                I acknowledge these blocking flags and take responsibility for approving this invoice
+              </label>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── ADVISORY flag banners ─────────────────────────────────────────── */}
+      {advisoryFlags.length > 0 && (
+        <div className="space-y-2">
+          {advisoryFlags.map((flag, idx) => (
+            <Alert key={idx} className="border-amber-300 bg-amber-50 text-amber-900">
+              <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />
+              <AlertTitle className="text-amber-800">Advisory Notice</AlertTitle>
+              <AlertDescription className="text-amber-700">{flag.reason}</AlertDescription>
+            </Alert>
+          ))}
+        </div>
+      )}
+
+      {/* ── Validation errors from approval attempt ──────────────────────── */}
+      {validationResult !== null && (
+        <div className="space-y-2">
+          {validationResult.errors.length > 0 && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" aria-hidden="true" />
+              <AlertTitle>Approval Blocked — Validation Errors</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc list-inside space-y-1">
+                  {validationResult.errors.map((e, idx) => (
+                    <li key={idx}>
+                      <span className="font-mono text-xs">[{e.code}]</span> {e.message}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                    onClick={() => void handleApprove(true)}
+                    disabled={actionLoading === 'approve'}
+                  >
+                    Force Approve Anyway (override warnings)
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+          {validationResult.warnings.length > 0 && (
+            <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+              <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />
+              <AlertTitle className="text-amber-800">Validation Warnings</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc list-inside space-y-1 text-amber-700">
+                  {validationResult.warnings.map((w, idx) => (
+                    <li key={idx}>
+                      <span className="font-mono text-xs">[{w.code}]</span> {w.message}
+                    </li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* ── Left: PDF Preview ──────────────────────────────────────────── */}

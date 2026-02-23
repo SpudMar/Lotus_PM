@@ -51,6 +51,7 @@ export const updateInvoiceSchema = z.object({
 
 export const approveInvoiceSchema = z.object({
   planId: z.string().cuid().optional(),
+  force: z.boolean().optional().default(false),
 })
 
 export const rejectInvoiceSchema = z.object({
