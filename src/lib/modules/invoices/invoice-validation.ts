@@ -1,26 +1,27 @@
 /**
- * Invoice Validation Engine — WS-F2
+ * Invoice Validation Engine -- WS-F2 + WS-F6
  *
- * Runs 8 automated checks before invoice approval.
+ * Runs automated checks before invoice approval.
  * Returns structured errors and warnings.
  * Errors block approval (unless force=true). Warnings are informational only.
  *
  * Checks:
- *   1. PARTICIPANT_INACTIVE  — participant must be active
- *   2. PROVIDER_INACTIVE     — provider must be active
- *   3. BLOCKING_FLAG         — unresolved BLOCKING flags on participant/provider
- *   4. INSUFFICIENT_BUDGET   — invoice total must not exceed budget line balance
- *   5. CATEGORY_MISMATCH     — invoice line category should match budget line category (warn)
- *   6. PRICE_EXCEEDED        — line item price must not exceed NDIS price guide cap
- *   7. DUPLICATE_INVOICE     — same invoice number + provider must not already exist
- *   8. ADVISORY_FLAG         — ADVISORY flags on participant/provider (warn only)
+ *   1. PARTICIPANT_INACTIVE  -- participant must be active
+ *   2. PROVIDER_INACTIVE     -- provider must be active
+ *   3. BLOCKING_FLAG         -- unresolved BLOCKING flags on participant/provider
+ *   4. INSUFFICIENT_BUDGET   -- invoice total must not exceed budget line balance
+ *   5. CATEGORY_MISMATCH     -- invoice line category should match budget line category (warn)
+ *   6. PRICE_EXCEEDED        -- line item price must not exceed NDIS price guide cap
+ *   7. DUPLICATE_INVOICE     -- same invoice number + provider must not already exist
+ *   8. ADVISORY_FLAG         -- ADVISORY flags on participant/provider (warn only)
+ *   9. SA_COMPLIANCE         -- advisory: ITEM_NOT_IN_SA, PRICE_ABOVE_SA_RATE, SA_BUDGET_EXCEEDED (warn only)
  */
 
 import { prisma } from '@/lib/db'
 import { validateLineItemPrice } from '@/lib/modules/price-guide/price-guide'
 import { getActiveFlags, FlagSeverity } from '@/lib/modules/crm/flags'
 
-// ── Public Types ─────────────────────────────────────────────────────────────
+// -- Public Types -----------------------------------------------------------
 
 export interface ValidationWarning {
   code: string
@@ -40,14 +41,14 @@ export interface InvoiceValidationResult {
   errors: ValidationError[]
 }
 
-// ── Internal helpers ─────────────────────────────────────────────────────────
+// -- Internal helpers -------------------------------------------------------
 
 type PricingRegion = 'NON_REMOTE' | 'REMOTE' | 'VERY_REMOTE'
 
-// ── Main validation function ─────────────────────────────────────────────────
+// -- Main validation function -----------------------------------------------
 
 /**
- * Run all 8 validation checks against an invoice before approval.
+ * Run all validation checks against an invoice before approval.
  * Returns valid=true only when there are zero errors.
  * All checks are run independently so we collect ALL issues at once.
  */
@@ -71,7 +72,7 @@ export async function validateInvoiceForApproval(
     },
   })
 
-  // ── Check 1: Participant active ──────────────────────────────────────────
+  // -- Check 1: Participant active -------------------------------------------
   if (invoice.participant !== null && invoice.participant.isActive === false) {
     errors.push({
       code: 'PARTICIPANT_INACTIVE',
@@ -79,7 +80,7 @@ export async function validateInvoiceForApproval(
     })
   }
 
-  // ── Check 2: Provider active ─────────────────────────────────────────────
+  // -- Check 2: Provider active ----------------------------------------------
   if (invoice.provider !== null && invoice.provider.isActive === false) {
     errors.push({
       code: 'PROVIDER_INACTIVE',
@@ -87,7 +88,7 @@ export async function validateInvoiceForApproval(
     })
   }
 
-  // ── Checks 3 & 8: Flags (BLOCKING errors + ADVISORY warnings) ────────────
+  // -- Checks 3 & 8: Flags (BLOCKING errors + ADVISORY warnings) ------------
   try {
     const activeFlags = await getActiveFlags({
       participantId: invoice.participantId ?? undefined,
@@ -111,17 +112,11 @@ export async function validateInvoiceForApproval(
     // Flag service failure should not block approval
     warnings.push({
       code: 'ADVISORY_FLAG',
-      message: 'Unable to retrieve active flags — manual review recommended',
+      message: 'Unable to retrieve active flags -- manual review recommended',
     })
   }
 
-  // ── Check 4: Budget availability ─────────────────────────────────────────
-  // Check each line against its own budget line, and the invoice total
-  // against the plan's budget lines. We use the first line's budget line
-  // as the primary budget reference if the invoice has no top-level budgetLineId.
-  //
-  // Strategy: group invoice lines by budgetLineId. For each unique budgetLine,
-  // sum the line totals and check against (allocatedCents - spentCents).
+  // -- Check 4: Budget availability -----------------------------------------
   const lineBudgetGroups = new Map<
     string,
     { allocatedCents: number; spentCents: number; lineTotal: number }
@@ -152,12 +147,7 @@ export async function validateInvoiceForApproval(
     }
   }
 
-  // If no lines have a budgetLineId, check the invoice total against the plan budget
-  // (fall back: if a planId is set, verify the invoice total is within combined budget)
-  // This is a best-effort check — skip if no plan or no budget lines.
-  // (Detailed per-line checking above is the primary mechanism.)
-
-  // ── Check 5: Category alignment ──────────────────────────────────────────
+  // -- Check 5: Category alignment ------------------------------------------
   for (const line of invoice.lines) {
     if (line.budgetLine !== null && line.categoryCode !== line.budgetLine.categoryCode) {
       warnings.push({
@@ -168,12 +158,11 @@ export async function validateInvoiceForApproval(
     }
   }
 
-  // ── Checks 6 (PRICE_EXCEEDED) + PRICE_GUIDE_UNAVAILABLE ─────────────────
+  // -- Checks 6 (PRICE_EXCEEDED) + PRICE_GUIDE_UNAVAILABLE ------------------
   const pricingRegion: PricingRegion =
     (invoice.participant?.pricingRegion as PricingRegion | undefined) ?? 'NON_REMOTE'
 
   for (const line of invoice.lines) {
-    // Only validate lines that have a support item number set
     if (!line.supportItemCode || line.supportItemCode.trim() === '') {
       continue
     }
@@ -198,18 +187,16 @@ export async function validateInvoiceForApproval(
         })
       }
     } catch {
-      // Price guide may not be imported yet — degrade gracefully
       warnings.push({
         code: 'PRICE_GUIDE_UNAVAILABLE',
-        message: `Price guide unavailable — could not validate line item ${line.supportItemCode}. Import the NDIS Price Guide in Settings to enable price validation.`,
+        message: `Price guide unavailable -- could not validate line item ${line.supportItemCode}. Import the NDIS Price Guide in Settings to enable price validation.`,
         lineId: line.id,
       })
-      // Only emit one warning per invoice (not per-line) for unavailability
       break
     }
   }
 
-  // ── Check 7: Duplicate invoice ───────────────────────────────────────────
+  // -- Check 7: Duplicate invoice -------------------------------------------
   if (invoice.providerId !== null) {
     const duplicate = await prisma.invInvoice.findFirst({
       where: {
@@ -226,6 +213,88 @@ export async function validateInvoiceForApproval(
       errors.push({
         code: 'DUPLICATE_INVOICE',
         message: `Invoice number "${invoice.invoiceNumber}" from this provider already exists (status: ${duplicate.status})`,
+      })
+    }
+  }
+
+  // -- Check 9: Service Agreement compliance (advisory warnings) ------------
+  // If an active SA exists for this provider + participant, check compliance.
+  // All failures here are ADVISORY (not blocking) -- rates can change informally.
+  if (invoice.participantId !== null && invoice.providerId !== null) {
+    try {
+      const activeAgreement = await prisma.saServiceAgreement.findFirst({
+        where: {
+          participantId: invoice.participantId,
+          providerId: invoice.providerId,
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
+        include: {
+          rateLines: true,
+          budgetAllocations: {
+            select: { allocatedCents: true },
+          },
+        },
+      })
+
+      if (activeAgreement !== null) {
+        // Check each invoice line against SA rate lines
+        for (const line of invoice.lines) {
+          if (!line.supportItemCode) continue
+
+          const matchingRateLine = activeAgreement.rateLines.find(
+            (rl) => rl.supportItemCode === line.supportItemCode
+          )
+
+          if (matchingRateLine === undefined) {
+            warnings.push({
+              code: 'ITEM_NOT_IN_SA',
+              message: `Support item ${line.supportItemCode} is not listed in the active service agreement (${activeAgreement.agreementRef})`,
+              lineId: line.id,
+            })
+          } else if (line.unitPriceCents > matchingRateLine.agreedRateCents) {
+            warnings.push({
+              code: 'PRICE_ABOVE_SA_RATE',
+              message: `Unit price $${(line.unitPriceCents / 100).toFixed(2)} exceeds agreed SA rate of $${(matchingRateLine.agreedRateCents / 100).toFixed(2)} for item ${line.supportItemCode} (SA: ${activeAgreement.agreementRef})`,
+              lineId: line.id,
+            })
+          }
+        }
+
+        // Check if invoice total would exceed SA budget allocations
+        const totalSaAllocatedCents = activeAgreement.budgetAllocations.reduce(
+          (sum, a) => sum + a.allocatedCents,
+          0
+        )
+
+        if (totalSaAllocatedCents > 0) {
+          const existingTotal = await prisma.invInvoice.aggregate({
+            where: {
+              participantId: invoice.participantId,
+              providerId: invoice.providerId,
+              status: { in: ['APPROVED', 'CLAIMED'] },
+              id: { not: invoiceId },
+              deletedAt: null,
+            },
+            _sum: { totalCents: true },
+          })
+
+          const existingSpend = existingTotal._sum.totalCents ?? 0
+          const invoiceTotal = invoice.lines.reduce((sum, l) => sum + l.totalCents, 0)
+
+          if (existingSpend + invoiceTotal > totalSaAllocatedCents) {
+            warnings.push({
+              code: 'SA_BUDGET_EXCEEDED',
+              message: `Invoice would bring total spend ($${((existingSpend + invoiceTotal) / 100).toFixed(2)}) above SA budget allocation of $${(totalSaAllocatedCents / 100).toFixed(2)} for agreement ${activeAgreement.agreementRef}`,
+            })
+          }
+        }
+      }
+    } catch {
+      // SA compliance check failure must not block invoice approval
+      warnings.push({
+        code: 'ADVISORY_FLAG',
+        message: 'Unable to check service agreement compliance -- manual review recommended',
       })
     }
   }
