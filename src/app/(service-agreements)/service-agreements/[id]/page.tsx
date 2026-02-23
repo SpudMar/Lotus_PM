@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
 import { hasPermission, type Role } from '@/lib/auth/rbac'
 import { getServiceAgreement } from '@/lib/modules/service-agreements/service-agreements'
+import { prisma } from '@/lib/db'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { SaStatusValue } from '@/lib/modules/service-agreements/types'
+import { BudgetAllocationsSection } from './budget-allocations-section'
 
 function statusVariant(status: SaStatusValue): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
@@ -48,6 +50,13 @@ export default async function ServiceAgreementDetailPage({
   } catch {
     notFound()
   }
+
+  // Find participant active plan for the budget allocation UI
+  const activePlan = await prisma.planPlan.findFirst({
+    where: { participantId: agreement.participantId, status: 'ACTIVE' },
+    select: { id: true },
+    orderBy: { startDate: 'desc' },
+  })
 
   const isDraft = agreement.status === 'DRAFT'
   const isActive = agreement.status === 'ACTIVE'
@@ -196,16 +205,16 @@ export default async function ServiceAgreementDetailPage({
                         <span className="text-sm">{line.supportItemName}</span>
                       </>
                     ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
+                      <span className="text-muted-foreground text-sm">--</span>
                     )}
                   </TableCell>
                   <TableCell>
                     ${(line.agreedRateCents / 100).toFixed(2)}
                   </TableCell>
                   <TableCell>
-                    {line.maxQuantity != null ? String(line.maxQuantity) : '—'}
+                    {line.maxQuantity != null ? String(line.maxQuantity) : '--'}
                   </TableCell>
-                  <TableCell>{line.unitType ?? '—'}</TableCell>
+                  <TableCell>{line.unitType ?? '--'}</TableCell>
                   {canWrite && isDraft && (
                     <TableCell className="text-right">
                       <Button asChild size="sm" variant="ghost">
@@ -221,6 +230,13 @@ export default async function ServiceAgreementDetailPage({
           </Table>
         </div>
       </div>
+
+      {/* Budget Allocations -- WS-F6 */}
+      <BudgetAllocationsSection
+        agreementId={agreement.id}
+        participantPlanId={activePlan?.id ?? null}
+        canWrite={canWrite}
+      />
     </div>
   )
 }

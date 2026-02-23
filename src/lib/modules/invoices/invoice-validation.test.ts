@@ -25,9 +25,13 @@ jest.mock('@/lib/db', () => ({
       findUniqueOrThrow: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      aggregate: jest.fn(),
     },
     planBudgetLine: {
       update: jest.fn(),
+    },
+    saServiceAgreement: {
+      findFirst: jest.fn(),
     },
   },
 }))
@@ -145,6 +149,8 @@ beforeEach(() => {
   mockValidateLineItemPrice.mockResolvedValue({ valid: true, capCents: 15000 })
   mockPrisma.invInvoice.findFirst.mockResolvedValue(null) // no duplicate by default
   mockPrisma.planBudgetLine.update.mockResolvedValue({})
+  mockPrisma.saServiceAgreement.findFirst.mockResolvedValue(null) // no active SA by default
+  mockPrisma.invInvoice.aggregate.mockResolvedValue({ _sum: { totalCents: null } })
 })
 
 // ── validateInvoiceForApproval tests ─────────────────────────────────────────
@@ -333,6 +339,99 @@ describe('validateInvoiceForApproval', () => {
     expect(result.errors).toHaveLength(0)
     expect(result.warnings).toHaveLength(0)
   })
+
+  // -- Check 9: SA_COMPLIANCE -- ITEM_NOT_IN_SA ----------------------------
+
+  it('returns ITEM_NOT_IN_SA warning when invoice line item not in active SA', async () => {
+    const inv = makeInvoice()
+    mockPrisma.invInvoice.findUniqueOrThrow.mockResolvedValue(inv)
+    mockPrisma.invInvoice.findFirst.mockResolvedValue(null)
+
+    mockPrisma.saServiceAgreement.findFirst.mockResolvedValue({
+      id: 'sa-001',
+      agreementRef: 'SA-20260101-ABCD',
+      rateLines: [
+        {
+          id: 'rl-001',
+          supportItemCode: '15_999_9999_1_3',
+          agreedRateCents: 15000,
+        },
+      ],
+      budgetAllocations: [],
+    })
+
+    const result = await validateInvoiceForApproval('inv-001')
+
+    expect(result.valid).toBe(true) // warnings only
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        code: 'ITEM_NOT_IN_SA',
+        lineId: 'line-001',
+      })
+    )
+  })
+
+  // -- Check 9: SA_COMPLIANCE -- PRICE_ABOVE_SA_RATE -----------------------
+
+  it('returns PRICE_ABOVE_SA_RATE warning when invoice price exceeds SA agreed rate', async () => {
+    const inv = makeInvoice()
+    mockPrisma.invInvoice.findUniqueOrThrow.mockResolvedValue(inv)
+    mockPrisma.invInvoice.findFirst.mockResolvedValue(null)
+
+    mockPrisma.saServiceAgreement.findFirst.mockResolvedValue({
+      id: 'sa-001',
+      agreementRef: 'SA-20260101-ABCD',
+      rateLines: [
+        {
+          id: 'rl-001',
+          supportItemCode: '15_042_0128_1_3',
+          agreedRateCents: 8000, // SA rate $80, invoice has $100
+        },
+      ],
+      budgetAllocations: [],
+    })
+
+    const result = await validateInvoiceForApproval('inv-001')
+
+    expect(result.valid).toBe(true)
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        code: 'PRICE_ABOVE_SA_RATE',
+        lineId: 'line-001',
+      })
+    )
+  })
+
+  // -- Check 9: SA_COMPLIANCE -- SA_BUDGET_EXCEEDED ------------------------
+
+  it('returns SA_BUDGET_EXCEEDED warning when invoice would exceed SA allocation', async () => {
+    const inv = makeInvoice()
+    mockPrisma.invInvoice.findUniqueOrThrow.mockResolvedValue(inv)
+    mockPrisma.invInvoice.findFirst.mockResolvedValue(null)
+
+    mockPrisma.saServiceAgreement.findFirst.mockResolvedValue({
+      id: 'sa-001',
+      agreementRef: 'SA-20260101-ABCD',
+      rateLines: [],
+      budgetAllocations: [
+        { allocatedCents: 5000 }, // $50 total SA allocation
+      ],
+    })
+
+    // Existing approved spend = $45
+    mockPrisma.invInvoice.aggregate.mockResolvedValue({ _sum: { totalCents: 4500 } })
+    // Invoice adds $100 (10000 cents) -> total $145 > $50
+
+    const result = await validateInvoiceForApproval('inv-001')
+
+    expect(result.valid).toBe(true)
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        code: 'SA_BUDGET_EXCEEDED',
+      })
+    )
+  })
+
 })
 
 // ── approveInvoice integration tests ─────────────────────────────────────────

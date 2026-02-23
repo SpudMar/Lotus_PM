@@ -63,6 +63,7 @@ model CoreUser {
   flagsResolved        CrmFlag[]            @relation("FlagResolvedBy")
   importedPriceGuides  NdisPriceGuideVersion[] @relation("PriceGuideImportedBy")
   paymentBatches       BnkPaymentBatch[]        @relation("BatchCreatedBy")
+  saBudgetAllocations  SaBudgetAllocation[]
 
   @@map("core_users")
 }
@@ -420,6 +421,7 @@ model PlanBudgetLine {
   invoiceLines    InvInvoiceLine[]
   periodBudgets   PlanPeriodBudget[]
   quarantines     FqQuarantine[]
+  saAllocations   SaBudgetAllocation[]
 
   @@unique([planId, categoryCode])
   @@index([planId])
@@ -1025,6 +1027,7 @@ model SaServiceAgreement {
   rateLines      SaRateLine[]
   documents      DocDocument[]
   quarantines    FqQuarantine[]
+  budgetAllocations SaBudgetAllocation[]
 
   @@index([participantId])
   @@index([providerId])
@@ -1280,3 +1283,28 @@ model NdisSupportItem {
   @@map("ndis_support_items")
 }
 
+
+// --------------------------------------------------
+// SA BUDGET ALLOCATION -- WS-F6
+// Internal tracking of budget committed from plan lines to service agreements.
+// Under PACE, service bookings are deprecated -- this is PM-internal only.
+// One budget line can be split across multiple SAs; one SA can draw from multiple lines.
+// --------------------------------------------------
+
+model SaBudgetAllocation {
+  id                 String             @id @default(cuid())
+  serviceAgreementId String
+  serviceAgreement   SaServiceAgreement @relation(fields: [serviceAgreementId], references: [id])
+  budgetLineId       String
+  budgetLine         PlanBudgetLine     @relation(fields: [budgetLineId], references: [id])
+  allocatedCents     Int                // partial amount from this budget line for this SA
+  note               String?            // e.g. "OT sessions Aug-Dec 2025"
+  createdAt          DateTime           @default(now())
+  createdById        String
+  createdBy          CoreUser           @relation(fields: [createdById], references: [id])
+
+  @@unique([serviceAgreementId, budgetLineId])
+  @@index([budgetLineId])
+  @@index([serviceAgreementId])
+  @@map("sa_budget_allocations")
+}
