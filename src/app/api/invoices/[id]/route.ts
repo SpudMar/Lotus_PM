@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requirePermission } from '@/lib/auth/session'
-import { getInvoice, approveInvoice, rejectInvoice, updateInvoice } from '@/lib/modules/invoices/invoices'
+import { getInvoice, approveInvoice, rejectInvoice, updateInvoice, ValidationFailedError } from '@/lib/modules/invoices/invoices'
 import { recordProviderEmailMatch } from '@/lib/modules/invoices/auto-match'
 import { approveInvoiceSchema, rejectInvoiceSchema, updateInvoiceSchema } from '@/lib/modules/invoices/validation'
 import { z } from 'zod'
@@ -85,7 +85,7 @@ export async function PATCH(
     if (action === 'approve') {
       const session = await requirePermission('invoices:approve')
       const input = approveInvoiceSchema.parse(body)
-      const invoice = await approveInvoice(id, session.user.id, input.planId)
+      const invoice = await approveInvoice(id, session.user.id, input.planId, input.force)
       return NextResponse.json({ data: invoice })
     }
 
@@ -103,6 +103,12 @@ export async function PATCH(
     }
     if (error instanceof Error && error.message === 'Forbidden') {
       return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 })
+    }
+    if (error instanceof ValidationFailedError) {
+      return NextResponse.json(
+        { error: 'Validation failed', code: 'VALIDATION_FAILED', validation: error.validation },
+        { status: 422 }
+      )
     }
     return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
   }
