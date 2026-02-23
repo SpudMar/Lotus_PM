@@ -94,11 +94,16 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | Plan Management | ✅ | Plans, budgets, S33 funding periods, fund quarantining, service agreements |
 | Invoice Processing | ✅ | Upload, Textract extraction, approval workflow, email ingest |
 | Claims & Payments | ✅ | Portal Mode — manual submit + outcome recording |
-| Banking | ✅ | ABA file generation, reconciliation |
+| Banking | ✅ | ABA file generation, reconciliation. **Batching improvements planned (WS-F5)** |
 | Reporting | ✅ | Dashboard, financial, NDIS compliance, budget utilisation |
 | Notifications | ✅ | In-app + ClickSend SMS live. Bell badge, unread count. |
 | Automation Engine | ✅ | Rules, event triggers, cron runner (`POST /api/automation/cron`, CRON_SECRET auth) |
 | Xero Integration | ✅ | OAuth2 flow, invoice→bill sync, settings page |
+| NDIS Price Guide | 🔄 | **WS-F1** — schema + XLSX importer planned. Catalogue: `/Users/Spud/Downloads/NDIS-Support Catalogue-2025-26 -v1.1.xlsx` |
+| Flag/Hold System | 🔄 | **WS-F3** — CrmFlag model (ADVISORY/BLOCKING severity). Any role creates; PM+ resolves. |
+| Invoice Validation | 🔄 | **WS-F2** — wire 8 checks into `approveInvoice()`. Needs WS-F1 + WS-F3 first. |
+| SA Budget Allocation | 🔄 | **WS-F6** — SaBudgetAllocation (partial allocs, internal tracking only — PACE deprecated SBs) |
+| Pattern Learning | 🔄 | **WS-F4** — InvItemPattern model; suggest support codes from history |
 | Documents | 🔄 | Backend built (`storage.ts`, `documents.ts`) — UI needed |
 | Participant App | 🔄 | `participant-app/` scaffold exists — not started |
 
@@ -183,5 +188,5 @@ gh run view <id> --log-failed
 
 ---
 
-*Last updated: 23 February 2026 — 648/648 tests, 20 migrations. PRs #32–33 complete (coordinator CRUD + detail pages). Next: Documents UI, ECS real image deploy, Participant App.*
+*Last updated: 23 February 2026 — 648/648 tests, 20 migrations. PRs #32–33 complete (coordinator CRUD + detail pages). Finance engine gap plan approved (WS-F1 to WS-F6). Full plan: `/Users/Spud/.claude/plans/distributed-riding-wilkes.md`. Next: Wave 1 — WS-F1 (Price Guide) + WS-F3 (Flags) in parallel.*
 *All decisions in this file were made deliberately. Update with care.*
