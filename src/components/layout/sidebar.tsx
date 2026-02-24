@@ -20,11 +20,14 @@ import {
   UserCheck,
   Handshake,
   Layers,
+  ScrollText,
+  ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Role } from '@/lib/auth/rbac'
 import { hasPermission, type Permission } from '@/lib/auth/rbac'
+import { SearchBar } from '@/components/layout/search-bar'
 
 interface NavItem {
   title: string
@@ -46,6 +49,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { title: 'Participants', href: '/participants', icon: Users, permission: 'participants:read' },
+      { title: 'Onboarding', href: '/participants/onboarding', icon: ClipboardList, permission: 'participants:read' },
       { title: 'Providers', href: '/providers', icon: Building2, permission: 'providers:read' },
       { title: 'Plans', href: '/plans', icon: FileText, permission: 'plans:read' },
       { title: 'Agreements', href: '/service-agreements', icon: Handshake, permission: 'service-agreements:read' },
@@ -60,6 +64,7 @@ const navGroups: NavGroup[] = [
       { title: 'Claims', href: '/claims', icon: CreditCard, permission: 'claims:read' },
       { title: 'Banking', href: '/banking', icon: Landmark, permission: 'banking:read' },
       { title: 'Payment Batches', href: '/banking/batches', icon: Layers, permission: 'banking:read' },
+      { title: 'Statements', href: '/statements', icon: ScrollText, permission: 'statements:read' },
       { title: 'Reports', href: '/reports', icon: BarChart3, permission: 'reports:read' },
     ],
   },
@@ -136,6 +141,12 @@ export function Sidebar({ role }: SidebarProps): React.JSX.Element {
         pathname.startsWith('/invoices/') && !pathname.startsWith('/invoices/review')
       )
     }
+    // Avoid participants/onboarding matching participants
+    if (item.href === '/participants') {
+      return pathname === '/participants' || (
+        pathname.startsWith('/participants/') && !pathname.startsWith('/participants/onboarding')
+      )
+    }
     return pathname === item.href || pathname.startsWith(item.href + '/')
   }
 
@@ -149,6 +160,11 @@ export function Sidebar({ role }: SidebarProps): React.JSX.Element {
             Lotus PM
           </span>
         </Link>
+      </div>
+
+      {/* Search */}
+      <div className="px-3 pt-3">
+        <SearchBar />
       </div>
 
       {/* Navigation */}

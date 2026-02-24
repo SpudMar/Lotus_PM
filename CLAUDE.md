@@ -91,19 +91,25 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 |--------|--------|-------|
 | Core Platform | ✅ | Auth, RBAC, audit logging |
 | CRM | ✅ | Participants, providers, coordinators with detail pages + correspondence |
-| Plan Management | ✅ | Plans, budgets, S33 funding periods, fund quarantining, service agreements |
+| Plan Management | ✅ | Plans, budgets, S33 funding periods (with period budget validation), fund quarantining (hard/soft limits), service agreements |
 | Invoice Processing | ✅ | Upload, Textract extraction, approval workflow, email ingest |
-| Claims & Payments | ✅ | Portal Mode — manual submit + outcome recording |
-| Banking | ✅ | ABA file generation, reconciliation. **PR #37** — `BnkPaymentBatch`, batch lifecycle (create→ABA→upload→confirm), 7 API routes, Batches UI |
+| Claims & Payments | ✅ | Portal Mode — manual submit + outcome recording. Bulk monthly claim generation, cancel claims with budget reversal |
+| Banking | ✅ | ABA file generation, reconciliation, payment hold/release. **PR #37** — batch lifecycle. **PR #48** — ON_HOLD status |
 | Reporting | ✅ | Dashboard, financial, NDIS compliance, budget utilisation |
 | Notifications | ✅ | In-app + ClickSend SMS live. Bell badge, unread count. |
 | Automation Engine | ✅ | Rules, event triggers, cron runner (`POST /api/automation/cron`, CRON_SECRET auth) |
 | Xero Integration | ✅ | OAuth2 flow, invoice→bill sync, settings page |
 | NDIS Price Guide | ✅ | **PR #34** — `NdisPriceGuideVersion` + `NdisSupportItem`, XLSX importer (`xlsx` pkg), `validateLineItemPrice()`, `PricingRegion` on participant, Settings UI (Price Guide tab) |
 | Flag/Hold System | ✅ | **PR #35** — `CrmFlag` (ADVISORY/BLOCKING), `createFlag()`/`resolveFlag()`/`getActiveFlags()`, banners + Flags tab on participant page, invoice approval gate |
-| Invoice Validation | ✅ | **PR #36** — `validateInvoiceForApproval()` (8 checks), wired into `approveInvoice()` with `force?` override, 422 API response, flag banners + error UI on review page |
-| SA Budget Allocation | 🔄 | **WS-F6** — SaBudgetAllocation (partial allocs, internal tracking only — PACE deprecated SBs) |
-| Pattern Learning | 🔄 | **WS-F4** — InvItemPattern model; suggest support codes from history |
+| Invoice Validation | ✅ | **PR #36 + #48** — `validateInvoiceForApproval()` (11 checks inc. TOTAL_MISMATCH + PERIOD_BUDGET_EXCEEDED), wired into `approveInvoice()` with `force?` override |
+| SA Budget Allocation | ✅ | **WS-F6** — SaBudgetAllocation (partial allocs, internal tracking only — PACE deprecated SBs) |
+| Pattern Learning | ✅ | **WS-F4** — InvItemPattern model; suggest support codes from history |
+| AI Invoice Automation | ✅ | **PRs #42-46** — 4 waves: processing engine, email ingest, Textract pipeline, per-line payments |
+| Provider Notifications | ✅ | **PR #46** — PM-initiated email notifications (auto-reject, needs-codes, custom, remittance) |
+| Billing (PM Fees) | ✅ | **PR #48** — PmFeeSchedule, PmFeeOverride, PmFeeCharge; monthly auto-generation + claiming |
+| Statements | ✅ | **PR #48** — ParticipantStatement; email + SMS (DOB-gated) + print/mail export; bulk generation |
+| Global Search | ✅ | **PR #48** — Command palette; participants, providers, invoices search |
+| Onboarding Queue | ✅ | **PR #48** — WordPress webhook DRAFT participant activation page |
 | Documents | 🔄 | Backend built (`storage.ts`, `documents.ts`) — UI needed |
 | Participant App | 🔄 | `participant-app/` scaffold exists — not started |
 
@@ -111,17 +117,18 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 
 ## CURRENT STATE
 
-- **725/725 tests** (39 suites) | **23 migrations** | Last merged: PR #37
-- Last migrations: `20260224020000_crm_flags`, `20260224030000_bnk_payment_batch`
+- **870/870 tests** (50 suites) | **29 migrations** | Last merged: PR #48
+- All CareSquare Tier 1 + Tier 2 gaps cleared — Lotus PM matches/exceeds CareSquare on all operational workflows
 - Dev server: `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`)
 - Staff SMS test numbers: `+61411941699` (director@ and pm@)
 - `CRON_SECRET` needed in `.env.local` + GitHub Actions secrets to activate cron
+- RBAC: 50 permissions total (Global Admin: all 50, Plan Manager: 47, Assistant: subset)
 
-**Staging (ap-southeast-2) — all 6 CDK stacks CREATE_COMPLETE:**
+**Staging (ap-southeast-2) — LIVE, CD auto-deploys on merge to main:**
 - CloudFront: `d2iv01jt8w4gxn.cloudfront.net`
 - ALB: `lotus-pm-staging-489597421.ap-southeast-2.elb.amazonaws.com`
 - RDS: `lotus-pm-staging.cbsk4oomy587.ap-southeast-2.rds.amazonaws.com`
-- ECS running nginx scaffold — real app image not yet deployed
+- ECS running real app — healthy on staging
 
 ---
 
@@ -129,8 +136,9 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 
 | ID | Decision | Trigger | Notes |
 |----|----------|---------|-------|
-| DEC-001 | Sentry data residency for production | Before real participant data enters staging | (A) Sentry US + PII scrubbing; (B) Self-host on ECS; (C) CloudWatch only. Dev uses Sentry US freely. REQ-011. |
-| DEC-002 | Payment provider API (replace ABA) | When payment volume makes manual ABA impractical | (A) Monoova ~$0.10–0.15/txn; (B) Split Payments ~$0.10; (C) Zepto; (D) CBA CommBiz ~$0.40. REQ-028. |
+| DEC-001 | ~~Sentry data residency~~ | **CLOSED** — CloudWatch only, Sentry never installed | REQ-011. |
+| DEC-002 | ~~Payment provider API~~ | **CLOSED** — ABA files indefinitely | REQ-028. Keep agnostic. |
+| DEC-003 | S33/PACE funding periods | **RESOLVED** 22 Feb 2026 — S33/PACE only. Periods irregular (monthly, quarterly, etc). Plans up to 5 years. | Implemented in `funding-periods.ts`. |
 
 ---
 
@@ -148,6 +156,10 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | `src/lib/events/types.ts` | EventBridge event type definitions |
 | `src/lib/modules/automation/engine.ts` | Automation rule evaluator and executor |
 | `src/app/api/automation/cron/route.ts` | Cron runner — CRON_SECRET auth |
+| `src/lib/modules/billing/fee-generation.ts` | PM fee auto-billing — monthly charge generation |
+| `src/lib/modules/statements/statement-generation.ts` | Participant financial statement generation |
+| `src/lib/modules/invoices/invoice-validation.ts` | 11-check invoice validation engine |
+| `src/lib/modules/plans/funding-periods.ts` | S33/PACE funding period management + budget queries |
 | `.github/workflows/cron.yml` | GH Actions schedule — POSTs to staging every 5 min |
 | `.github/workflows/ci.yml` | CI pipeline (lint, type-check, test, build) |
 | `infrastructure/lib/config.ts` | CDK environment configs |
@@ -159,6 +171,10 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 - **Schema not persisted**: Agents run `prisma migrate dev` (generates SQL) but often don't save
   the changes back to `schema.prisma`. Always verify `schema.prisma` has the new models before merging — if missing, add from the migration SQL and run `prisma generate`.
 - **Shared local repo**: Two parallel agents in the same repo dir cross-contaminate working trees. One agent's uncommitted files leak into the other's commit. At merge time: check each PR's schema diff carefully, resolve conflicts manually, re-run `prisma generate` to validate.
+- **Enum sync**: Agents add enum values in migration SQL but not in `schema.prisma` enum definitions. Prisma generate succeeds but TypeScript rejects the string literals. Always verify both migration AND schema enum match.
+- **Linter interference**: ESLint auto-fix causes Write tool "File modified since read". Write to `/tmp/` then `cp` in.
+- **Prisma Json fields**: Cast with `as unknown as Prisma.InputJsonValue`.
+- **Model field names**: `CrmProvider.name` (not `businessName`), `PlanStatus.ACTIVE`, `BnkPaymentStatus.CLEARED` (not COMPLETED), `ParticipantOnboardingStatus.COMPLETE` (not ACTIVE). Always check schema before field access.
 
 ---
 
@@ -196,5 +212,5 @@ gh run view <id> --log-failed
 
 ---
 
-*Last updated: 23 February 2026 — 725/725 tests, 23 migrations. PRs #34–37 merged (WS-F1 Price Guide + WS-F3 Flags + WS-F2 Invoice Validation + WS-F5 ABA Batching). Wave 3 in progress — WS-F6 SA Budget Allocation agent running. Next: merge WS-F6, then WS-F4 Pattern Learning + Documents UI. Full finance engine plan: `/Users/Spud/.claude/plans/distributed-riding-wilkes.md`.*
+*Last updated: 24 February 2026 — 870/870 tests, 29 migrations, 50 suites. PRs #34–48 merged. All 7 workstreams complete. All CareSquare Tier 1+2 gaps cleared. Next: Participant App (REQ-018), Documents UI, PACE B2B when PRODA approved.*
 *All decisions in this file were made deliberately. Update with care.*

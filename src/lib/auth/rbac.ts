@@ -108,6 +108,14 @@ const PERMISSIONS = {
   // NDIS Price Guide — WS-F1: read for PM+; import for admin only
   'price-guide:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
   'price-guide:import': [ROLES.GLOBAL_ADMIN],
+
+  // Billing -- PM Fee schedules, charges, generation
+  'billing:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
+  'billing:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
+
+  // Statements -- participant financial statements
+  'statements:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
+  'statements:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
 } as const
 
 export type Permission = keyof typeof PERMISSIONS

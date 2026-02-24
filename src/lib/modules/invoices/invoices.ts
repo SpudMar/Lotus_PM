@@ -468,6 +468,48 @@ export async function rejectInvoice(id: string, userId: string, reason: string) 
   return invoice
 }
 
+
+// --- Replace PDF ---
+
+export async function replacePdf(
+  invoiceId: string,
+  newS3Key: string,
+  newS3Bucket: string,
+  userId: string,
+): Promise<ReturnType<typeof prisma.invInvoice.update>> {
+  const invoice = await prisma.invInvoice.findFirst({
+    where: { id: invoiceId, deletedAt: null },
+    select: { id: true, s3Key: true, s3Bucket: true },
+  })
+
+  if (!invoice) {
+    throw new Error('NOT_FOUND')
+  }
+
+  const oldS3Key = invoice.s3Key
+  const oldS3Bucket = invoice.s3Bucket
+
+  const updated = await prisma.invInvoice.update({
+    where: { id: invoiceId },
+    data: {
+      s3Key: newS3Key,
+      s3Bucket: newS3Bucket,
+      processingCategory: null,
+    },
+  })
+
+  await createAuditLog({
+    userId,
+    action: 'invoice.pdf_replaced',
+    resource: 'invoice',
+    resourceId: invoiceId,
+    before: { s3Key: oldS3Key, s3Bucket: oldS3Bucket },
+    after: { s3Key: newS3Key, s3Bucket: newS3Bucket },
+  })
+
+  return updated
+}
+
 /** Get counts by status for dashboard */
 export async function getInvoiceStatusCounts() {
   const counts = await prisma.invInvoice.groupBy({

@@ -8,6 +8,10 @@
  * (monthly, quarterly, bi-monthly, bi-annual, annual — can be mixed within one
  * plan). Plans run up to 5 years. PACE shows the period breakdown.
  * This module provides basic CRUD stubs; full logic can be added when prioritised.
+ *
+ * Wave 3 additions:
+ *   - getActivePeriodBudget()      — find period budget for a service date + category
+ *   - getCumulativeReleasedBudget() — sum released budget across periods up to a date
  */
 
 import { prisma } from '@/lib/db'
@@ -212,4 +216,109 @@ export async function updatePeriodBudget(
   })
 
   return updated
+}
+
+// ── Period Budget Query Functions (Wave 3) ─────────────────────────────────
+
+/** Return type for getActivePeriodBudget */
+export interface PeriodBudgetInfo {
+  periodId: string
+  allocatedCents: number
+  spentCents: number
+  remainingCents: number
+}
+
+/**
+ * Find the PlanFundingPeriod that contains the service date, then find the
+ * PlanPeriodBudget for the given category. Calculates spent cents by summing
+ * approved/claimed invoice line totals that fall within the period and match
+ * the budget line.
+ *
+ * @returns Budget info or null if no matching period/budget found.
+ */
+export async function getActivePeriodBudget(
+  planId: string,
+  categoryCode: string,
+  serviceDate: Date,
+): Promise<PeriodBudgetInfo | null> {
+  // Find the funding period that contains the service date
+  const period = await prisma.planFundingPeriod.findFirst({
+    where: {
+      planId,
+      isActive: true,
+      startDate: { lte: serviceDate },
+      endDate: { gte: serviceDate },
+    },
+    select: { id: true, startDate: true, endDate: true },
+  })
+
+  if (!period) return null
+
+  // Find the period budget for the given category
+  const periodBudget = await prisma.planPeriodBudget.findFirst({
+    where: {
+      fundingPeriodId: period.id,
+      budgetLine: { categoryCode },
+    },
+    select: {
+      id: true,
+      allocatedCents: true,
+      budgetLineId: true,
+    },
+  })
+
+  if (!periodBudget) return null
+
+  // Calculate spent: sum of totalCents from approved/claimed invoice lines
+  // that match this budget line and have service dates within the period
+  const spentAggregate = await prisma.invInvoiceLine.aggregate({
+    where: {
+      budgetLineId: periodBudget.budgetLineId,
+      serviceDate: {
+        gte: period.startDate,
+        lte: period.endDate,
+      },
+      invoice: {
+        planId,
+        status: { in: ['APPROVED', 'CLAIMED'] },
+        deletedAt: null,
+      },
+    },
+    _sum: { totalCents: true },
+  })
+
+  const spentCents = spentAggregate._sum.totalCents ?? 0
+  const remainingCents = Math.max(0, periodBudget.allocatedCents - spentCents)
+
+  return {
+    periodId: period.id,
+    allocatedCents: periodBudget.allocatedCents,
+    spentCents,
+    remainingCents,
+  }
+}
+
+/**
+ * Sum allocatedCents from all PlanPeriodBudget records where the parent
+ * PlanFundingPeriod has startDate <= asOfDate and isActive is true.
+ * Returns total released budget for the category up to that date.
+ */
+export async function getCumulativeReleasedBudget(
+  planId: string,
+  categoryCode: string,
+  asOfDate: Date,
+): Promise<number> {
+  const result = await prisma.planPeriodBudget.aggregate({
+    where: {
+      budgetLine: { categoryCode, planId },
+      fundingPeriod: {
+        planId,
+        isActive: true,
+        startDate: { lte: asOfDate },
+      },
+    },
+    _sum: { allocatedCents: true },
+  })
+
+  return result._sum.allocatedCents ?? 0
 }

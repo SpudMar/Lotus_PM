@@ -85,6 +85,9 @@ interface Participant {
   invoices: { id: string; invoiceNumber: string; totalCents: number; status: string; receivedAt: string }[]
   invoiceApprovalEnabled?: boolean
   invoiceApprovalMethod?: 'APP' | 'EMAIL' | 'SMS' | null
+  gender?: string | null
+  disability?: string | null
+  alias?: string | null
 }
 
 // ── Flag types ───────────────────────────────────────────────────────────────
@@ -490,6 +493,35 @@ export default function ParticipantDetailPage({
               </CardContent>
             </Card>
           </div>
+
+          {/* Additional Details */}
+          {(participant.gender || participant.disability || participant.alias) && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Additional Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {participant.alias && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Preferred name</span>
+                    <span>{participant.alias}</span>
+                  </div>
+                )}
+                {participant.gender && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Gender</span>
+                    <span>{participant.gender}</span>
+                  </div>
+                )}
+                {participant.disability && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Disability</span>
+                    <span>{participant.disability}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Plans */}
           {participant.plans.length > 0 && (

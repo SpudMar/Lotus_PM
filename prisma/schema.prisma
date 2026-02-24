@@ -173,6 +173,11 @@ model CrmParticipant {
   invoiceApprovalEnabled  Boolean         @default(false)
   invoiceApprovalMethod   ApprovalMethod?
 
+  // Additional demographics
+  gender            String?
+  disability        String?
+  alias             String?
+
   // Metadata
   isActive          Boolean   @default(true)
   onboardedAt       DateTime  @default(now())
@@ -194,6 +199,15 @@ model CrmParticipant {
   coordinatorAssignments CrmCoordinatorAssignment[] @relation("AssignedCoordinator")
   flags             CrmFlag[]
   itemPatterns      InvItemPattern[]
+  feeOverrides      PmFeeOverride[]
+  feeCharges        PmFeeCharge[]
+  statements        ParticipantStatement[]
+
+  // Statement preferences
+  statementFrequency  StatementFrequency?  @default(MONTHLY)
+  statementDelivery   StatementDelivery?   @default(EMAIL)
+  statementEmail      String?              // override email for statements
+  statementPhone      String?              // override phone for SMS statements
 
   @@index([ndisNumber])
   @@index([assignedToId])
@@ -729,6 +743,7 @@ enum ClmStatus {
   REJECTED
   PARTIAL
   PAID
+  CANCELLED
 }
 
 // ─────────────────────────────────────────────
@@ -756,6 +771,8 @@ model BnkPayment {
 
   status        BnkPaymentStatus @default(PENDING)
   processedAt   DateTime?
+  holdReason    String?
+  heldAt        DateTime?
 
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -771,6 +788,7 @@ enum BnkPaymentStatus {
   CLEARED
   FAILED
   REVERSED
+  ON_HOLD
 }
 
 model BnkAbaFile {
@@ -1167,6 +1185,11 @@ enum FqStatus {
   EXPIRED
 }
 
+enum QuarantineLimitType {
+  SOFT
+  HARD
+}
+
 model FqQuarantine {
   id                  String    @id @default(cuid())
   serviceAgreementId  String?
@@ -1177,6 +1200,7 @@ model FqQuarantine {
   usedCents           Int       @default(0)
   fundingPeriodId     String?   // FK deferred — WS3 (DEC-003)
   status              FqStatus  @default(ACTIVE)
+  limitType           QuarantineLimitType @default(SOFT)
   notes               String?
   createdById         String
   createdAt           DateTime  @default(now())
@@ -1354,4 +1378,121 @@ model InvItemPattern {
   @@unique([providerId, participantId, categoryCode, itemNumber])
   @@index([providerId, categoryCode])
   @@map("inv_item_patterns")
+}
+
+// --------------------------------------------------
+// PM FEE BILLING MODULE
+// Plan management fees charged to participants monthly.
+// Category 14 support items claimed to NDIS.
+// --------------------------------------------------
+
+enum PmFeeFrequency {
+  MONTHLY
+  PER_INVOICE
+  ONE_OFF
+}
+
+enum PmFeeChargeStatus {
+  PENDING    // charge created, no claim yet
+  CLAIMED    // ClmClaim generated
+  PAID       // payment received
+  WAIVED     // manually waived by PM
+}
+
+// PM Fee Schedule -- defines standard fees the PM charges
+model PmFeeSchedule {
+  id               String           @id @default(cuid())
+  name             String           // e.g. "Monthly Plan Management Fee"
+  supportItemCode  String           // NDIS code e.g. "14_033_0127_8_3"
+  description      String?
+  rateCents        Int              // standard rate in cents
+  frequency        PmFeeFrequency   @default(MONTHLY)
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+
+  overrides        PmFeeOverride[]
+  charges          PmFeeCharge[]
+
+  @@map("pm_fee_schedules")
+}
+
+// Per-participant rate override
+model PmFeeOverride {
+  id              String         @id @default(cuid())
+  feeScheduleId  String
+  feeSchedule    PmFeeSchedule  @relation(fields: [feeScheduleId], references: [id])
+  participantId  String
+  participant    CrmParticipant @relation(fields: [participantId], references: [id])
+  rateCents      Int            // override rate for this participant
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  @@unique([feeScheduleId, participantId])
+  @@map("pm_fee_overrides")
+}
+
+// Individual fee charge record
+model PmFeeCharge {
+  id              String            @id @default(cuid())
+  feeScheduleId  String
+  feeSchedule    PmFeeSchedule     @relation(fields: [feeScheduleId], references: [id])
+  participantId  String
+  participant    CrmParticipant    @relation(fields: [participantId], references: [id])
+  periodStart    DateTime
+  periodEnd      DateTime
+  amountCents    Int
+  status         PmFeeChargeStatus @default(PENDING)
+  claimId        String?           // linked ClmClaim once generated
+  generatedAt    DateTime          @default(now())
+  generatedById  String?
+  notes          String?
+  deletedAt      DateTime?
+
+  @@unique([feeScheduleId, participantId, periodStart])
+  @@map("pm_fee_charges")
+}
+
+// --------------------------------------------------
+// PARTICIPANT STATEMENTS MODULE
+// Financial statements sent to participants.
+// --------------------------------------------------
+
+enum StatementFrequency {
+  WEEKLY
+  FORTNIGHTLY
+  MONTHLY
+  NONE
+}
+
+enum StatementDelivery {
+  EMAIL
+  SMS
+  MAIL
+}
+
+model ParticipantStatement {
+  id                   String             @id @default(cuid())
+  participantId        String
+  participant          CrmParticipant     @relation(fields: [participantId], references: [id])
+  periodStart          DateTime
+  periodEnd            DateTime
+  generatedAt          DateTime           @default(now())
+  sentAt               DateTime?
+  deliveryMethod       StatementDelivery  @default(EMAIL)
+  s3Key                String?            // PDF/HTML stored in S3
+  totalInvoicedCents   Int                // cents
+  totalClaimedCents    Int                // cents
+  totalPaidCents       Int                // cents
+  budgetRemainingCents Int                // cents
+  lineItems            Json               // StatementLineItem[]
+  createdById          String
+  deletedAt            DateTime?
+
+  @@index([participantId])
+  @@index([periodStart, periodEnd])
+  @@map("participant_statements")
 }
