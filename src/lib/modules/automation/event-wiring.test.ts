@@ -131,8 +131,8 @@ describe('participant-approval event name wiring', () => {
   describe('requestParticipantApproval', () => {
     it('emits lotus-pm.invoices.approval-requested (with full prefix)', async () => {
       const invoice = makeFullInvoice()
-      mockInvoice.findFirst.mockResolvedValue(invoice)
-      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'PENDING_PARTICIPANT_APPROVAL' })
+      mockInvoice.findFirst.mockResolvedValue(invoice as never)
+      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'PENDING_PARTICIPANT_APPROVAL' } as never)
 
       await requestParticipantApproval(INVOICE_ID, USER_ID)
 
@@ -144,8 +144,8 @@ describe('participant-approval event name wiring', () => {
 
     it('does NOT emit bare invoices.approval-requested (without prefix)', async () => {
       const invoice = makeFullInvoice()
-      mockInvoice.findFirst.mockResolvedValue(invoice)
-      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'PENDING_PARTICIPANT_APPROVAL' })
+      mockInvoice.findFirst.mockResolvedValue(invoice as never)
+      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'PENDING_PARTICIPANT_APPROVAL' } as never)
 
       await requestParticipantApproval(INVOICE_ID, USER_ID)
 
@@ -166,8 +166,8 @@ describe('participant-approval event name wiring', () => {
         approvalTokenHash: tokenHash,
         approvalTokenExpiresAt: new Date(Date.now() + 3600 * 1000),
       })
-      mockInvoice.findFirst.mockResolvedValue(invoice)
-      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'APPROVED' })
+      mockInvoice.findFirst.mockResolvedValue(invoice as never)
+      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'APPROVED' } as never)
 
       await processApprovalResponse(token, 'APPROVED')
 
@@ -187,8 +187,8 @@ describe('participant-approval event name wiring', () => {
         approvalTokenHash: tokenHash,
         approvalTokenExpiresAt: new Date(Date.now() + 3600 * 1000),
       })
-      mockInvoice.findFirst.mockResolvedValue(invoice)
-      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'APPROVED' })
+      mockInvoice.findFirst.mockResolvedValue(invoice as never)
+      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'APPROVED' } as never)
 
       await processApprovalResponse(token, 'APPROVED')
 
@@ -208,8 +208,8 @@ describe('participant-approval event name wiring', () => {
         approvalTokenHash: tokenHash,
         approvalTokenExpiresAt: new Date(Date.now() + 3600 * 1000),
       })
-      mockInvoice.findFirst.mockResolvedValue(invoice)
-      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'PENDING_REVIEW' })
+      mockInvoice.findFirst.mockResolvedValue(invoice as never)
+      mockInvoice.update.mockResolvedValue({ ...invoice, status: 'PENDING_REVIEW' } as never)
 
       await processApprovalResponse(token, 'REJECTED')
 
@@ -226,7 +226,7 @@ describe('participant-approval event name wiring', () => {
         { id: 'inv-exp-1', participantId: 'part-a' },
         { id: 'inv-exp-2', participantId: 'part-b' },
       ]
-      mockInvoice.findMany.mockResolvedValue(expiredInvoices)
+      mockInvoice.findMany.mockResolvedValue(expiredInvoices as never)
       mockInvoice.updateMany.mockResolvedValue({ count: 2 })
 
       await skipExpiredApprovals()
@@ -243,7 +243,7 @@ describe('participant-approval event name wiring', () => {
 
     it('does NOT emit bare invoices.approval-skipped', async () => {
       const expiredInvoices = [{ id: 'inv-exp-1', participantId: 'part-a' }]
-      mockInvoice.findMany.mockResolvedValue(expiredInvoices)
+      mockInvoice.findMany.mockResolvedValue(expiredInvoices as never)
       mockInvoice.updateMany.mockResolvedValue({ count: 1 })
 
       await skipExpiredApprovals()
@@ -324,8 +324,8 @@ describe('budget alert threshold logic', () => {
     amountCents: number
   ) {
     const invoice = makeBudgetLineInvoice(spentCents, allocatedCents, amountCents)
-    mockInvoice.findFirst.mockResolvedValue({ status: 'PENDING_REVIEW' })
-    mockInvoice.update.mockResolvedValue(invoice)
+    mockInvoice.findFirst.mockResolvedValue({ status: 'PENDING_REVIEW' } as never)
+    mockInvoice.update.mockResolvedValue(invoice as never)
     mockBudgetLine.update.mockResolvedValue({} as never)
   }
 
