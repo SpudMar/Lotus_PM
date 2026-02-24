@@ -110,6 +110,8 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | Statements | ✅ | **PR #48** — ParticipantStatement; email + SMS (DOB-gated) + print/mail export; bulk generation |
 | Global Search | ✅ | **PR #48** — Command palette; participants, providers, invoices search |
 | Onboarding Queue | ✅ | **PR #48** — WordPress webhook DRAFT participant activation page |
+| Provider Portal | ✅ | **PRs #49-53** — Onboarding, dashboard, invoices, payments, profile, magic-link auth, premium redesign |
+| Analytics Data Infra | ✅ | **PR #51** — InvStatusHistory, phase timing, hold categorisation, disability categories |
 | Documents | 🔄 | Backend built (`storage.ts`, `documents.ts`) — UI needed |
 | Participant App | 🔄 | `participant-app/` scaffold exists — not started |
 
@@ -117,8 +119,10 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 
 ## CURRENT STATE
 
-- **870/870 tests** (50 suites) | **29 migrations** | Last merged: PR #48
+- **951/951 tests** (60 suites) | **35 migrations** | Last merged: PR #53
 - All CareSquare Tier 1 + Tier 2 gaps cleared — Lotus PM matches/exceeds CareSquare on all operational workflows
+- Provider Portal complete (PRs #49-53) — magic-link auth, premium redesign, full provider self-service
+- Analytics data infrastructure complete (PR #51) — status history tracking instrumented across all 9 transitions
 - Dev server: `node node_modules/.bin/next dev` (Turbopack — do NOT use `--webpack`)
 - Staff SMS test numbers: `+61411941699` (director@ and pm@)
 - `CRON_SECRET` needed in `.env.local` + GitHub Actions secrets to activate cron
@@ -212,5 +216,5 @@ gh run view <id> --log-failed
 
 ---
 
-*Last updated: 24 February 2026 — 870/870 tests, 29 migrations, 50 suites. PRs #34–48 merged. All 7 workstreams complete. All CareSquare Tier 1+2 gaps cleared. Next: Participant App (REQ-018), Documents UI, PACE B2B when PRODA approved.*
+*Last updated: 25 February 2026 — 951/951 tests, 35 migrations, 60 suites. PRs #34–53 merged. Provider Portal + Analytics Data Infra complete. Next: Analytics Dashboard (PM side), Documents UI, Participant App (REQ-018), Data Retention (REQ-010), PACE B2B when PRODA approved.*
 *All decisions in this file were made deliberately. Update with care.*

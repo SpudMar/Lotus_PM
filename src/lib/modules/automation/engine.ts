@@ -96,9 +96,7 @@ async function executeAction(action: AutoAction, context: TriggerContext): Promi
             subject: 'Automation Rule',
             body: message,
             participantId,
-            // userId is required — use a placeholder that downstream can filter
-            // In production this would be a dedicated "system" user cuid
-            userId: 'system',
+            userId: null, // System-initiated — no user session
           },
         })
         return true
