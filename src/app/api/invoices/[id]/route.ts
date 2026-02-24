@@ -114,7 +114,7 @@ export async function PATCH(
     if (action === 'approve') {
       const session = await requirePermission('invoices:approve')
       const input = approveInvoiceSchema.parse(body)
-      const invoice = await approveInvoice(id, session.user.id, input.planId, input.force)
+      const invoice = await approveInvoice(id, session.user.id, input.planId, input.force, input.lineDecisions)
       return NextResponse.json({ data: invoice })
     }
 

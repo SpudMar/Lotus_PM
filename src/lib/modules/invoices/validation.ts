@@ -33,7 +33,7 @@ const invoiceLineUpdateSchema = z.object({
   supportItemCode: z.string().min(1),
   supportItemName: z.string().min(1),
   categoryCode: z.string().min(2).max(2),
-  serviceDate: z.string().min(1), // ISO date string — coerced to Date in module
+  serviceDate: z.string().min(1), // ISO date string -- coerced to Date in module
   quantity: z.number().min(0),
   unitPriceCents: z.number().int().min(0),
   totalCents: z.number().int().min(0),
@@ -54,16 +54,25 @@ export const updateInvoiceSchema = z.object({
   lines: z.array(invoiceLineUpdateSchema).optional(),
 })
 
+/** Per-line decision for Wave 3 partial payment approval */
+const lineDecisionSchema = z.object({
+  lineId: z.string().min(1),
+  decision: z.enum(['APPROVE', 'REJECT', 'ADJUST']),
+  reason: z.string().min(1).max(500).optional(),
+  adjustedAmountCents: z.number().int().min(0).optional(),
+})
+
 export const approveInvoiceSchema = z.object({
   planId: z.string().cuid().optional(),
   force: z.boolean().optional().default(false),
+  lineDecisions: z.array(lineDecisionSchema).optional(),
 })
 
 export const rejectInvoiceSchema = z.object({
   reason: z.string().min(1, 'Rejection reason is required').max(500),
 })
 
-/** Bulk invoice action — approve, reject, or generate claims for multiple invoices */
+/** Bulk invoice action -- approve, reject, or generate claims for multiple invoices */
 export const bulkInvoiceActionSchema = z.object({
   action: z.enum(['approve', 'reject', 'claim']),
   invoiceIds: z.array(z.string().min(1)).min(1, 'At least one invoice ID is required').max(100),
