@@ -28,6 +28,7 @@ import {
   notifyProviderAutoRejected,
   notifyProviderNeedsCodes,
 } from '@/lib/modules/notifications/provider-notifications'
+import { recordStatusTransition } from './status-history'
 
 // ── Public Types ───────────────────────────────────────────────────────────────
 
@@ -519,6 +520,13 @@ async function executeAction(
         where: { id: invoiceId },
         data: { status: 'PENDING_REVIEW' },
       })
+      void recordStatusTransition({
+        invoiceId,
+        fromStatus: 'PROCESSING',
+        toStatus: 'PENDING_REVIEW',
+        holdCategory: 'MISSING_NDIS_CODES',
+        holdReason: 'AI detected missing or low-confidence NDIS codes',
+      })
       // Fire-and-forget: notify provider to supply correct support item codes
       void notifyProviderNeedsCodes({ invoiceId }).catch((err) => {
         console.error('[processing-engine] NEEDS_CODES notification failed:', err)
@@ -531,6 +539,12 @@ async function executeAction(
         where: { id: invoiceId },
         data: { status: 'PENDING_REVIEW' },
       })
+      void recordStatusTransition({
+        invoiceId,
+        fromStatus: 'PROCESSING',
+        toStatus: 'PENDING_REVIEW',
+        holdReason: 'AI processing flagged invoice for manual review',
+      })
       break
     }
 
@@ -542,6 +556,14 @@ async function executeAction(
           rejectedById: SYSTEM_USER_ID,
           rejectedAt: new Date(),
         },
+      })
+      void recordStatusTransition({
+        invoiceId,
+        fromStatus: 'PROCESSING',
+        toStatus: 'REJECTED',
+        changedBy: SYSTEM_USER_ID,
+        holdCategory: 'OTHER',
+        holdReason: 'Auto-rejected by processing engine',
       })
       // Fire-and-forget: notify provider of the rejection reason
       void notifyProviderAutoRejected({ invoiceId }).catch((err) => {

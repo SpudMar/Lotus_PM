@@ -106,6 +106,8 @@ const MOCK_PARTICIPANT = {
   pricingRegion: "NON_REMOTE" as const,
   gender: null,
   disability: null,
+  disabilityCategory: null,
+  ndisRegistrationDate: null,
   alias: null,
   statementFrequency: 'MONTHLY' as const,
   statementDelivery: 'EMAIL' as const,

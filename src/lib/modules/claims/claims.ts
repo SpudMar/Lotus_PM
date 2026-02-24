@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { processEvent } from '@/lib/modules/automation/engine'
+import { recordStatusTransition } from '@/lib/modules/invoices/status-history'
 import type { z } from 'zod'
 import type {
   createClaimSchema,
@@ -174,6 +175,12 @@ export async function createClaimFromInvoice(input: CreateInput, userId: string)
   await prisma.invInvoice.update({
     where: { id: input.invoiceId },
     data: { status: 'CLAIMED' },
+  })
+
+  void recordStatusTransition({
+    invoiceId: input.invoiceId,
+    fromStatus: 'APPROVED',
+    toStatus: 'CLAIMED',
   })
 
   await createAuditLog({

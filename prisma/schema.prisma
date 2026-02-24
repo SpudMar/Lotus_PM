@@ -193,6 +193,8 @@ model CrmParticipant {
   // Additional demographics
   gender            String?
   disability        String?
+  disabilityCategory  String?
+  ndisRegistrationDate DateTime?
   alias             String?
 
   // Metadata
@@ -588,6 +590,12 @@ model InvInvoice {
   aiProcessingResult    Json?         // Full structured output from Bedrock Claude
   processedAt           DateTime?     // When the processing engine completed
 
+  // Analytics tracking
+  statusHistory     InvStatusHistory[]
+  firstApprovedAt   DateTime?
+  firstRejectedAt   DateTime?
+  totalProcessingMs Int?
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   deletedAt       DateTime?     // Soft delete — REQ-010
@@ -615,10 +623,42 @@ enum InvStatus {
   PAID
 }
 
+enum InvHoldCategory {
+  MISSING_NDIS_CODES
+  INCORRECT_AMOUNT
+  DUPLICATE_INVOICE
+  PROVIDER_NOT_APPROVED
+  BUDGET_EXCEEDED
+  AWAITING_PARTICIPANT_APPROVAL
+  AWAITING_PROVIDER_CORRECTION
+  PLAN_BUDGET_EXCEEDED
+  SYSTEM_HOLD
+  OTHER
+}
+
 enum InvIngestSource {
   EMAIL   // Received via SES inbound email pipeline (REQ-024)
   MANUAL  // Entered manually by staff via the web UI
   API     // Submitted via external API (future)
+}
+
+model InvStatusHistory {
+  id           String           @id @default(cuid())
+  invoiceId    String
+  invoice      InvInvoice       @relation(fields: [invoiceId], references: [id])
+  fromStatus   InvStatus?
+  toStatus     InvStatus
+  changedAt    DateTime         @default(now())
+  changedBy    String?
+  holdCategory InvHoldCategory?
+  holdReason   String?
+  metadata     Json?
+  durationMs   Int?
+
+  @@index([invoiceId])
+  @@index([changedAt])
+  @@index([toStatus])
+  @@map("inv_status_history")
 }
 
 model InvInvoiceLine {

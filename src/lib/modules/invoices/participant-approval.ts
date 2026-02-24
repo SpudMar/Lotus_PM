@@ -14,6 +14,7 @@ import { createAuditLog } from '@/lib/modules/core/audit'
 import { processEvent } from '@/lib/modules/automation/engine'
 import { createNotificationRecord } from '@/lib/modules/notifications/notifications'
 import { sendTemplatedEmail } from '@/lib/modules/notifications/email-send'
+import { recordStatusTransition } from './status-history'
 
 // ─── Secret ───────────────────────────────────────────────────────────────────
 
@@ -132,6 +133,13 @@ export async function requestParticipantApproval(
       approvalTokenExpiresAt: expiresAt,
       approvalSentAt: new Date(),
     },
+  })
+
+  void recordStatusTransition({
+    invoiceId,
+    fromStatus: invoice.status,
+    toStatus: 'PENDING_PARTICIPANT_APPROVAL',
+    changedBy: requestedById,
   })
 
   // Approval URL for email/SMS links
@@ -263,6 +271,12 @@ export async function processApprovalResponse(
         approvalTokenExpiresAt: null,
       },
     })
+    void recordStatusTransition({
+      invoiceId,
+      fromStatus: 'PENDING_PARTICIPANT_APPROVAL',
+      toStatus: 'APPROVED',
+      changedBy: participantId,
+    })
   } else {
     updated = await prisma.invInvoice.update({
       where: { id: invoiceId },
@@ -272,6 +286,13 @@ export async function processApprovalResponse(
         approvalTokenHash: null,
         approvalTokenExpiresAt: null,
       },
+    })
+    void recordStatusTransition({
+      invoiceId,
+      fromStatus: 'PENDING_PARTICIPANT_APPROVAL',
+      toStatus: 'PENDING_REVIEW',
+      changedBy: participantId,
+      holdReason: 'Participant rejected invoice',
     })
   }
 
@@ -338,6 +359,12 @@ export async function skipExpiredApprovals(): Promise<number> {
         participantId: inv.participantId,
       })
     }
+    void recordStatusTransition({
+      invoiceId: inv.id,
+      fromStatus: 'PENDING_PARTICIPANT_APPROVAL',
+      toStatus: 'PENDING_REVIEW',
+      holdReason: 'Approval token expired — auto-skipped to PM queue',
+    })
   }
 
   return expired.length

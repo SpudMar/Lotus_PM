@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { processEvent } from '@/lib/modules/automation/engine'
+import { recordStatusTransition } from '@/lib/modules/invoices/status-history'
 import type { z } from 'zod'
 import type { createPaymentSchema } from './validation'
 
@@ -294,6 +295,14 @@ export async function reconcilePayments(paymentIds: string[], userId: string) {
     where: { id: { in: invoiceIds } },
     data: { status: 'PAID' },
   })
+
+  for (const invoiceId of invoiceIds) {
+    void recordStatusTransition({
+      invoiceId,
+      fromStatus: 'CLAIMED',
+      toStatus: 'PAID',
+    })
+  }
 
   await createAuditLog({
     userId,
