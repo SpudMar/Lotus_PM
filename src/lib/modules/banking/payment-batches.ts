@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import type { BnkPaymentBatch } from '@prisma/client'
+import { notifyProvidersRemittance } from '@/lib/modules/notifications/provider-notifications'
 
 // ─── Status Derivation ────────────────────────────────────
 
@@ -252,6 +253,11 @@ export async function markBatchConfirmed(
     resource: 'payment_batch',
     resourceId: batchId,
     after: { confirmedAt: updated.confirmedAt },
+  })
+
+  // Fire-and-forget: send remittance advice emails to all providers in the batch
+  void notifyProvidersRemittance({ batchId }).catch((err) => {
+    console.error('[payment-batches] remittance notification failed for batch:', batchId, err)
   })
 
   return updated

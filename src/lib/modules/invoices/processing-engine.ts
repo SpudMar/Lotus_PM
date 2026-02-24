@@ -24,6 +24,10 @@ import { validateInvoiceLines } from './invoice-validation'
 import { approveInvoice } from './invoices'
 import { requestParticipantApproval } from './participant-approval'
 import { SYSTEM_USER_ID } from './email-ingest'
+import {
+  notifyProviderAutoRejected,
+  notifyProviderNeedsCodes,
+} from '@/lib/modules/notifications/provider-notifications'
 
 // ── Public Types ───────────────────────────────────────────────────────────────
 
@@ -510,7 +514,18 @@ async function executeAction(
       break
     }
 
-    case 'NEEDS_CODES':
+    case 'NEEDS_CODES': {
+      await prisma.invInvoice.update({
+        where: { id: invoiceId },
+        data: { status: 'PENDING_REVIEW' },
+      })
+      // Fire-and-forget: notify provider to supply correct support item codes
+      void notifyProviderNeedsCodes({ invoiceId }).catch((err) => {
+        console.error('[processing-engine] NEEDS_CODES notification failed:', err)
+      })
+      break
+    }
+
     case 'NEEDS_REVIEW': {
       await prisma.invInvoice.update({
         where: { id: invoiceId },
@@ -527,6 +542,10 @@ async function executeAction(
           rejectedById: SYSTEM_USER_ID,
           rejectedAt: new Date(),
         },
+      })
+      // Fire-and-forget: notify provider of the rejection reason
+      void notifyProviderAutoRejected({ invoiceId }).catch((err) => {
+        console.error('[processing-engine] AUTO_REJECTED notification failed:', err)
       })
       break
     }
