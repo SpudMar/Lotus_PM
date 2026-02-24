@@ -17,11 +17,23 @@ import {
   AlertTriangle,
   TrendingUp,
   DollarSign,
+  BarChart3,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react'
 import { formatAUD } from '@/lib/shared/currency'
 import { formatDateAU } from '@/lib/shared/dates'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts'
 
-type ActiveTab = 'overview' | 'compliance' | 'budget' | 'financial'
+type ActiveTab = 'overview' | 'compliance' | 'budget' | 'financial' | 'analytics'
 
 interface DashboardSummary {
   participants: { active: number; total: number }
@@ -81,6 +93,77 @@ interface FinancialData {
   }>
 }
 
+interface ProcessingTimeMetrics {
+  avgDays: number
+  p50Days: number
+  p90Days: number
+  slaComplianceRate: number
+  totalProcessed: number
+  withinSla: number
+}
+
+interface StatusFunnelItem {
+  status: string
+  count: number
+}
+
+interface HoldCategoryItem {
+  category: string
+  count: number
+}
+
+interface VolumeDataPoint {
+  period: string
+  count: number
+}
+
+interface DisabilityCategoryItem {
+  category: string
+  count: number
+}
+
+interface AnalyticsData {
+  processingTime: ProcessingTimeMetrics
+  statusFunnel: StatusFunnelItem[]
+  holdCategories: HoldCategoryItem[]
+  volumeOverTime: VolumeDataPoint[]
+  disabilityCategories: DisabilityCategoryItem[]
+}
+
+// Human-readable labels for InvHoldCategory enum values
+const HOLD_CATEGORY_LABELS: Record<string, string> = {
+  MISSING_NDIS_CODES: 'Missing NDIS Codes',
+  INCORRECT_AMOUNT: 'Incorrect Amount',
+  DUPLICATE_INVOICE: 'Duplicate Invoice',
+  PROVIDER_NOT_APPROVED: 'Provider Not Approved',
+  BUDGET_EXCEEDED: 'Budget Exceeded',
+  AWAITING_PARTICIPANT_APPROVAL: 'Awaiting Participant Approval',
+  AWAITING_PROVIDER_CORRECTION: 'Awaiting Provider Correction',
+  PLAN_BUDGET_EXCEEDED: 'Plan Budget Exceeded',
+  SYSTEM_HOLD: 'System Hold',
+  OTHER: 'Other',
+}
+
+// Human-readable labels for InvStatus enum values
+const STATUS_LABELS: Record<string, string> = {
+  RECEIVED: 'Received',
+  PROCESSING: 'Processing',
+  PENDING_REVIEW: 'Pending Review',
+  PENDING_PARTICIPANT_APPROVAL: 'Pending Participant Approval',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  CLAIMED: 'Claimed',
+  PAID: 'Paid',
+}
+
+function formatStatusLabel(status: string): string {
+  return STATUS_LABELS[status] ?? status
+}
+
+function formatHoldLabel(category: string): string {
+  return HOLD_CATEGORY_LABELS[category] ?? category
+}
+
 export default function ReportsPage(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
   const [loading, setLoading] = useState(true)
@@ -88,6 +171,7 @@ export default function ReportsPage(): React.JSX.Element {
   const [compliance, setCompliance] = useState<ComplianceMetrics | null>(null)
   const [budget, setBudget] = useState<BudgetRow[]>([])
   const [financial, setFinancial] = useState<FinancialData | null>(null)
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -118,6 +202,14 @@ export default function ReportsPage(): React.JSX.Element {
         } else if (res.status === 403) {
           setFinancial(null)
         }
+      } else if (activeTab === 'analytics') {
+        const res = await fetch('/api/reports/analytics')
+        if (res.ok) {
+          const json = await res.json()
+          setAnalytics(json.data)
+        } else if (res.status === 403) {
+          setAnalytics(null)
+        }
       }
     } finally {
       setLoading(false)
@@ -142,6 +234,10 @@ export default function ReportsPage(): React.JSX.Element {
             <TabsTrigger value="compliance">Compliance</TabsTrigger>
             <TabsTrigger value="budget">Budget</TabsTrigger>
             <TabsTrigger value="financial">Financial</TabsTrigger>
+            <TabsTrigger value="analytics">
+              <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+              Analytics
+            </TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -541,6 +637,219 @@ export default function ReportsPage(): React.JSX.Element {
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
               Financial reports require Plan Manager or Admin access.
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ─── Analytics Tab ─── */}
+        {!loading && activeTab === 'analytics' && analytics && (
+          <div className="space-y-6">
+            {/* Row 1: KPI Cards */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Avg Processing Time</CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {analytics.processingTime.avgDays.toFixed(1)}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">days</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {analytics.processingTime.totalProcessed} invoices processed
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Median (P50)</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {analytics.processingTime.p50Days.toFixed(1)}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">days</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">50th percentile</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">P90 Processing Time</CardTitle>
+                  <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {analytics.processingTime.p90Days.toFixed(1)}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">days</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">90th percentile</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">SLA Compliance Rate</CardTitle>
+                  <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {analytics.processingTime.slaComplianceRate.toFixed(1)}%
+                  </div>
+                  <Progress
+                    value={analytics.processingTime.slaComplianceRate}
+                    className="mt-2"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {analytics.processingTime.withinSla} of {analytics.processingTime.totalProcessed} within 5 days
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Row 2: Status Funnel + Hold Breakdown */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Invoice Status Transitions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {analytics.statusFunnel.length === 0 ? (
+                    <p className="py-8 text-center text-muted-foreground">No data available</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart
+                        data={analytics.statusFunnel.map((item) => ({
+                          ...item,
+                          label: formatStatusLabel(item.status),
+                        }))}
+                        layout="vertical"
+                        margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} />
+                        <YAxis
+                          type="category"
+                          dataKey="label"
+                          width={160}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          formatter={(value: number | undefined) => [value ?? 0, 'Transitions']}
+                        />
+                        <Bar dataKey="count" fill="#059669" radius={[0, 3, 3, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Hold Category Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {analytics.holdCategories.length === 0 ? (
+                    <p className="py-8 text-center text-muted-foreground">No hold data available</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart
+                        data={analytics.holdCategories.map((item) => ({
+                          ...item,
+                          label: formatHoldLabel(item.category),
+                        }))}
+                        layout="vertical"
+                        margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} />
+                        <YAxis
+                          type="category"
+                          dataKey="label"
+                          width={180}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          formatter={(value: number | undefined) => [value ?? 0, 'Holds']}
+                        />
+                        <Bar dataKey="count" fill="#059669" radius={[0, 3, 3, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Row 3: Volume Over Time + Disability Categories */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Invoice Volume (Last 6 Months)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {analytics.volumeOverTime.length === 0 ? (
+                    <p className="py-8 text-center text-muted-foreground">No data available</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart
+                        data={analytics.volumeOverTime}
+                        margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip
+                          formatter={(value: number | undefined) => [value ?? 0, 'Invoices']}
+                        />
+                        <Bar dataKey="count" fill="#059669" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Participant Disability Categories</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {analytics.disabilityCategories.length === 0 ? (
+                    <p className="py-8 text-center text-muted-foreground">No data available</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart
+                        data={analytics.disabilityCategories}
+                        layout="vertical"
+                        margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} />
+                        <YAxis
+                          type="category"
+                          dataKey="category"
+                          width={120}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          formatter={(value: number | undefined) => [value ?? 0, 'Participants']}
+                        />
+                        <Bar dataKey="count" fill="#059669" radius={[0, 3, 3, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {!loading && activeTab === 'analytics' && !analytics && (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Analytics reports require Plan Manager or Admin access.
             </CardContent>
           </Card>
         )}
