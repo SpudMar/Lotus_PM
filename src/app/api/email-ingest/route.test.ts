@@ -10,6 +10,10 @@
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
+jest.mock('@/lib/modules/invoices/processing-engine', () => ({
+  processInvoice: jest.fn().mockResolvedValue({ category: 'NEEDS_REVIEW', validationErrors: [] }),
+}))
+
 jest.mock('@/lib/modules/invoices/email-ingest', () => ({
   sqsMessageSchema: jest.requireActual('@/lib/modules/invoices/email-ingest').sqsMessageSchema,
   parseEmailFromS3: jest.fn(),

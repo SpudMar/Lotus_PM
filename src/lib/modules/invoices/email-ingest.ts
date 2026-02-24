@@ -30,6 +30,7 @@ import { createAuditLog } from '@/lib/modules/core/audit'
 import { createFromEmailIngest } from '@/lib/modules/crm/correspondence'
 import { autoMatchInvoice } from './auto-match'
 import type { ExtractedInvoiceData } from './textract-extraction'
+import { processInvoice } from './processing-engine'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -498,6 +499,12 @@ export async function applyExtractionToInvoice(
       ],
     })
   )
+
+  // Trigger AI processing engine (Wave 1)
+  // Fire-and-forget with error handling — never block email ingest on AI failure
+  processInvoice(invoice.id).catch((err) => {
+    console.error('[email-ingest] processInvoice failed, invoice left PENDING_REVIEW:', err)
+  })
 
   return invoice
 }
