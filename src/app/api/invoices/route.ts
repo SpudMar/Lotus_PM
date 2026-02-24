@@ -17,8 +17,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const providerId = request.nextUrl.searchParams.get('providerId') ?? undefined
     const ingestSource = request.nextUrl.searchParams.get('ingestSource') ?? undefined
     const search = request.nextUrl.searchParams.get('search') ?? undefined
+    const processingCategory = request.nextUrl.searchParams.get('processingCategory') ?? undefined
 
-    const { data, total } = await listInvoices({ page, pageSize, status, statusIn, participantId, providerId, ingestSource, search })
+    const { data, total } = await listInvoices({ page, pageSize, status, statusIn, participantId, providerId, ingestSource, search, processingCategory })
     return NextResponse.json(paginatedResponse(data, total, page, pageSize))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
