@@ -12,13 +12,13 @@ export default function ProviderAuthVerifyPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const token = searchParams.get('token')
-    if (!token) {
-      setError('Invalid login link — token is missing.')
-      return
-    }
-
     void (async () => {
+      const token = searchParams.get('token')
+      if (!token) {
+        setError('Invalid login link — token is missing.')
+        return
+      }
+
       try {
         const result = await signIn('provider-magic-link', {
           token,
