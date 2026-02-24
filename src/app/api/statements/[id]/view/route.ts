@@ -11,9 +11,10 @@ import type { StatementLineItem } from '@/lib/modules/statements/statement-gener
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   try {
+    const { id } = await params
     const { searchParams } = new URL(request.url)
     const token = searchParams.get('token')
 
@@ -26,14 +27,14 @@ export async function GET(
 
     // Verify the token
     const payload = verifyToken(token)
-    if (payload.statementId !== params.id) {
+    if (payload.statementId !== id) {
       return NextResponse.json(
         { error: 'Token does not match statement', code: 'FORBIDDEN' },
         { status: 403 }
       )
     }
 
-    const statement = await getStatementById(params.id)
+    const statement = await getStatementById(id)
     if (!statement) {
       return NextResponse.json(
         { error: 'Statement not found', code: 'NOT_FOUND' },

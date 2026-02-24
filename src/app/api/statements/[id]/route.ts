@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { requirePermission } from '@/lib/auth/session'
 import {
   getStatementById,
@@ -7,12 +7,13 @@ import {
 import { createAuditLog } from '@/lib/modules/core/audit'
 
 export async function GET(
-  _request: Request,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   try {
     await requirePermission('statements:read')
-    const statement = await getStatementById(params.id)
+    const { id } = await params
+    const statement = await getStatementById(id)
 
     if (!statement) {
       return NextResponse.json(
@@ -43,12 +44,13 @@ export async function GET(
 }
 
 export async function DELETE(
-  _request: Request,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   try {
     const session = await requirePermission('statements:write')
-    const statement = await getStatementById(params.id)
+    const { id } = await params
+    const statement = await getStatementById(id)
 
     if (!statement) {
       return NextResponse.json(
@@ -57,13 +59,13 @@ export async function DELETE(
       )
     }
 
-    await softDeleteStatement(params.id)
+    await softDeleteStatement(id)
 
     await createAuditLog({
       userId: session.user.id,
       action: 'statements.statement.deleted',
       resource: 'participant_statement',
-      resourceId: params.id,
+      resourceId: id,
       before: { participantId: statement.participantId },
     })
 

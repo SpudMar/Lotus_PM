@@ -5,11 +5,12 @@ import { createAuditLog } from '@/lib/modules/core/audit'
 
 export async function POST(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   try {
     const session = await requirePermission('statements:write')
-    const result = await sendStatement(params.id)
+    const { id } = await params
+    const result = await sendStatement(id)
 
     if (!result.success) {
       return NextResponse.json(
@@ -22,7 +23,7 @@ export async function POST(
       userId: session.user.id,
       action: 'statements.statement.sent',
       resource: 'participant_statement',
-      resourceId: params.id,
+      resourceId: id,
       after: { success: true },
     })
 
