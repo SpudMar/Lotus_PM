@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 
 interface AuditLogInput {
-  userId: string
+  userId?: string | null  // Null for system-initiated actions (cron, automation)
   action: string
   resource: string
   resourceId: string
@@ -18,7 +18,7 @@ interface AuditLogInput {
 export async function createAuditLog(input: AuditLogInput): Promise<void> {
   await prisma.coreAuditLog.create({
     data: {
-      userId: input.userId,
+      userId: input.userId ?? null,
       action: input.action,
       resource: input.resource,
       resourceId: input.resourceId,

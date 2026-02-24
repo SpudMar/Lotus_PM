@@ -90,14 +90,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       triggered++
     }
 
-    // 5. Audit log
-    await createAuditLog({
-      userId: 'system',
-      action: 'automation.cron.run',
-      resource: 'AutoRule',
-      resourceId: 'batch',
-      after: { triggered, skipped, totalRules: scheduledRules.length },
-    })
+    // 5. Audit log (fire-and-forget — never crash cron)
+    try {
+      await createAuditLog({
+        userId: null,
+        action: 'automation.cron.run',
+        resource: 'AutoRule',
+        resourceId: 'batch',
+        after: { triggered, skipped, totalRules: scheduledRules.length },
+      })
+    } catch {
+      // Audit logging must never crash the cron endpoint
+    }
 
     // 6. Return summary
     return NextResponse.json({ triggered, skipped, results })

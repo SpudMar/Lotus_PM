@@ -135,7 +135,7 @@ model CoreProviderMagicLink {
 
 model CoreAuditLog {
   id         String   @id @default(cuid())
-  userId     String
+  userId     String?  // Nullable for system-initiated actions (cron, automation)
   action     String   // e.g. "invoice.approved", "participant.created"
   resource   String   // e.g. "invoice", "participant"
   resourceId String
@@ -145,7 +145,7 @@ model CoreAuditLog {
   userAgent  String?
   createdAt  DateTime @default(now())
 
-  user CoreUser @relation(fields: [userId], references: [id])
+  user CoreUser? @relation(fields: [userId], references: [id])
 
   @@index([resource, resourceId])
   @@index([userId])
@@ -305,11 +305,11 @@ model CrmCommLog {
   body          String           @db.Text
   participantId String?
   providerId    String?
-  userId        String           // Staff member who logged this
+  userId        String?          // Nullable for automation-generated entries
 
   participant   CrmParticipant?  @relation(fields: [participantId], references: [id])
   provider      CrmProvider?     @relation(fields: [providerId], references: [id])
-  user          CoreUser         @relation(fields: [userId], references: [id])
+  user          CoreUser?        @relation(fields: [userId], references: [id])
 
   occurredAt    DateTime         @default(now())
   createdAt     DateTime         @default(now())
