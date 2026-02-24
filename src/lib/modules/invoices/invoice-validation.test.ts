@@ -1,7 +1,7 @@
 /**
  * Unit tests for WS-F2 Invoice Validation Engine.
  *
- * Covers all 8 validation checks and the integration with approveInvoice().
+ * Covers all validation checks and the integration with approveInvoice().
  *
  * Checks tested:
  *   1. PARTICIPANT_INACTIVE
@@ -11,10 +11,11 @@
  *   5. INSUFFICIENT_BUDGET
  *   6. DUPLICATE_INVOICE
  *   7. PRICE_EXCEEDED
- *   8. PRICE_GUIDE_UNAVAILABLE (warning — graceful degradation)
- *   9. All checks pass → valid: true
- *  10. approveInvoice with validation error + force=false → throws VALIDATION_FAILED
- *  11. approveInvoice with validation error + force=true → approves
+ *   8. PRICE_GUIDE_UNAVAILABLE (warning -- graceful degradation)
+ *   9. All checks pass -> valid: true
+ *  10. approveInvoice with validation error + force=false -> throws VALIDATION_FAILED
+ *  11. approveInvoice with validation error + force=true -> approves
+ *  12. PERIOD_BUDGET_EXCEEDED (warning)
  */
 
 // ── Mocks (must come before imports) ─────────────────────────────────────────
@@ -56,11 +57,16 @@ jest.mock('@/lib/modules/crm/flags', () => ({
   },
 }))
 
+jest.mock('@/lib/modules/plans/funding-periods', () => ({
+  getActivePeriodBudget: jest.fn(),
+}))
+
 // ── Imports (after mocks) ─────────────────────────────────────────────────────
 
 import { prisma } from '@/lib/db'
 import { validateLineItemPrice } from '@/lib/modules/price-guide/price-guide'
 import { getActiveFlags } from '@/lib/modules/crm/flags'
+import { getActivePeriodBudget } from '@/lib/modules/plans/funding-periods'
 import { validateInvoiceForApproval } from './invoice-validation'
 import { approveInvoice, ValidationFailedError } from './invoices'
 
@@ -70,6 +76,7 @@ import { approveInvoice, ValidationFailedError } from './invoices'
 const mockPrisma = prisma as any
 const mockValidateLineItemPrice = validateLineItemPrice as jest.MockedFunction<typeof validateLineItemPrice>
 const mockGetActiveFlags = getActiveFlags as jest.MockedFunction<typeof getActiveFlags>
+const mockGetActivePeriodBudget = getActivePeriodBudget as jest.MockedFunction<typeof getActivePeriodBudget>
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -151,6 +158,7 @@ beforeEach(() => {
   mockPrisma.planBudgetLine.update.mockResolvedValue({})
   mockPrisma.saServiceAgreement.findFirst.mockResolvedValue(null) // no active SA by default
   mockPrisma.invInvoice.aggregate.mockResolvedValue({ _sum: { totalCents: null } })
+  mockGetActivePeriodBudget.mockResolvedValue(null) // no period budget by default
 })
 
 // ── validateInvoiceForApproval tests ─────────────────────────────────────────
@@ -196,7 +204,7 @@ describe('validateInvoiceForApproval', () => {
       {
         id: 'flag-001',
         severity: 'BLOCKING',
-        reason: 'Suspected fraudulent invoices — refer to compliance team',
+        reason: 'Suspected fraudulent invoices -- refer to compliance team',
         createdById: 'user-001',
         createdBy: { id: 'user-001', name: 'Jane PM' },
         participantId: 'part-001',
@@ -213,7 +221,7 @@ describe('validateInvoiceForApproval', () => {
     expect(result.errors).toContainEqual(
       expect.objectContaining({
         code: 'BLOCKING_FLAG',
-        message: 'Suspected fraudulent invoices — refer to compliance team',
+        message: 'Suspected fraudulent invoices -- refer to compliance team',
       })
     )
   })
@@ -239,7 +247,7 @@ describe('validateInvoiceForApproval', () => {
 
     const result = await validateInvoiceForApproval('inv-001')
 
-    // Advisory flag is a warning, not an error — invoice should still be valid
+    // Advisory flag is a warning, not an error -- invoice should still be valid
     expect(result.valid).toBe(true)
     expect(result.warnings).toContainEqual(
       expect.objectContaining({
@@ -255,7 +263,7 @@ describe('validateInvoiceForApproval', () => {
     const inv = makeInvoice({
       lines: [
         makeLine({
-          totalCents: 600000, // 6000.00 — exceeds budget of 5000.00
+          totalCents: 600000, // 6000.00 -- exceeds budget of 5000.00
           budgetLine: makeBudgetLine({ allocatedCents: 500000, spentCents: 0 }),
         }),
       ],
@@ -317,7 +325,7 @@ describe('validateInvoiceForApproval', () => {
 
     const result = await validateInvoiceForApproval('inv-001')
 
-    // Should be valid — price guide unavailability is only a warning
+    // Should be valid -- price guide unavailability is only a warning
     expect(result.valid).toBe(true)
     expect(result.warnings).toContainEqual(
       expect.objectContaining({ code: 'PRICE_GUIDE_UNAVAILABLE' })
@@ -432,6 +440,102 @@ describe('validateInvoiceForApproval', () => {
     )
   })
 
+  // -- Check 12: PERIOD_BUDGET_EXCEEDED (warning) -------------------------
+
+  it('returns PERIOD_BUDGET_EXCEEDED warning when line total exceeds period budget', async () => {
+    const inv = makeInvoice({
+      lines: [
+        makeLine({
+          totalCents: 200000, // $2000.00
+          budgetLine: makeBudgetLine({ categoryCode: '15' }),
+        }),
+      ],
+    })
+    mockPrisma.invInvoice.findUniqueOrThrow.mockResolvedValue(inv)
+    mockPrisma.invInvoice.findFirst.mockResolvedValue(null)
+
+    // Period budget has only $1000 remaining
+    mockGetActivePeriodBudget.mockResolvedValue({
+      periodId: 'period-001',
+      allocatedCents: 250000,
+      spentCents: 150000,
+      remainingCents: 100000, // $1000 remaining
+    })
+
+    const result = await validateInvoiceForApproval('inv-001')
+
+    expect(result.valid).toBe(true) // warning only, not an error
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        code: 'PERIOD_BUDGET_EXCEEDED',
+        lineId: 'line-001',
+      })
+    )
+  })
+
+  it('does not warn when line total fits within period budget', async () => {
+    const inv = makeInvoice()
+    mockPrisma.invInvoice.findUniqueOrThrow.mockResolvedValue(inv)
+    mockPrisma.invInvoice.findFirst.mockResolvedValue(null)
+
+    // Period budget has plenty remaining
+    mockGetActivePeriodBudget.mockResolvedValue({
+      periodId: 'period-001',
+      allocatedCents: 500000,
+      spentCents: 0,
+      remainingCents: 500000,
+    })
+
+    const result = await validateInvoiceForApproval('inv-001')
+
+    expect(result.valid).toBe(true)
+    const periodWarnings = result.warnings.filter((w) => w.code === 'PERIOD_BUDGET_EXCEEDED')
+    expect(periodWarnings).toHaveLength(0)
+  })
+
+  it('skips period budget check when no period budget exists for the category', async () => {
+    mockPrisma.invInvoice.findUniqueOrThrow.mockResolvedValue(makeInvoice())
+    mockPrisma.invInvoice.findFirst.mockResolvedValue(null)
+
+    // No period budget found (returns null)
+    mockGetActivePeriodBudget.mockResolvedValue(null)
+
+    const result = await validateInvoiceForApproval('inv-001')
+
+    expect(result.valid).toBe(true)
+    const periodWarnings = result.warnings.filter((w) => w.code === 'PERIOD_BUDGET_EXCEEDED')
+    expect(periodWarnings).toHaveLength(0)
+  })
+
+  it('does not block approval when period budget check fails', async () => {
+    mockPrisma.invInvoice.findUniqueOrThrow.mockResolvedValue(makeInvoice())
+    mockPrisma.invInvoice.findFirst.mockResolvedValue(null)
+
+    // Period budget service throws
+    mockGetActivePeriodBudget.mockRejectedValue(new Error('DB connection error'))
+
+    const result = await validateInvoiceForApproval('inv-001')
+
+    // Should still be valid -- period budget check is advisory
+    expect(result.valid).toBe(true)
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        code: 'PERIOD_BUDGET_EXCEEDED',
+        message: expect.stringContaining('Unable to check funding period budget'),
+      })
+    )
+  })
+
+  it('skips period budget check when invoice has no planId', async () => {
+    const inv = makeInvoice({ planId: null })
+    mockPrisma.invInvoice.findUniqueOrThrow.mockResolvedValue(inv)
+    mockPrisma.invInvoice.findFirst.mockResolvedValue(null)
+
+    const result = await validateInvoiceForApproval('inv-001')
+
+    expect(mockGetActivePeriodBudget).not.toHaveBeenCalled()
+  })
+
 })
 
 // ── approveInvoice integration tests ─────────────────────────────────────────
@@ -451,10 +555,10 @@ describe('approveInvoice', () => {
     ],
   }
 
-  // ── force=false with errors → throws ValidationFailedError ────────────────
+  // ── force=false with errors -> throws ValidationFailedError ────────────────
 
   it('throws ValidationFailedError when validation errors exist and force=false', async () => {
-    // Make participant inactive → PARTICIPANT_INACTIVE error
+    // Make participant inactive -> PARTICIPANT_INACTIVE error
     const inv = makeInvoice({
       participant: makeParticipant({ isActive: false }),
     })
@@ -475,10 +579,10 @@ describe('approveInvoice', () => {
     expect(mockPrisma.invInvoice.update).not.toHaveBeenCalled()
   })
 
-  // ── force=true with errors → approves anyway ──────────────────────────────
+  // ── force=true with errors -> approves anyway ──────────────────────────────
 
   it('approves invoice when force=true even with validation errors', async () => {
-    // Make participant inactive → would normally block approval
+    // Make participant inactive -> would normally block approval
     const inv = makeInvoice({
       participant: makeParticipant({ isActive: false }),
     })

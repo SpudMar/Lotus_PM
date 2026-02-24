@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
-import type { BnkPaymentBatch } from '@prisma/client'
+import type { BnkPayment, BnkPaymentBatch } from '@prisma/client'
 import { notifyProvidersRemittance } from '@/lib/modules/notifications/provider-notifications'
 
 // ─── Status Derivation ────────────────────────────────────
@@ -334,6 +334,74 @@ export async function getPaymentBatch(id: string): Promise<BnkPaymentBatch | nul
       },
     },
   }) as Promise<BnkPaymentBatch | null>
+}
+
+
+// --- Payment Hold / Release ---
+
+export async function holdPayment(
+  paymentId: string,
+  reason: string,
+  userId: string,
+): Promise<BnkPayment> {
+  const payment = await prisma.bnkPayment.findUnique({ where: { id: paymentId } })
+  if (!payment) throw new Error('NOT_FOUND')
+
+  if (payment.status !== 'PENDING') {
+    throw new Error('INVALID_STATUS')
+  }
+
+  const updated = await prisma.bnkPayment.update({
+    where: { id: paymentId },
+    data: {
+      status: 'ON_HOLD',
+      holdReason: reason,
+      heldAt: new Date(),
+    },
+  })
+
+  await createAuditLog({
+    userId,
+    action: 'payment.held',
+    resource: 'payment',
+    resourceId: paymentId,
+    before: { status: 'PENDING' },
+    after: { status: 'ON_HOLD', holdReason: reason },
+  })
+
+  return updated
+}
+
+export async function releasePayment(
+  paymentId: string,
+  userId: string,
+): Promise<BnkPayment> {
+  const payment = await prisma.bnkPayment.findUnique({ where: { id: paymentId } })
+  if (!payment) throw new Error('NOT_FOUND')
+
+  if (payment.status !== 'ON_HOLD') {
+    throw new Error('INVALID_STATUS')
+  }
+
+  const updated = await prisma.bnkPayment.update({
+    where: { id: paymentId },
+    data: {
+      status: 'PENDING',
+      holdReason: null,
+      heldAt: null,
+    },
+  })
+
+  await createAuditLog({
+    userId,
+    action: 'payment.released',
+    resource: 'payment',
+    resourceId: paymentId,
+    before: { status: 'ON_HOLD', holdReason: payment.holdReason },
+    after: { status: 'PENDING' },
+  })
+
+  return updated
 }
 
 export { deriveBatchStatus }

@@ -15,11 +15,14 @@
  *   7. DUPLICATE_INVOICE     -- same invoice number + provider must not already exist
  *   8. ADVISORY_FLAG         -- ADVISORY flags on participant/provider (warn only)
  *   9. SA_COMPLIANCE         -- advisory: ITEM_NOT_IN_SA, PRICE_ABOVE_SA_RATE, SA_BUDGET_EXCEEDED (warn only)
+ *  10. TOTAL_MISMATCH        -- advisory: invoice total != sum of line item totals (warn only)
+ *  11. PERIOD_BUDGET_EXCEEDED -- advisory: line total exceeds funding period budget (warn only)
  */
 
 import { prisma } from '@/lib/db'
 import { validateLineItemPrice } from '@/lib/modules/price-guide/price-guide'
 import { getActiveFlags, FlagSeverity } from '@/lib/modules/crm/flags'
+import { getActivePeriodBudget } from '@/lib/modules/plans/funding-periods'
 
 // -- Public Types -----------------------------------------------------------
 
@@ -296,6 +299,47 @@ export async function validateInvoiceForApproval(
         code: 'ADVISORY_FLAG',
         message: 'Unable to check service agreement compliance -- manual review recommended',
       })
+    }
+  }
+
+  // -- Check 10: TOTAL_MISMATCH (advisory warning) ---------------------------
+  const lineTotal = invoice.lines.reduce((sum, l) => sum + l.totalCents, 0)
+  const delta = invoice.totalCents - lineTotal
+  if (delta !== 0) {
+    const sign = delta > 0 ? '+' : ''
+    warnings.push({
+      code: 'TOTAL_MISMATCH',
+      message: `Invoice total ($${(invoice.totalCents / 100).toFixed(2)}) does not match sum of line items ($${(lineTotal / 100).toFixed(2)}). Delta: ${sign}$${(delta / 100).toFixed(2)}`,
+    })
+  }
+
+  // -- Check 11: PERIOD_BUDGET_EXCEEDED (advisory warning) ------------------
+  if (invoice.planId !== null) {
+    for (const line of invoice.lines) {
+      if (!line.categoryCode || !line.serviceDate) continue
+
+      try {
+        const periodBudget = await getActivePeriodBudget(
+          invoice.planId,
+          line.categoryCode,
+          line.serviceDate
+        )
+
+        if (periodBudget !== null && line.totalCents > periodBudget.remainingCents) {
+          warnings.push({
+            code: 'PERIOD_BUDGET_EXCEEDED',
+            message: `Line item $${(line.totalCents / 100).toFixed(2)} exceeds remaining period budget of $${(periodBudget.remainingCents / 100).toFixed(2)} for category ${line.categoryCode} (allocated: $${(periodBudget.allocatedCents / 100).toFixed(2)}, spent: $${(periodBudget.spentCents / 100).toFixed(2)})`,
+            lineId: line.id,
+          })
+        }
+      } catch {
+        // Period budget check failure must not block invoice approval
+        warnings.push({
+          code: 'PERIOD_BUDGET_EXCEEDED',
+          message: `Unable to check funding period budget for category ${line.categoryCode} -- manual review recommended`,
+          lineId: line.id,
+        })
+      }
     }
   }
 

@@ -12,6 +12,11 @@
  *   - addPeriodBudget: succeeds within budget line total
  *   - addPeriodBudget: rejects when allocation exceeds budget line total
  *   - updatePeriodBudget: succeeds with valid amount
+ *   - getActivePeriodBudget: returns budget info for matching period/category
+ *   - getActivePeriodBudget: returns null when no matching period
+ *   - getActivePeriodBudget: returns null when no matching budget
+ *   - getCumulativeReleasedBudget: sums across active periods up to date
+ *   - getCumulativeReleasedBudget: returns 0 when no periods exist
  */
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
@@ -28,13 +33,18 @@ jest.mock('@/lib/db', () => ({
     planPeriodBudget: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
+      aggregate: jest.fn(),
     },
     planPlan: {
       findUnique: jest.fn(),
     },
     planBudgetLine: {
       findUnique: jest.fn(),
+    },
+    invInvoiceLine: {
+      aggregate: jest.fn(),
     },
     coreAuditLog: {
       create: jest.fn(),
@@ -51,6 +61,8 @@ import {
   deleteFundingPeriod,
   addPeriodBudget,
   updatePeriodBudget,
+  getActivePeriodBudget,
+  getCumulativeReleasedBudget,
 } from '../funding-periods'
 
 // ── Type casts ─────────────────────────────────────────────────────────────
@@ -60,6 +72,7 @@ const mockPeriodBudget = prisma.planPeriodBudget as jest.Mocked<typeof prisma.pl
 const mockPlan = prisma.planPlan as jest.Mocked<typeof prisma.planPlan>
 const mockBudgetLine = prisma.planBudgetLine as jest.Mocked<typeof prisma.planBudgetLine>
 const mockAuditLog = prisma.coreAuditLog as jest.Mocked<typeof prisma.coreAuditLog>
+const mockInvoiceLine = prisma.invInvoiceLine as jest.Mocked<typeof prisma.invInvoiceLine>
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -324,5 +337,136 @@ describe('updatePeriodBudget', () => {
     ).rejects.toThrow('Period budget allocation cannot exceed the budget line total')
 
     expect(mockPeriodBudget.update).not.toHaveBeenCalled()
+  })
+})
+
+// ── getActivePeriodBudget ──────────────────────────────────────────────────
+
+describe('getActivePeriodBudget', () => {
+  beforeEach(clearAll)
+
+  it('returns budget info when a matching period and category exist', async () => {
+    mockFundingPeriod.findFirst.mockResolvedValue({
+      id: PERIOD_ID,
+      startDate: new Date('2025-07-01'),
+      endDate: new Date('2025-12-31'),
+    } as never)
+
+    mockPeriodBudget.findFirst.mockResolvedValue({
+      id: 'pb-001',
+      allocatedCents: 250000,
+      budgetLineId: BUDGET_LINE_ID,
+    } as never)
+
+    mockInvoiceLine.aggregate.mockResolvedValue({
+      _sum: { totalCents: 100000 },
+    } as never)
+
+    const result = await getActivePeriodBudget(PLAN_ID, '15', new Date('2025-09-15'))
+
+    expect(result).toEqual({
+      periodId: PERIOD_ID,
+      allocatedCents: 250000,
+      spentCents: 100000,
+      remainingCents: 150000,
+    })
+
+    expect(mockFundingPeriod.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          planId: PLAN_ID,
+          isActive: true,
+        }),
+      })
+    )
+  })
+
+  it('returns null when no active period contains the service date', async () => {
+    mockFundingPeriod.findFirst.mockResolvedValue(null)
+
+    const result = await getActivePeriodBudget(PLAN_ID, '15', new Date('2026-07-15'))
+
+    expect(result).toBeNull()
+    expect(mockPeriodBudget.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('returns null when period exists but no budget for the category', async () => {
+    mockFundingPeriod.findFirst.mockResolvedValue({
+      id: PERIOD_ID,
+      startDate: new Date('2025-07-01'),
+      endDate: new Date('2025-12-31'),
+    } as never)
+
+    mockPeriodBudget.findFirst.mockResolvedValue(null)
+
+    const result = await getActivePeriodBudget(PLAN_ID, '99', new Date('2025-09-15'))
+
+    expect(result).toBeNull()
+    expect(mockInvoiceLine.aggregate).not.toHaveBeenCalled()
+  })
+
+  it('returns remainingCents as 0 when spent exceeds allocated', async () => {
+    mockFundingPeriod.findFirst.mockResolvedValue({
+      id: PERIOD_ID,
+      startDate: new Date('2025-07-01'),
+      endDate: new Date('2025-12-31'),
+    } as never)
+
+    mockPeriodBudget.findFirst.mockResolvedValue({
+      id: 'pb-001',
+      allocatedCents: 100000,
+      budgetLineId: BUDGET_LINE_ID,
+    } as never)
+
+    mockInvoiceLine.aggregate.mockResolvedValue({
+      _sum: { totalCents: 150000 },
+    } as never)
+
+    const result = await getActivePeriodBudget(PLAN_ID, '15', new Date('2025-09-15'))
+
+    expect(result).toEqual({
+      periodId: PERIOD_ID,
+      allocatedCents: 100000,
+      spentCents: 150000,
+      remainingCents: 0,
+    })
+  })
+})
+
+// ── getCumulativeReleasedBudget ────────────────────────────────────────────
+
+describe('getCumulativeReleasedBudget', () => {
+  beforeEach(clearAll)
+
+  it('sums allocatedCents across active periods up to the given date', async () => {
+    mockPeriodBudget.aggregate.mockResolvedValue({
+      _sum: { allocatedCents: 750000 },
+    } as never)
+
+    const result = await getCumulativeReleasedBudget(PLAN_ID, '15', new Date('2026-03-15'))
+
+    expect(result).toBe(750000)
+
+    expect(mockPeriodBudget.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          budgetLine: { categoryCode: '15', planId: PLAN_ID },
+          fundingPeriod: expect.objectContaining({
+            planId: PLAN_ID,
+            isActive: true,
+          }),
+        }),
+      })
+    )
+  })
+
+  it('returns 0 when no periods exist for the category', async () => {
+    mockPeriodBudget.aggregate.mockResolvedValue({
+      _sum: { allocatedCents: null },
+    } as never)
+
+    const result = await getCumulativeReleasedBudget(PLAN_ID, '99', new Date('2026-03-15'))
+
+    expect(result).toBe(0)
   })
 })

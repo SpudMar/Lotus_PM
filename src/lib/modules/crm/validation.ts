@@ -16,6 +16,9 @@ export const createParticipantSchema = z.object({
   emergencyContactName: z.string().max(100).optional(),
   emergencyContactPhone: z.string().max(20).optional(),
   emergencyContactRel: z.string().max(50).optional(),
+  gender: z.string().max(50).optional(),
+  disability: z.string().max(500).optional(),
+  alias: z.string().max(100).optional(),
 })
 
 export const updateParticipantSchema = createParticipantSchema.partial()

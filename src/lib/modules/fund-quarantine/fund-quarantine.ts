@@ -286,6 +286,71 @@ export async function drawDown(quarantineId: string, amountCents: number, userId
   return updated
 }
 
+// ── Quarantine limit check ────────────────────────────────────────────────
+
+/**
+ * Result of checking quarantine limits for a provider on a budget line.
+ */
+export interface QuarantineCheckResult {
+  exceeded: boolean
+  limitType: 'SOFT' | 'HARD'
+  quarantineId: string
+  providerId: string
+  budgetLineId: string
+  quarantinedCents: number
+  usedCents: number
+  message: string
+}
+
+/**
+ * Check all active quarantines for a given provider + budget line.
+ * Returns results for any quarantine where usedCents + additionalCents
+ * would exceed quarantinedCents.
+ *
+ * Used by invoice validation to detect HARD limit breaches.
+ */
+export async function checkQuarantineLimits(
+  providerId: string,
+  budgetLineId: string,
+  additionalCents: number,
+): Promise<QuarantineCheckResult[]> {
+  const quarantines = await prisma.fqQuarantine.findMany({
+    where: {
+      providerId,
+      budgetLineId,
+      status: 'ACTIVE',
+    },
+    select: {
+      id: true,
+      providerId: true,
+      budgetLineId: true,
+      quarantinedCents: true,
+      usedCents: true,
+      limitType: true,
+    },
+  })
+
+  const results: QuarantineCheckResult[] = []
+
+  for (const q of quarantines) {
+    const projectedUsed = q.usedCents + additionalCents
+    if (projectedUsed > q.quarantinedCents) {
+      results.push({
+        exceeded: true,
+        limitType: q.limitType,
+        quarantineId: q.id,
+        providerId: q.providerId,
+        budgetLineId: q.budgetLineId,
+        quarantinedCents: q.quarantinedCents,
+        usedCents: q.usedCents,
+        message: `Provider quarantine ${q.limitType} limit exceeded: projected spend $${(projectedUsed / 100).toFixed(2)} exceeds quarantine of $${(q.quarantinedCents / 100).toFixed(2)}`,
+      })
+    }
+  }
+
+  return results
+}
+
 // ── Auto-create from Service Agreement ────────────────────────────────────
 
 /**

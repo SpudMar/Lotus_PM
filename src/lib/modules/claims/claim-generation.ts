@@ -21,6 +21,7 @@
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { processEvent } from '@/lib/modules/automation/engine'
+import { getCumulativeReleasedBudget } from '@/lib/modules/plans/funding-periods'
 
 // Types
 
@@ -40,6 +41,11 @@ export interface ClaimBatchEntry {
 export interface ClaimGenerationError {
   invoiceId: string
   error: string
+}
+
+export interface ClaimPeriodBudgetValidation {
+  valid: boolean
+  message?: string
 }
 
 // Claim reference generation
@@ -212,4 +218,91 @@ export async function generateClaimBatch(
   }
 
   return { claims: results, invoicesProcessed: invoices.length }
+}
+
+// ── Period Budget Validation for Claims (Wave 3) ──────────────────────────────
+
+/**
+ * Check whether a claim amount fits within the cumulative released period
+ * budget for the invoice's service date categories.
+ *
+ * This is an advisory check -- it does NOT block claim generation.
+ * Consumers can call this before generating claims to surface warnings.
+ *
+ * @param invoiceId - The invoice to validate against period budgets
+ * @returns { valid: boolean, message?: string }
+ */
+export async function validateClaimAgainstPeriodBudget(
+  invoiceId: string
+): Promise<ClaimPeriodBudgetValidation> {
+  const invoice = await prisma.invInvoice.findUnique({
+    where: { id: invoiceId },
+    select: {
+      planId: true,
+      totalCents: true,
+      lines: {
+        select: {
+          categoryCode: true,
+          serviceDate: true,
+          totalCents: true,
+        },
+      },
+    },
+  })
+
+  if (!invoice || !invoice.planId) {
+    return { valid: true }
+  }
+
+  // Group line totals by category code
+  const categoryTotals = new Map<string, { totalCents: number; serviceDate: Date }>()
+  for (const line of invoice.lines) {
+    const existing = categoryTotals.get(line.categoryCode)
+    if (existing) {
+      existing.totalCents += line.totalCents
+    } else {
+      categoryTotals.set(line.categoryCode, {
+        totalCents: line.totalCents,
+        serviceDate: line.serviceDate,
+      })
+    }
+  }
+
+  // Check each category against cumulative released budget
+  for (const [categoryCode, data] of categoryTotals) {
+    const releasedBudget = await getCumulativeReleasedBudget(
+      invoice.planId,
+      categoryCode,
+      data.serviceDate,
+    )
+
+    // If no period budgets exist for this category, skip (periods not set up)
+    if (releasedBudget === 0) continue
+
+    // Sum existing claimed amounts for this category and plan
+    const existingClaimed = await prisma.clmClaimLine.aggregate({
+      where: {
+        categoryCode,
+        claim: {
+          invoice: {
+            planId: invoice.planId,
+            deletedAt: null,
+          },
+          status: { not: 'REJECTED' },
+        },
+      },
+      _sum: { totalCents: true },
+    })
+
+    const existingSpent = existingClaimed._sum.totalCents ?? 0
+
+    if (existingSpent + data.totalCents > releasedBudget) {
+      return {
+        valid: false,
+        message: `Claim amount $${(data.totalCents / 100).toFixed(2)} for category ${categoryCode} would exceed cumulative released period budget of $${(releasedBudget / 100).toFixed(2)} (already claimed: $${(existingSpent / 100).toFixed(2)})`,
+      }
+    }
+  }
+
+  return { valid: true }
 }

@@ -15,7 +15,7 @@ jest.mock('@/lib/db', () => ({
     bnkPayment: {
       findMany: jest.fn(),
       updateMany: jest.fn(),
-      findFirst: jest.fn(),
+      findUnique: jest.fn(),      findFirst: jest.fn(),
       update: jest.fn(),
     },
     bnkAbaFile: {
@@ -39,6 +39,8 @@ import {
   markBatchConfirmed,
   listPaymentBatches,
   deriveBatchStatus,
+  holdPayment,
+  releasePayment,
 } from './payment-batches'
 
 const mockPrisma = prisma as jest.Mocked<typeof prisma>
@@ -403,6 +405,79 @@ describe('listPaymentBatches', () => {
         where: { confirmedAt: { not: null } },
       })
     )
+  })
+})
+
+
+// --- holdPayment ---
+
+describe('holdPayment', () => {
+  test('sets payment status to ON_HOLD with reason and heldAt', async () => {
+    const payment = makePayment({ status: 'PENDING' })
+    const held = { ...payment, status: 'ON_HOLD', holdReason: 'Suspicious amount', heldAt: new Date() }
+    ;(mockPrisma.bnkPayment.findUnique as jest.Mock).mockResolvedValue(payment)
+    ;(mockPrisma.bnkPayment.update as jest.Mock).mockResolvedValue(held)
+
+    const result = await holdPayment(payment.id, 'Suspicious amount', USER_ID)
+
+    expect(result.status).toBe('ON_HOLD')
+    expect(mockPrisma.bnkPayment.update).toHaveBeenCalledWith({
+      where: { id: payment.id },
+      data: {
+        status: 'ON_HOLD',
+        holdReason: 'Suspicious amount',
+        heldAt: expect.any(Date),
+      },
+    })
+  })
+
+  test('throws NOT_FOUND when payment does not exist', async () => {
+    ;(mockPrisma.bnkPayment.findUnique as jest.Mock).mockResolvedValue(null)
+
+    await expect(holdPayment('nonexistent', 'reason', USER_ID)).rejects.toThrow('NOT_FOUND')
+  })
+
+  test('throws INVALID_STATUS when payment is not PENDING', async () => {
+    const payment = makePayment({ status: 'IN_ABA_FILE' })
+    ;(mockPrisma.bnkPayment.findUnique as jest.Mock).mockResolvedValue(payment)
+
+    await expect(holdPayment(payment.id, 'reason', USER_ID)).rejects.toThrow('INVALID_STATUS')
+  })
+})
+
+// --- releasePayment ---
+
+describe('releasePayment', () => {
+  test('sets payment back to PENDING and clears hold fields', async () => {
+    const payment = makePayment({ status: 'ON_HOLD', holdReason: 'Testing', heldAt: new Date() })
+    const released = { ...payment, status: 'PENDING', holdReason: null, heldAt: null }
+    ;(mockPrisma.bnkPayment.findUnique as jest.Mock).mockResolvedValue(payment)
+    ;(mockPrisma.bnkPayment.update as jest.Mock).mockResolvedValue(released)
+
+    const result = await releasePayment(payment.id, USER_ID)
+
+    expect(result.status).toBe('PENDING')
+    expect(mockPrisma.bnkPayment.update).toHaveBeenCalledWith({
+      where: { id: payment.id },
+      data: {
+        status: 'PENDING',
+        holdReason: null,
+        heldAt: null,
+      },
+    })
+  })
+
+  test('throws NOT_FOUND when payment does not exist', async () => {
+    ;(mockPrisma.bnkPayment.findUnique as jest.Mock).mockResolvedValue(null)
+
+    await expect(releasePayment('nonexistent', USER_ID)).rejects.toThrow('NOT_FOUND')
+  })
+
+  test('throws INVALID_STATUS when payment is not ON_HOLD', async () => {
+    const payment = makePayment({ status: 'PENDING' })
+    ;(mockPrisma.bnkPayment.findUnique as jest.Mock).mockResolvedValue(payment)
+
+    await expect(releasePayment(payment.id, USER_ID)).rejects.toThrow('INVALID_STATUS')
   })
 })
 

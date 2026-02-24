@@ -29,6 +29,8 @@ describe('RBAC permissions', () => {
         'coordinator:read', 'coordinator:write',
         'service-agreements:read', 'service-agreements:write',
         'price-guide:read', 'price-guide:import',
+        'billing:read', 'billing:write',
+        'statements:read', 'statements:write',
       ]
       for (const perm of expectedPerms) {
         expect(hasPermission(role, perm as Permission)).toBe(true)

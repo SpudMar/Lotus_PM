@@ -1,0 +1,373 @@
+/**
+ * Statement Send Module
+ *
+ * Handles sending generated statements to participants via their
+ * preferred delivery method: EMAIL (PDF attachment via SES),
+ * SMS (presigned S3 link), or MAIL (office printing list).
+ *
+ * Uses existing notification modules — SES for email, ClickSend for SMS.
+ * PDF generation is handled inline (HTML-to-text statement format).
+ */
+
+import { prisma } from '@/lib/db'
+import { sendRawEmail } from '@/lib/modules/notifications/email-send'
+import { sendSms } from '@/lib/modules/notifications/notifications'
+import { generateDownloadUrl } from '@/lib/modules/documents/storage'
+import { formatAUD } from '@/lib/shared/currency'
+import { formatDateAU } from '@/lib/shared/dates'
+import type { StatementLineItem } from './statement-generation'
+import type { SesAttachment } from '@/lib/modules/notifications/ses-client'
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface SendStatementResult {
+  success: boolean
+  errorMessage?: string
+}
+
+export interface MailListEntry {
+  participantId: string
+  firstName: string
+  lastName: string
+  ndisNumber: string
+  address: string | null
+  suburb: string | null
+  state: string | null
+  postcode: string | null
+  statementId: string
+  periodStart: Date
+  periodEnd: Date
+  totalInvoicedCents: number
+  totalClaimedCents: number
+  totalPaidCents: number
+  budgetRemainingCents: number
+}
+
+// ─── HTML Statement Builder ──────────────────────────────────────────────────
+
+function buildStatementHtml(params: {
+  firstName: string
+  lastName: string
+  ndisNumber: string
+  periodStart: Date
+  periodEnd: Date
+  totalInvoicedCents: number
+  totalClaimedCents: number
+  totalPaidCents: number
+  budgetRemainingCents: number
+  lineItems: StatementLineItem[]
+}): string {
+  const lineRows = params.lineItems
+    .map(
+      (item) => `
+    <tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;">${formatDateAU(new Date(item.date))}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;">${escapeHtml(item.providerName)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;">${escapeHtml(item.invoiceNumber)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${formatAUD(item.invoicedCents)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;">${item.claimStatus}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${formatAUD(item.paidCents)}</td>
+    </tr>`
+    )
+    .join('')
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Participant Statement</title></head>
+<body style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto;padding:20px;">
+  <div style="text-align:center;margin-bottom:30px;">
+    <h1 style="color:#059669;margin:0;">Lotus Assist</h1>
+    <p style="color:#666;margin:5px 0;">Plan Management Statement</p>
+  </div>
+
+  <div style="margin-bottom:20px;">
+    <p><strong>Participant:</strong> ${escapeHtml(params.firstName)} ${escapeHtml(params.lastName)}</p>
+    <p><strong>NDIS Number:</strong> ${escapeHtml(params.ndisNumber)}</p>
+    <p><strong>Period:</strong> ${formatDateAU(params.periodStart)} - ${formatDateAU(params.periodEnd)}</p>
+  </div>
+
+  <div style="background:#f8f9fa;border-radius:8px;padding:20px;margin-bottom:20px;">
+    <h3 style="margin:0 0 10px 0;">Summary</h3>
+    <table style="width:100%;">
+      <tr><td>Total Invoiced:</td><td style="text-align:right;font-weight:bold;">${formatAUD(params.totalInvoicedCents)}</td></tr>
+      <tr><td>Total Claimed:</td><td style="text-align:right;font-weight:bold;">${formatAUD(params.totalClaimedCents)}</td></tr>
+      <tr><td>Total Paid:</td><td style="text-align:right;font-weight:bold;">${formatAUD(params.totalPaidCents)}</td></tr>
+      <tr><td style="border-top:2px solid #ccc;padding-top:8px;">Budget Remaining:</td><td style="text-align:right;font-weight:bold;border-top:2px solid #ccc;padding-top:8px;color:#059669;">${formatAUD(params.budgetRemainingCents)}</td></tr>
+    </table>
+  </div>
+
+  ${
+    params.lineItems.length > 0
+      ? `<h3>Invoice Details</h3>
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f0f0f0;">
+        <th style="padding:8px 10px;text-align:left;">Date</th>
+        <th style="padding:8px 10px;text-align:left;">Provider</th>
+        <th style="padding:8px 10px;text-align:left;">Invoice #</th>
+        <th style="padding:8px 10px;text-align:right;">Amount</th>
+        <th style="padding:8px 10px;text-align:left;">Status</th>
+        <th style="padding:8px 10px;text-align:right;">Paid</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${lineRows}
+    </tbody>
+  </table>`
+      : '<p style="color:#666;">No invoices for this period.</p>'
+  }
+
+  <div style="margin-top:30px;padding-top:15px;border-top:1px solid #eee;color:#999;font-size:12px;">
+    <p>This statement was generated by Lotus Assist Pty Ltd. If you have questions about your statement, please contact your plan manager.</p>
+  </div>
+</body>
+</html>`
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+// ─── Send via Email ──────────────────────────────────────────────────────────
+
+/**
+ * Send a statement via email with an HTML attachment.
+ * Uses the participant's statementEmail (override) or primary email.
+ */
+export async function sendStatementEmail(
+  statementId: string
+): Promise<SendStatementResult> {
+  const statement = await prisma.participantStatement.findFirst({
+    where: { id: statementId, deletedAt: null },
+    include: {
+      participant: {
+        select: {
+          firstName: true,
+          lastName: true,
+          ndisNumber: true,
+          email: true,
+          statementEmail: true,
+        },
+      },
+    },
+  })
+
+  if (!statement) {
+    return { success: false, errorMessage: 'Statement not found' }
+  }
+
+  const recipientEmail =
+    statement.participant.statementEmail ?? statement.participant.email
+  if (!recipientEmail) {
+    return { success: false, errorMessage: 'Participant has no email address' }
+  }
+
+  const lineItems = statement.lineItems as unknown as StatementLineItem[]
+
+  const html = buildStatementHtml({
+    firstName: statement.participant.firstName,
+    lastName: statement.participant.lastName,
+    ndisNumber: statement.participant.ndisNumber,
+    periodStart: statement.periodStart,
+    periodEnd: statement.periodEnd,
+    totalInvoicedCents: statement.totalInvoicedCents,
+    totalClaimedCents: statement.totalClaimedCents,
+    totalPaidCents: statement.totalPaidCents,
+    budgetRemainingCents: statement.budgetRemainingCents,
+    lineItems,
+  })
+
+  // Create a simple HTML attachment
+  const pdfBuffer = Buffer.from(html, 'utf-8')
+  const attachment: SesAttachment = {
+    filename: `statement-${formatDateAU(statement.periodStart).replace(/\//g, '-')}-to-${formatDateAU(statement.periodEnd).replace(/\//g, '-')}.html`,
+    content: pdfBuffer,
+    contentType: 'text/html',
+  }
+
+  try {
+    await sendRawEmail({
+      to: recipientEmail,
+      subject: `Your Plan Management Statement - ${formatDateAU(statement.periodStart)} to ${formatDateAU(statement.periodEnd)}`,
+      htmlBody: html,
+      attachments: [attachment],
+      participantId: statement.participantId,
+    })
+
+    await prisma.participantStatement.update({
+      where: { id: statementId },
+      data: { sentAt: new Date() },
+    })
+
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    return { success: false, errorMessage: msg }
+  }
+}
+
+// ─── Send via SMS ────────────────────────────────────────────────────────────
+
+/**
+ * Send a statement via SMS with a presigned download link.
+ * Uses the participant's statementPhone (override) or primary phone.
+ * The link requires DOB verification before showing the statement.
+ */
+export async function sendStatementSms(
+  statementId: string
+): Promise<SendStatementResult> {
+  const statement = await prisma.participantStatement.findFirst({
+    where: { id: statementId, deletedAt: null },
+    include: {
+      participant: {
+        select: {
+          firstName: true,
+          phone: true,
+          statementPhone: true,
+        },
+      },
+    },
+  })
+
+  if (!statement) {
+    return { success: false, errorMessage: 'Statement not found' }
+  }
+
+  const recipientPhone =
+    statement.participant.statementPhone ?? statement.participant.phone
+  if (!recipientPhone) {
+    return { success: false, errorMessage: 'Participant has no phone number' }
+  }
+
+  // Build a DOB-gated verification URL
+  const baseUrl = process.env['NEXTAUTH_URL'] ?? 'http://localhost:3000'
+  const verifyUrl = `${baseUrl}/api/statements/verify?sid=${statementId}`
+
+  const message = `Lotus PM: Your plan statement is ready. View it here: ${verifyUrl} (DOB verification required)`
+
+  try {
+    await sendSms(recipientPhone, message, {
+      participantId: statement.participantId,
+    })
+
+    await prisma.participantStatement.update({
+      where: { id: statementId },
+      data: { sentAt: new Date() },
+    })
+
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    return { success: false, errorMessage: msg }
+  }
+}
+
+// ─── Send Statement (auto-detect method) ─────────────────────────────────────
+
+/**
+ * Send a statement using its configured delivery method.
+ */
+export async function sendStatement(
+  statementId: string
+): Promise<SendStatementResult> {
+  const statement = await prisma.participantStatement.findFirst({
+    where: { id: statementId, deletedAt: null },
+    select: { deliveryMethod: true },
+  })
+
+  if (!statement) {
+    return { success: false, errorMessage: 'Statement not found' }
+  }
+
+  switch (statement.deliveryMethod) {
+    case 'EMAIL':
+      return sendStatementEmail(statementId)
+    case 'SMS':
+      return sendStatementSms(statementId)
+    case 'MAIL':
+      // MAIL delivery is not automated — it's handled by office staff
+      return { success: false, errorMessage: 'MAIL statements must be printed manually' }
+    default:
+      return { success: false, errorMessage: 'Unknown delivery method' }
+  }
+}
+
+// ─── Get Presigned URL for S3 ────────────────────────────────────────────────
+
+/**
+ * Get a presigned download URL for a statement's S3 file.
+ * Returns null if no s3Key is set (HTML-only statements).
+ */
+export async function getStatementDownloadUrl(
+  statementId: string
+): Promise<string | null> {
+  const statement = await prisma.participantStatement.findFirst({
+    where: { id: statementId, deletedAt: null },
+    select: { s3Key: true },
+  })
+
+  if (!statement?.s3Key) return null
+
+  const result = await generateDownloadUrl({ s3Key: statement.s3Key })
+  return result.downloadUrl
+}
+
+// ─── Mail List ───────────────────────────────────────────────────────────────
+
+/**
+ * Get the list of participants who need printed/mailed statements for a period.
+ * Returns participant details and statement data for office staff to print.
+ */
+export async function getMailList(
+  month: number,
+  year: number
+): Promise<MailListEntry[]> {
+  const periodStart = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0))
+  const periodEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999))
+
+  const statements = await prisma.participantStatement.findMany({
+    where: {
+      deliveryMethod: 'MAIL',
+      periodStart,
+      periodEnd,
+      deletedAt: null,
+    },
+    include: {
+      participant: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          ndisNumber: true,
+          address: true,
+          suburb: true,
+          state: true,
+          postcode: true,
+        },
+      },
+    },
+    orderBy: { participant: { lastName: 'asc' } },
+  })
+
+  return statements.map((s) => ({
+    participantId: s.participant.id,
+    firstName: s.participant.firstName,
+    lastName: s.participant.lastName,
+    ndisNumber: s.participant.ndisNumber,
+    address: s.participant.address,
+    suburb: s.participant.suburb,
+    state: s.participant.state,
+    postcode: s.participant.postcode,
+    statementId: s.id,
+    periodStart: s.periodStart,
+    periodEnd: s.periodEnd,
+    totalInvoicedCents: s.totalInvoicedCents,
+    totalClaimedCents: s.totalClaimedCents,
+    totalPaidCents: s.totalPaidCents,
+    budgetRemainingCents: s.budgetRemainingCents,
+  }))
+}

@@ -436,6 +436,88 @@ export async function submitBatch(
   return updated
 }
 
+
+// --- Cancel Claim ---
+
+export async function cancelClaim(
+  claimId: string,
+  userId: string,
+  reason?: string,
+) {
+  const claim = await prisma.clmClaim.findUnique({
+    where: { id: claimId },
+    include: {
+      lines: {
+        include: {
+          invoiceLine: {
+            select: { budgetLineId: true },
+          },
+        },
+      },
+    },
+  })
+
+  if (!claim) {
+    throw new Error('NOT_FOUND')
+  }
+
+  // Only PENDING or SUBMITTED claims can be cancelled
+  if (claim.status !== 'PENDING' && claim.status !== 'SUBMITTED') {
+    throw new Error('INVALID_STATUS')
+  }
+
+  // Reverse budget reservations
+  const budgetLineAdjustments = new Map<string, number>()
+  for (const line of claim.lines) {
+    const budgetLineId = line.invoiceLine?.budgetLineId
+    if (budgetLineId) {
+      const current = budgetLineAdjustments.get(budgetLineId) ?? 0
+      budgetLineAdjustments.set(budgetLineId, current + line.totalCents)
+    }
+  }
+
+  for (const [budgetLineId, amountCents] of budgetLineAdjustments) {
+    const budgetLine = await prisma.planBudgetLine.findUnique({
+      where: { id: budgetLineId },
+      select: { reservedCents: true },
+    })
+    if (budgetLine) {
+      const newReserved = Math.max(0, budgetLine.reservedCents - amountCents)
+      await prisma.planBudgetLine.update({
+        where: { id: budgetLineId },
+        data: { reservedCents: newReserved },
+      })
+    }
+  }
+
+  const updated = await prisma.clmClaim.update({
+    where: { id: claimId },
+    data: {
+      status: 'CANCELLED',
+    },
+    include: {
+      lines: true,
+    },
+  })
+
+  await createAuditLog({
+    userId,
+    action: 'claim.cancelled',
+    resource: 'claim',
+    resourceId: claimId,
+    before: { status: claim.status },
+    after: {
+      status: 'CANCELLED',
+      ...(reason ? { reason } : {}),
+      reversedBudgetLines: Array.from(budgetLineAdjustments.entries()).map(
+        ([blId, cents]) => ({ budgetLineId: blId, reversedCents: cents }),
+      ),
+    },
+  })
+
+  return updated
+}
+
 /** Get claims that are approved but not yet paid — ready for payment */
 export async function getClaimsReadyForPayment() {
   return prisma.clmClaim.findMany({
