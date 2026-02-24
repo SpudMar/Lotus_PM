@@ -17,6 +17,7 @@
  * REQ-015: Routing decisions enable < 5 business day processing requirement.
  */
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { processWithAI, type AIProcessingResult } from './ai-processor'
 import { validateInvoiceLines } from './invoice-validation'
@@ -63,7 +64,6 @@ export async function processInvoice(invoiceId: string): Promise<ProcessingResul
             id: true,
             name: true,
             abn: true,
-            providerType: true,
             isActive: true,
           },
         },
@@ -113,7 +113,7 @@ export async function processInvoice(invoiceId: string): Promise<ProcessingResul
       invoiceId,
       providerName: invoice.provider?.name ?? null,
       providerAbn: invoice.provider?.abn ?? null,
-      providerType: invoice.provider?.providerType ?? null,
+      providerType: null,
       participantName: invoice.participant
         ? `${invoice.participant.firstName} ${invoice.participant.lastName}`
         : null,
@@ -457,7 +457,7 @@ async function persistResult(
     where: { id: invoiceId },
     data: {
       processingCategory: category,
-      aiProcessingResult: aiResult ?? undefined,
+      aiProcessingResult: aiResult !== null ? (aiResult as unknown as Prisma.InputJsonValue) : undefined,
       processedAt: new Date(),
       // Set rejection reason on the invoice for AUTO_REJECTED
       ...(category === 'AUTO_REJECTED' && rejectionReason !== null
