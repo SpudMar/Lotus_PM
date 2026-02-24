@@ -62,7 +62,7 @@ describe('recordStatusTransition', () => {
     })
 
     const createCall = mockHistory.create.mock.calls[0]
-    const durationMs = (createCall as any)[0].data.durationMs
+    const durationMs = (createCall as unknown as [{ data: { durationMs: number } }])[0].data.durationMs
     expect(durationMs).toBeGreaterThan(55000)
     expect(durationMs).toBeLessThan(65000)
   })
@@ -120,7 +120,7 @@ describe('recordStatusTransition', () => {
     mockHistory.findFirst.mockResolvedValue(null)
     await recordStatusTransition({ invoiceId: 'inv-1', fromStatus: null, toStatus: 'RECEIVED' })
     const createCall = mockHistory.create.mock.calls[0]
-    const durationMs = (createCall as any)[0].data.durationMs
+    const durationMs = (createCall as unknown as [{ data: { durationMs: number | null } }])[0].data.durationMs
     expect(durationMs).toBeNull()
   })
 })
