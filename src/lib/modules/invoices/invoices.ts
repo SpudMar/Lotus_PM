@@ -140,6 +140,15 @@ export async function createInvoice(input: CreateInput, userId: string) {
 
   void recordInvoiceCreated(invoice.id)
 
+  // Fire-and-forget — never crash the main flow
+  processEvent('lotus-pm.invoices.received', {
+    invoiceId: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    participantId: invoice.participantId ?? '',
+    providerId: invoice.providerId ?? '',
+    totalCents: invoice.totalCents,
+  }).catch(() => {})
+
   return invoice
 }
 
@@ -384,6 +393,23 @@ export async function approveInvoice(
         where: { id: budgetLineId },
         data: { spentCents: { increment: amountCents } },
       })
+
+      // Budget alert — fire-and-forget if >= 80% utilisation
+      const budgetLine = updatedLines.find((l) => l.budgetLineId === budgetLineId)?.budgetLine
+      if (budgetLine && budgetLine.allocatedCents > 0) {
+        const usedPercent = Math.round(((budgetLine.spentCents + amountCents) / budgetLine.allocatedCents) * 100)
+        if (usedPercent >= 80) {
+          processEvent('lotus-pm.plans.budget-alert', {
+            participantId: invoice.participantId ?? '',
+            planId: budgetLine.planId,
+            categoryCode: budgetLine.categoryCode,
+            categoryName: budgetLine.categoryName,
+            usedPercent,
+            allocatedCents: budgetLine.allocatedCents,
+            spentCents: budgetLine.spentCents + amountCents,
+          }).catch(() => {})
+        }
+      }
     }
 
     await createAuditLog({
@@ -452,6 +478,23 @@ export async function approveInvoice(
       where: { id: budgetLineId },
       data: { spentCents: { increment: amountCents } },
     })
+
+    // Budget alert — fire-and-forget if >= 80% utilisation
+    const budgetLine = invoice.lines.find((l) => l.budgetLineId === budgetLineId)?.budgetLine
+    if (budgetLine && budgetLine.allocatedCents > 0) {
+      const usedPercent = Math.round(((budgetLine.spentCents + amountCents) / budgetLine.allocatedCents) * 100)
+      if (usedPercent >= 80) {
+        processEvent('lotus-pm.plans.budget-alert', {
+          participantId: invoice.participantId ?? '',
+          planId: budgetLine.planId,
+          categoryCode: budgetLine.categoryCode,
+          categoryName: budgetLine.categoryName,
+          usedPercent,
+          allocatedCents: budgetLine.allocatedCents,
+          spentCents: budgetLine.spentCents + amountCents,
+        }).catch(() => {})
+      }
+    }
   }
 
   await createAuditLog({

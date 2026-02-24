@@ -10,6 +10,7 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { prisma } from '@/lib/db'
 import { sendSesEmail } from './ses-client'
 import { interpolateTemplate } from './email-templates'
+import { processEvent } from '@/lib/modules/automation/engine'
 import type { NotifSentEmail } from '@prisma/client'
 import type { SesAttachment } from './ses-client'
 
@@ -195,6 +196,14 @@ export async function sendTemplatedEmail(
       triggeredById: opts.triggeredById,
     },
   })
+
+  // Fire-and-forget — never crash the main flow
+  processEvent('lotus-pm.emails.sent', {
+    templateId: opts.templateId,
+    recipientEmail: opts.recipientEmail,
+    participantId: opts.participantId ?? '',
+    subject,
+  }).catch(() => {})
 
   return sentEmail
 }

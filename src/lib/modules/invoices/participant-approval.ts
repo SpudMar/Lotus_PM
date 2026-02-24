@@ -215,11 +215,11 @@ export async function requestParticipantApproval(
   })
 
   // Emit event
-  void processEvent('invoices.approval-requested', {
+  processEvent('lotus-pm.invoices.approval-requested', {
     invoiceId,
     participantId: participant.id,
     userId: requestedById,
-  })
+  }).catch(() => {})
 
   return { token, invoice: updated }
 }
@@ -243,7 +243,7 @@ export async function processApprovalResponse(
   // 2. Fetch invoice
   const invoice = await prisma.invInvoice.findFirst({
     where: { id: invoiceId, deletedAt: null },
-  })
+  }).catch(() => {})
   if (!invoice) throw new Error('NOT_FOUND')
 
   // 3. Single-use check — compare stored hash
@@ -308,10 +308,10 @@ export async function processApprovalResponse(
   // Emit event
   const eventName =
     decision === 'APPROVED'
-      ? 'invoices.participant-approved'
-      : 'invoices.participant-rejected'
+      ? 'lotus-pm.invoices.participant-approved'
+      : 'lotus-pm.invoices.participant-rejected'
 
-  void processEvent(eventName, { invoiceId, participantId })
+  processEvent(eventName, { invoiceId, participantId }).catch(() => {})
 
   return updated
 }
@@ -354,10 +354,10 @@ export async function skipExpiredApprovals(): Promise<number> {
   // Emit events for each skipped invoice
   for (const inv of expired) {
     if (inv.participantId) {
-      void processEvent('invoices.approval-skipped', {
+      processEvent('lotus-pm.invoices.approval-skipped', {
         invoiceId: inv.id,
         participantId: inv.participantId,
-      })
+      }).catch(() => {})
     }
     void recordStatusTransition({
       invoiceId: inv.id,
