@@ -22,6 +22,7 @@ import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { processEvent } from '@/lib/modules/automation/engine'
 import { getCumulativeReleasedBudget } from '@/lib/modules/plans/funding-periods'
+import { recordStatusTransition } from '@/lib/modules/invoices/status-history'
 
 // Types
 
@@ -177,6 +178,12 @@ export async function generateClaimBatch(
     await prisma.invInvoice.update({
       where: { id: invoice.id },
       data: { status: 'CLAIMED' },
+    })
+
+    void recordStatusTransition({
+      invoiceId: invoice.id,
+      fromStatus: 'APPROVED',
+      toStatus: 'CLAIMED',
     })
 
     // REQ-017: Audit log -- no PII

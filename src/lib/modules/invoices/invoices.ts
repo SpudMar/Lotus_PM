@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { recordStatusTransition, recordInvoiceCreated } from './status-history'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { processEvent } from '@/lib/modules/automation/engine'
 import { validateInvoiceForApproval } from './invoice-validation'
@@ -137,6 +138,8 @@ export async function createInvoice(input: CreateInput, userId: string) {
     after: { invoiceNumber: invoice.invoiceNumber, totalCents: invoice.totalCents },
   })
 
+  void recordInvoiceCreated(invoice.id)
+
   return invoice
 }
 
@@ -271,6 +274,10 @@ export async function approveInvoice(
     const allRejected = lineDecisions.every((ld) => ld.decision === 'REJECT')
 
     if (allRejected) {
+      const currentStatusForPartialReject = await prisma.invInvoice.findFirst({
+        where: { id },
+        select: { status: true },
+      })
       const rejectedInvoice = await prisma.invInvoice.update({
         where: { id },
         data: {
@@ -283,6 +290,15 @@ export async function approveInvoice(
         include: {
           lines: { include: { budgetLine: true } },
         },
+      })
+
+      void recordStatusTransition({
+        invoiceId: id,
+        fromStatus: currentStatusForPartialReject?.status ?? null,
+        toStatus: 'REJECTED',
+        changedBy: userId,
+        holdCategory: 'OTHER',
+        holdReason: 'All line items rejected via per-line decisions',
       })
 
       await createAuditLog({
@@ -325,6 +341,10 @@ export async function approveInvoice(
       approvedSubtotalCents += effectiveCents
     }
 
+    const currentStatusBeforePartialApprove = await prisma.invInvoice.findFirst({
+      where: { id },
+      select: { status: true },
+    })
     const invoice = await prisma.invInvoice.update({
       where: { id },
       data: {
@@ -337,6 +357,13 @@ export async function approveInvoice(
       include: {
         lines: { include: { budgetLine: true } },
       },
+    })
+
+    void recordStatusTransition({
+      invoiceId: id,
+      fromStatus: currentStatusBeforePartialApprove?.status ?? null,
+      toStatus: 'APPROVED',
+      changedBy: userId,
     })
 
     // Increment budget line spent -- only for approved/adjusted lines
@@ -387,6 +414,10 @@ export async function approveInvoice(
 
   // Standard approval (no per-line decisions)
 
+  const currentStatusBeforeApprove = await prisma.invInvoice.findFirst({
+    where: { id },
+    select: { status: true },
+  })
   const invoice = await prisma.invInvoice.update({
     where: { id },
     data: {
@@ -398,6 +429,13 @@ export async function approveInvoice(
     include: {
       lines: { include: { budgetLine: true } },
     },
+  })
+
+  void recordStatusTransition({
+    invoiceId: id,
+    fromStatus: currentStatusBeforeApprove?.status ?? null,
+    toStatus: 'APPROVED',
+    changedBy: userId,
   })
 
   // Increment spentCents on budget lines for all approved invoice lines
@@ -440,6 +478,10 @@ export async function approveInvoice(
 }
 
 export async function rejectInvoice(id: string, userId: string, reason: string) {
+  const currentInvoice = await prisma.invInvoice.findFirst({
+    where: { id },
+    select: { status: true },
+  })
   const invoice = await prisma.invInvoice.update({
     where: { id },
     data: {
@@ -448,6 +490,15 @@ export async function rejectInvoice(id: string, userId: string, reason: string) 
       rejectedAt: new Date(),
       rejectionReason: reason,
     },
+  })
+
+  void recordStatusTransition({
+    invoiceId: id,
+    fromStatus: currentInvoice?.status ?? null,
+    toStatus: 'REJECTED',
+    changedBy: userId,
+    holdCategory: 'OTHER',
+    holdReason: reason,
   })
 
   await createAuditLog({
