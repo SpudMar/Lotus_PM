@@ -15,7 +15,6 @@ export async function listInvoices(params: {
   page: number
   pageSize: number
   status?: string
-  /** Multiple statuses — takes precedence over the single `status` field */
   statusIn?: string[]
   participantId?: string
   providerId?: string
@@ -26,7 +25,6 @@ export async function listInvoices(params: {
 }) {
   const { page, pageSize, status, statusIn, participantId, providerId, ingestSource, search, processingCategory } = params
 
-  // statusIn (array) takes precedence over single status
   const statusFilter =
     statusIn && statusIn.length > 0
       ? { status: { in: statusIn as InvStatusValue[] } }
@@ -108,7 +106,6 @@ export async function createInvoice(input: CreateInput, userId: string) {
       subtotalCents: input.subtotalCents,
       gstCents: input.gstCents,
       totalCents: input.totalCents,
-      // Optional fields for manual upload
       ...(input.s3Key ? { s3Key: input.s3Key } : {}),
       ...(input.s3Bucket ? { s3Bucket: input.s3Bucket } : {}),
       ...(input.ingestSource ? { ingestSource: input.ingestSource } : {}),
@@ -143,13 +140,7 @@ export async function createInvoice(input: CreateInput, userId: string) {
   return invoice
 }
 
-/**
- * Update a draft invoice (RECEIVED or PENDING_REVIEW only).
- * Replaces all invoice lines if provided.
- * When participantId/providerId change, updates linked CrmCorrespondence entries.
- */
 export async function updateInvoice(id: string, input: UpdateInput, userId: string) {
-  // Guard: only allow updates on drafts not yet approved/claimed
   const current = await prisma.invInvoice.findFirst({
     where: { id, deletedAt: null },
     select: { status: true, invoiceNumber: true, totalCents: true },
@@ -163,7 +154,6 @@ export async function updateInvoice(id: string, input: UpdateInput, userId: stri
     throw new Error('INVALID_STATUS')
   }
 
-  // Replace lines if provided
   if (input.lines !== undefined) {
     await prisma.invInvoiceLine.deleteMany({ where: { invoiceId: id } })
     if (input.lines.length > 0) {
@@ -199,7 +189,6 @@ export async function updateInvoice(id: string, input: UpdateInput, userId: stri
     include: { lines: true },
   })
 
-  // Update linked CrmCorrespondence entries when participant/provider are newly linked
   if (input.participantId !== undefined) {
     await prisma.crmCorrespondence.updateMany({
       where: { invoiceId: id, participantId: null },
@@ -241,11 +230,21 @@ export class ValidationFailedError extends Error {
   }
 }
 
+// ── Per-line decision types -- Wave 3 ─────────────────────────────────────
+
+export interface LineDecision {
+  lineId: string
+  decision: 'APPROVE' | 'REJECT' | 'ADJUST'
+  reason?: string              // required for REJECT
+  adjustedAmountCents?: number // required for ADJUST
+}
+
 export async function approveInvoice(
   id: string,
   userId: string,
   planId?: string,
-  force?: boolean
+  force?: boolean,
+  lineDecisions?: LineDecision[]
 ): Promise<ReturnType<typeof prisma.invInvoice.update>> {
   // Run all validation checks before approving
   const validationResult = await validateInvoiceForApproval(id)
@@ -253,6 +252,140 @@ export async function approveInvoice(
   if (validationResult.errors.length > 0 && force !== true) {
     throw new ValidationFailedError(validationResult)
   }
+
+  // Apply per-line decisions when provided
+  if (lineDecisions && lineDecisions.length > 0) {
+    // Persist each line decision
+    for (const ld of lineDecisions) {
+      await prisma.invInvoiceLine.update({
+        where: { id: ld.lineId },
+        data: {
+          lineStatus: ld.decision,
+          ...(ld.decision === 'REJECT' ? { rejectionReason: ld.reason ?? null } : {}),
+          ...(ld.decision === 'ADJUST' ? { adjustedAmountCents: ld.adjustedAmountCents ?? null } : {}),
+        },
+      })
+    }
+
+    // If every decision is REJECT, reject the whole invoice
+    const allRejected = lineDecisions.every((ld) => ld.decision === 'REJECT')
+
+    if (allRejected) {
+      const rejectedInvoice = await prisma.invInvoice.update({
+        where: { id },
+        data: {
+          status: 'REJECTED',
+          rejectedById: userId,
+          rejectedAt: new Date(),
+          rejectionReason: 'All line items rejected',
+          planId: planId ?? undefined,
+        },
+        include: {
+          lines: { include: { budgetLine: true } },
+        },
+      })
+
+      await createAuditLog({
+        userId,
+        action: 'invoice.rejected',
+        resource: 'invoice',
+        resourceId: id,
+        after: {
+          status: 'REJECTED',
+          reason: 'All line items rejected via per-line decisions',
+          lineDecisionCount: lineDecisions.length,
+        },
+      })
+
+      void processEvent('lotus-pm.invoices.rejected', {
+        invoiceId: id,
+        rejectedBy: userId,
+        reason: 'All line items rejected',
+      }).catch(() => {/* automation failures must not affect main flow */})
+
+      return rejectedInvoice
+    }
+
+    // Build lookup: lineId to decision
+    const decisionByLineId = new Map(lineDecisions.map((ld) => [ld.lineId, ld]))
+
+    // Re-fetch lines to compute approved total
+    const updatedLines = await prisma.invInvoiceLine.findMany({
+      where: { invoiceId: id },
+      include: { budgetLine: true },
+    })
+
+    // Approved subtotal: sum effective amounts for non-rejected lines with a decision
+    let approvedSubtotalCents = 0
+    for (const line of updatedLines) {
+      const ld = decisionByLineId.get(line.id)
+      if (!ld || ld.decision === 'REJECT') continue
+      const effectiveCents =
+        ld.decision === 'ADJUST' ? (ld.adjustedAmountCents ?? line.totalCents) : line.totalCents
+      approvedSubtotalCents += effectiveCents
+    }
+
+    const invoice = await prisma.invInvoice.update({
+      where: { id },
+      data: {
+        status: 'APPROVED',
+        approvedById: userId,
+        approvedAt: new Date(),
+        planId: planId ?? undefined,
+        subtotalCents: approvedSubtotalCents,
+      },
+      include: {
+        lines: { include: { budgetLine: true } },
+      },
+    })
+
+    // Increment budget line spent -- only for approved/adjusted lines
+    const budgetLineUpdatesPartial = new Map<string, number>()
+    for (const line of updatedLines) {
+      const ld = decisionByLineId.get(line.id)
+      if (!ld || ld.decision === 'REJECT') continue
+      if (line.budgetLineId !== null) {
+        const effectiveCents =
+          ld.decision === 'ADJUST' ? (ld.adjustedAmountCents ?? line.totalCents) : line.totalCents
+        const current = budgetLineUpdatesPartial.get(line.budgetLineId) ?? 0
+        budgetLineUpdatesPartial.set(line.budgetLineId, current + effectiveCents)
+      }
+    }
+
+    for (const [budgetLineId, amountCents] of budgetLineUpdatesPartial) {
+      await prisma.planBudgetLine.update({
+        where: { id: budgetLineId },
+        data: { spentCents: { increment: amountCents } },
+      })
+    }
+
+    await createAuditLog({
+      userId,
+      action: 'invoice.approved',
+      resource: 'invoice',
+      resourceId: id,
+      after: {
+        status: 'APPROVED',
+        approvedSubtotalCents,
+        ...(force === true ? { forced: true } : {}),
+        validationWarnings: validationResult.warnings.map((w) => w.code),
+        lineDecisionCount: lineDecisions.length,
+        rejectedLineCount: lineDecisions.filter((ld) => ld.decision === 'REJECT').length,
+        adjustedLineCount: lineDecisions.filter((ld) => ld.decision === 'ADJUST').length,
+      },
+    })
+
+    void processEvent('lotus-pm.invoices.approved', {
+      invoiceId: id,
+      amountCents: approvedSubtotalCents,
+      approvedBy: userId,
+      approvedAt: new Date().toISOString(),
+    }).catch(() => {/* automation failures must not affect main flow */})
+
+    return invoice
+  }
+
+  // Standard approval (no per-line decisions)
 
   const invoice = await prisma.invInvoice.update({
     where: { id },

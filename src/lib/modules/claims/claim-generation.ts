@@ -1,5 +1,5 @@
 /**
- * Bulk Claim Generation — creates NDIS claims from a batch of approved invoices.
+ * Bulk Claim Generation -- creates NDIS claims from a batch of approved invoices.
  *
  * Generates one ClmClaim per invoice. Each ClmClaimLine links back to the source
  * InvInvoiceLine via invoiceLineId and to the source InvInvoice via sourceInvoiceId.
@@ -9,6 +9,11 @@
  * This is the automated path; individual claim creation is handled by
  * createClaimFromInvoice() in claims.ts.
  *
+ * Wave 3: respects per-line decisions --
+ *   - Lines with lineStatus = 'REJECTED' are skipped entirely.
+ *   - Lines with lineStatus = 'ADJUSTED' use adjustedAmountCents instead of totalCents.
+ *   - Lines with lineStatus = 'APPROVED' or null/PENDING use totalCents.
+ *
  * REQ-011: All DB queries use ap-southeast-2.
  * REQ-017: No PII in audit logs.
  */
@@ -17,7 +22,7 @@ import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { processEvent } from '@/lib/modules/automation/engine'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// Types
 
 export interface ClaimBatchResult {
   claims: ClaimBatchEntry[]
@@ -37,7 +42,7 @@ export interface ClaimGenerationError {
   error: string
 }
 
-// ── Claim reference generation ─────────────────────────────────────────────────
+// Claim reference generation
 
 /**
  * Generate the next sequential claim reference in CLM-YYYYMMDD-XXXX format.
@@ -61,7 +66,7 @@ async function nextBatchClaimReference(): Promise<string> {
   return `${prefix}${String(seq + 1).padStart(4, '0')}`
 }
 
-// ── Main function ──────────────────────────────────────────────────────────────
+// Main function
 
 /**
  * Generate claims for a list of approved invoice IDs.
@@ -70,6 +75,11 @@ async function nextBatchClaimReference(): Promise<string> {
  * processing. Throws immediately with a descriptive error for validation
  * failures; use the partial-success wrapper in the bulk API route for
  * per-invoice error handling.
+ *
+ * Wave 3 per-line partial payments:
+ *   - Lines with lineStatus='REJECTED' are excluded from the claim.
+ *   - Lines with lineStatus='ADJUSTED' have their totalCents overridden by adjustedAmountCents.
+ *   - Lines with lineStatus='APPROVED', 'PENDING', or null are included at face value.
  *
  * @param invoiceIds - IDs of approved invoices to generate claims for
  * @param userId     - Staff user ID for audit log
@@ -111,10 +121,20 @@ export async function generateClaimBatch(
 
   for (const invoice of invoices) {
     const claimReference = await nextBatchClaimReference()
-    // Sum of all line totals — use invoice.totalCents as fallback if no lines
+
+    // Wave 3: filter out REJECTED lines; use adjustedAmountCents for ADJUSTED lines
+    const claimableLines = invoice.lines.filter((l) => l.lineStatus !== 'REJECTED')
+
+    // Calculate total from claimable lines only
     const claimedCents =
-      invoice.lines.length > 0
-        ? invoice.lines.reduce((sum, l) => sum + l.totalCents, 0)
+      claimableLines.length > 0
+        ? claimableLines.reduce((sum, l) => {
+            const effectiveCents =
+              l.lineStatus === 'ADJUSTED' && l.adjustedAmountCents !== null
+                ? l.adjustedAmountCents
+                : l.totalCents
+            return sum + effectiveCents
+          }, 0)
         : invoice.totalCents
 
     const claim = await prisma.clmClaim.create({
@@ -124,18 +144,24 @@ export async function generateClaimBatch(
         participantId: invoice.participantId,
         claimedCents,
         lines: {
-          create: invoice.lines.map((line) => ({
-            invoiceLineId: line.id,
-            sourceInvoiceId: invoice.id,
-            supportItemCode: line.supportItemCode,
-            supportItemName: line.supportItemName,
-            categoryCode: line.categoryCode,
-            serviceDate: line.serviceDate,
-            quantity: line.quantity,
-            unitPriceCents: line.unitPriceCents,
-            totalCents: line.totalCents,
-            gstCents: line.gstCents,
-          })),
+          create: claimableLines.map((line) => {
+            const effectiveCents =
+              line.lineStatus === 'ADJUSTED' && line.adjustedAmountCents !== null
+                ? line.adjustedAmountCents
+                : line.totalCents
+            return {
+              invoiceLineId: line.id,
+              sourceInvoiceId: invoice.id,
+              supportItemCode: line.supportItemCode,
+              supportItemName: line.supportItemName,
+              categoryCode: line.categoryCode,
+              serviceDate: line.serviceDate,
+              quantity: line.quantity,
+              unitPriceCents: line.unitPriceCents,
+              totalCents: effectiveCents,
+              gstCents: line.gstCents,
+            }
+          }),
         },
       },
       select: { id: true },
@@ -147,13 +173,19 @@ export async function generateClaimBatch(
       data: { status: 'CLAIMED' },
     })
 
-    // REQ-017: Audit log — no PII
+    // REQ-017: Audit log -- no PII
     await createAuditLog({
       userId,
       action: 'claim.batch-generated',
       resource: 'claim',
       resourceId: claim.id,
-      after: { claimReference, invoiceId: invoice.id, claimedCents },
+      after: {
+        claimReference,
+        invoiceId: invoice.id,
+        claimedCents,
+        includedLines: claimableLines.length,
+        skippedLines: invoice.lines.length - claimableLines.length,
+      },
     })
 
     // Fire-and-forget: automation rules (e.g. notify staff)
@@ -175,7 +207,7 @@ export async function generateClaimBatch(
       claimReference,
       participantName,
       totalCents: claimedCents,
-      lineCount: invoice.lines.length,
+      lineCount: claimableLines.length,
     })
   }
 

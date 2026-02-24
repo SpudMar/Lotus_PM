@@ -138,6 +138,17 @@ interface ActiveFlag {
   createdBy: { id: string; name: string }
 }
 
+
+// -- Per-line decision types -- Wave 3 ---
+
+type LineDecisionStatus = 'APPROVE' | 'REJECT' | 'ADJUST'
+
+interface LineDecisionState {
+  decision: LineDecisionStatus
+  reason?: string
+  adjustedAmountCents?: number
+}
+
 type FormLine = InvoiceLine
 
 // ── Match confidence helpers ───────────────────────────────────────────────────
@@ -297,7 +308,13 @@ export default function InvoiceReviewDetailPage({
   const [activeFlags, setActiveFlags] = useState<ActiveFlag[]>([])
   const [flagsAcknowledged, setFlagsAcknowledged] = useState(false)
 
-  // ── Data loading ──────────────────────────────────────────────────────────────
+  // Per-line decisions -- Wave 3
+  const [lineDecisions, setLineDecisions] = useState<Record<string, LineDecisionState>>({})
+  const [expandedLineAction, setExpandedLineAction] = useState<{ idx: number; type: 'reject' | 'adjust' } | null>(null)
+  const [pendingLineReason, setPendingLineReason] = useState('')
+  const [pendingLineAdjusted, setPendingLineAdjusted] = useState('')
+
+  // -- Data loading ---
 
   const loadInvoice = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -316,7 +333,10 @@ export default function InvoiceReviewDetailPage({
         setSelectedParticipantId(inv.participantId ?? '')
         setSelectedProviderId(inv.providerId ?? '')
         setSelectedPlanId(inv.planId ?? '')
+        setLineDecisions({})
+        setExpandedLineAction(null)
         setLines(inv.lines.map((l) => ({
+
           ...l,
           serviceDate: new Date(l.serviceDate).toISOString().split('T')[0] ?? '',
         })))
@@ -453,7 +473,19 @@ export default function InvoiceReviewDetailPage({
       const res = await fetch(`/api/invoices/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve', planId: selectedPlanId || undefined, force }),
+        body: JSON.stringify({
+          action: 'approve',
+          planId: selectedPlanId || undefined,
+          force,
+          lineDecisions: Object.keys(lineDecisions).length > 0
+            ? Object.entries(lineDecisions).map(([lineId, ld]) => ({
+                lineId,
+                decision: ld.decision,
+                reason: ld.reason,
+                adjustedAmountCents: ld.adjustedAmountCents,
+              }))
+            : undefined,
+        }),
       })
       if (res.ok) {
         router.push('/invoices/review')
@@ -651,7 +683,18 @@ export default function InvoiceReviewDetailPage({
                   title={!selectedParticipantId ? 'Assign a participant before approving' : undefined}
                 >
                   <CheckCircle className="mr-2 h-4 w-4" aria-hidden="true" />
-                  {actionLoading === 'approve' ? 'Approving...' : 'Approve'}
+                  {actionLoading === 'approve' ? 'Approving...' : (() => {
+                    const decisions = Object.values(lineDecisions)
+                    if (decisions.length === 0) return 'Approve'
+                    const approvedCount = decisions.filter((d) => d.decision === 'APPROVE').length
+                    const rejectedCount = decisions.filter((d) => d.decision === 'REJECT').length
+                    const adjustedCount = decisions.filter((d) => d.decision === 'ADJUST').length
+                    const parts: string[] = []
+                    if (approvedCount > 0) parts.push(approvedCount + ' approved')
+                    if (adjustedCount > 0) parts.push(adjustedCount + ' adjusted')
+                    if (rejectedCount > 0) parts.push(rejectedCount + ' rejected')
+                    return 'Approve Invoice (' + parts.join(', ') + ')'
+                  })()}
                 </Button>
               </>
             )}
@@ -1064,13 +1107,14 @@ export default function InvoiceReviewDetailPage({
                       <TableHead className="text-xs">Unit price</TableHead>
                       <TableHead className="text-xs">Total</TableHead>
                       <TableHead className="text-xs">Budget line</TableHead>
+                      {isEditable && <TableHead className="text-xs">Decision</TableHead>}
                       {isEditable && <TableHead className="w-8" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {lines.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={isEditable ? 8 : 7} className="py-4 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={isEditable ? 9 : 7} className="py-4 text-center text-sm text-muted-foreground">
                           No line items. Add support items above.
                         </TableCell>
                       </TableRow>
@@ -1082,7 +1126,15 @@ export default function InvoiceReviewDetailPage({
                         return (
                           <TableRow
                             key={idx}
-                            className={isMissingCode ? 'border-l-4 border-l-amber-400 bg-amber-50/50' : ''}
+                            className={(() => {
+                              const lineId = line.id
+                              const ld = lineId ? lineDecisions[lineId] : undefined
+                              if (ld?.decision === 'REJECT') return 'border-l-4 border-l-red-400 bg-red-50/40 opacity-75'
+                              if (ld?.decision === 'ADJUST') return 'border-l-4 border-l-amber-400 bg-amber-50/50'
+                              if (ld?.decision === 'APPROVE') return 'border-l-4 border-l-green-400 bg-green-50/40'
+                              if (isMissingCode) return 'border-l-4 border-l-amber-400 bg-amber-50/50'
+                              return ''
+                            })()}
                           >
                             <TableCell className="p-1">
                               {isEditable ? (
@@ -1216,6 +1268,109 @@ export default function InvoiceReviewDetailPage({
                                 </span>
                               )}
                             </TableCell>
+                            {isEditable && (
+                              <TableCell className="p-1">
+                                {(() => {
+                                  const lineId = line.id
+                                  if (!lineId) return null
+                                  const ld = lineDecisions[lineId]
+                                  const decisionStatus = ld?.decision ?? null
+                                  return (
+                                    <div className="flex flex-col gap-0.5 min-w-[130px]">
+                                      <div className="flex gap-0.5 flex-wrap">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setLineDecisions((prev) => ({ ...prev, [lineId]: { decision: 'APPROVE' } }))
+                                            if (expandedLineAction?.idx === idx) setExpandedLineAction(null)
+                                          }}
+                                          className={'rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ' + (decisionStatus === 'APPROVE' ? 'bg-green-600 text-white' : 'bg-green-100 text-green-800 hover:bg-green-200')}
+                                          aria-label="Approve this line"
+                                          title="Approve this line"
+                                        >
+                                          Approve
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExpandedLineAction(expandedLineAction?.idx === idx && expandedLineAction.type === 'reject' ? null : { idx, type: 'reject' })
+                                            setPendingLineReason(ld?.reason ?? '')
+                                          }}
+                                          className={'rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ' + (decisionStatus === 'REJECT' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800 hover:bg-red-200')}
+                                          aria-label="Reject this line"
+                                          title="Reject this line"
+                                        >
+                                          Reject
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExpandedLineAction(expandedLineAction?.idx === idx && expandedLineAction.type === 'adjust' ? null : { idx, type: 'adjust' })
+                                            setPendingLineAdjusted(ld?.adjustedAmountCents !== undefined ? centsToDollars(ld.adjustedAmountCents).toFixed(2) : centsToDollars(line.totalCents).toFixed(2))
+                                          }}
+                                          className={'rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ' + (decisionStatus === 'ADJUST' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800 hover:bg-amber-200')}
+                                          aria-label="Adjust this line amount"
+                                          title="Adjust this line amount"
+                                        >
+                                          Adjust
+                                        </button>
+                                      </div>
+                                      {expandedLineAction?.idx === idx && expandedLineAction.type === 'reject' && (
+                                        <div className="flex gap-1 mt-0.5">
+                                          <input
+                                            type="text"
+                                            className="h-6 w-28 rounded border border-red-300 px-1 text-[10px]"
+                                            placeholder="Reason..."
+                                            value={pendingLineReason}
+                                            onChange={(e) => setPendingLineReason(e.target.value)}
+                                            aria-label="Rejection reason"
+                                          />
+                                          <button
+                                            type="button"
+                                            className="rounded bg-red-600 px-1.5 text-[10px] text-white hover:bg-red-700"
+                                            onClick={() => {
+                                              setLineDecisions((prev) => ({ ...prev, [lineId]: { decision: 'REJECT', reason: pendingLineReason } }))
+                                              setExpandedLineAction(null)
+                                            }}
+                                          >
+                                            Set
+                                          </button>
+                                        </div>
+                                      )}
+                                      {expandedLineAction?.idx === idx && expandedLineAction.type === 'adjust' && (
+                                        <div className="flex gap-1 mt-0.5">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            className="h-6 w-20 rounded border border-amber-300 px-1 text-[10px]"
+                                            value={pendingLineAdjusted}
+                                            onChange={(e) => setPendingLineAdjusted(e.target.value)}
+                                            aria-label="Adjusted amount"
+                                          />
+                                          <button
+                                            type="button"
+                                            className="rounded bg-amber-600 px-1.5 text-[10px] text-white hover:bg-amber-700"
+                                            onClick={() => {
+                                              setLineDecisions((prev) => ({ ...prev, [lineId]: { decision: 'ADJUST', adjustedAmountCents: dollarsToCents(parseFloat(pendingLineAdjusted) || 0) } }))
+                                              setExpandedLineAction(null)
+                                            }}
+                                          >
+                                            Set
+                                          </button>
+                                        </div>
+                                      )}
+                                      {decisionStatus === 'REJECT' && ld?.reason && (
+                                        <span className="text-[9px] text-red-700 truncate max-w-[130px]" title={ld.reason}>{ld.reason}</span>
+                                      )}
+                                      {decisionStatus === 'ADJUST' && ld?.adjustedAmountCents !== undefined && (
+                                        <span className="text-[9px] text-amber-700">{'Adjusted: ' + formatAUD(ld.adjustedAmountCents)}</span>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
+                              </TableCell>
+                            )}
                             {isEditable && (
                               <TableCell className="p-1">
                                 <Button
