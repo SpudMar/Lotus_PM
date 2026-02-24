@@ -305,3 +305,133 @@ export async function validateInvoiceForApproval(
     warnings,
   }
 }
+
+// ── Per-line AI validation ─────────────────────────────────────────────────────
+
+import type { AIProcessingResult } from './ai-processor'
+
+export interface LineValidationResult {
+  lineIndex: number
+  status: 'VALID' | 'INVALID'
+  notes: string[]
+}
+
+/**
+ * Validate each AI-processed invoice line against price caps and plan date ranges.
+ *
+ * Called by processing-engine after AI extraction. Results are stored on
+ * InvInvoiceLine.validationStatus and .validationNotes.
+ *
+ * Checks:
+ *   1. Price cap — if AI suggested a code, totalCents must not exceed priceStandardCents * quantity
+ *   2. Date range — serviceDate must fall within participant's active plan period
+ */
+export async function validateInvoiceLines(
+  invoiceId: string,
+  aiResult: AIProcessingResult
+): Promise<LineValidationResult[]> {
+  // Load invoice lines + plan date range
+  const invoice = await prisma.invInvoice.findUnique({
+    where: { id: invoiceId },
+    select: {
+      participantId: true,
+      lines: {
+        select: {
+          id: true,
+          totalCents: true,
+          quantity: true,
+          serviceDate: true,
+        },
+        orderBy: { id: 'asc' },
+      },
+      plan: {
+        select: {
+          startDate: true,
+          endDate: true,
+          status: true,
+        },
+      },
+    },
+  })
+
+  if (!invoice) return []
+
+  // Load active NDIS price guide version for cap lookups
+  const now = new Date()
+  const activeVersion = await prisma.ndisPriceGuideVersion.findFirst({
+    where: {
+      effectiveFrom: { lte: now },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+    },
+    orderBy: { effectiveFrom: 'desc' },
+    select: { id: true },
+  })
+
+  const results: LineValidationResult[] = []
+
+  for (let i = 0; i < invoice.lines.length; i++) {
+    const dbLine = invoice.lines[i]
+    const aiLine = aiResult.lineItems[i]
+    const notes: string[] = []
+    let status: 'VALID' | 'INVALID' = 'VALID'
+
+    if (!dbLine) {
+      results.push({ lineIndex: i, status: 'VALID', notes: [] })
+      continue
+    }
+
+    // ── Check 1: Price cap ───────────────────────────────────────────────────
+    if (aiLine?.suggestedNdisCode && activeVersion) {
+      try {
+        const supportItem = await prisma.ndisSupportItem.findFirst({
+          where: {
+            versionId: activeVersion.id,
+            itemNumber: aiLine.suggestedNdisCode,
+          },
+          select: { priceStandardCents: true },
+        })
+
+        if (supportItem?.priceStandardCents !== null && supportItem?.priceStandardCents !== undefined) {
+          const capCents = supportItem.priceStandardCents
+          const quantity = dbLine.quantity ?? aiLine.quantity ?? 1
+          const allowedTotal = Math.ceil(capCents * quantity)
+
+          if (dbLine.totalCents > allowedTotal) {
+            status = 'INVALID'
+            notes.push(
+              `Price exceeds NDIS cap: $${(dbLine.totalCents / 100).toFixed(2)} > $${(allowedTotal / 100).toFixed(2)} ` +
+                `(cap $${(capCents / 100).toFixed(2)} x qty ${quantity})`
+            )
+          }
+        }
+      } catch {
+        // Price cap check failure is non-fatal — do not block
+        notes.push('Price cap could not be verified (price guide unavailable)')
+      }
+    }
+
+    // ── Check 2: Service date within plan period ─────────────────────────────
+    if (dbLine.serviceDate && invoice.plan) {
+      const { startDate, endDate } = invoice.plan
+      const svcDate = new Date(dbLine.serviceDate)
+
+      if (startDate && svcDate < startDate) {
+        status = 'INVALID'
+        notes.push(
+          `Service date ${svcDate.toISOString().slice(0, 10)} is before plan start ${startDate.toISOString().slice(0, 10)}`
+        )
+      }
+
+      if (endDate && svcDate > endDate) {
+        status = 'INVALID'
+        notes.push(
+          `Service date ${svcDate.toISOString().slice(0, 10)} is after plan end ${endDate.toISOString().slice(0, 10)}`
+        )
+      }
+    }
+
+    results.push({ lineIndex: i, status, notes })
+  }
+
+  return results
+}

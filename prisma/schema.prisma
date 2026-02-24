@@ -532,6 +532,11 @@ model InvInvoice {
   xeroInvoiceId   String?       // Xero Invoice GUID after sync
   xeroSyncedAt    DateTime?     // Timestamp of last successful Xero sync
 
+  // AI processing engine -- Wave 1
+  processingCategory    String?       // AUTO_APPROVED | PARTICIPANT_APPROVAL | NEEDS_CODES | NEEDS_REVIEW | AUTO_REJECTED
+  aiProcessingResult    Json?         // Full structured output from Bedrock Claude
+  processedAt           DateTime?     // When the processing engine completed
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   deletedAt       DateTime?     // Soft delete — REQ-010
@@ -544,6 +549,7 @@ model InvInvoice {
   @@index([providerId])
   @@index([status])
   @@index([receivedAt])
+  @@index([processingCategory])
   @@map("inv_invoices")
 }
 
@@ -590,6 +596,17 @@ model InvInvoiceLine {
   suggestedItemCode   String?  // system suggestion
   suggestedConfidence Float?   // 0.0-1.0
   userOverrideCode    String?  // if PM chose differently from suggestion
+
+  // AI processing engine -- Wave 1
+  aiSuggestedCode     String?  // AI-suggested NDIS support code
+  aiCodeConfidence    String?  // HIGH | MEDIUM | LOW | NONE
+  aiCodeReasoning     String?  // AI reasoning for the suggestion
+  validationStatus    String?  @default("PENDING") // PENDING | VALID | INVALID
+  validationNotes     Json?    // Per-line validation details
+  priceCapCents       Int?     // NDIS price cap for this support item
+  lineStatus          String?  @default("PENDING") // PENDING | APPROVED | REJECTED | ADJUSTED
+  rejectionReason     String?  // Reason for line rejection
+  adjustedAmountCents Int?     // Override amount if adjusted
 
   claimLines      ClmClaimLine[]
 

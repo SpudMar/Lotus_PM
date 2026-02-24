@@ -197,6 +197,7 @@ export class LotusPmAppStack extends cdk.Stack {
         DB_PASSWORD: ecs.Secret.fromSecretsManager(props.dbSecret, 'password'),
         DB_NAME: ecs.Secret.fromSecretsManager(props.dbSecret, 'dbname'),
         NEXTAUTH_SECRET: ecs.Secret.fromSecretsManager(appSecret, 'NEXTAUTH_SECRET'),
+        CRON_SECRET: ecs.Secret.fromSecretsManager(appSecret, 'CRON_SECRET'),
       },
       healthCheck: {
         command: ['CMD-SHELL', 'wget -qO- http://localhost:3000/api/health || exit 1'],

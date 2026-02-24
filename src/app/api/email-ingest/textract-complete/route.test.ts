@@ -7,6 +7,10 @@
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
+jest.mock('@/lib/modules/invoices/processing-engine', () => ({
+  processInvoice: jest.fn().mockResolvedValue({ category: 'NEEDS_REVIEW', validationErrors: [] }),
+}))
+
 jest.mock('@/lib/modules/invoices/email-ingest', () => ({
   // Use the real Zod schema for validation tests
   textractCompleteSchema: jest.requireActual('@/lib/modules/invoices/email-ingest')

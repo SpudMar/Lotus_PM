@@ -38,6 +38,10 @@ jest.mock('@/lib/modules/core/audit', () => ({
   createAuditLog: jest.fn(),
 }))
 
+jest.mock('./processing-engine', () => ({
+  processInvoice: jest.fn().mockResolvedValue({ category: 'NEEDS_REVIEW', validationErrors: [] }),
+}))
+
 // ── Imports (after mocks) ─────────────────────────────────────────────────────
 
 import { S3Client, GetObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3'
