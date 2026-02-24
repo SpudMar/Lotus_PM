@@ -1,14 +1,14 @@
 'use client'
 
+/**
+ * Provider portal profile page — premium redesign.
+ * Per-section edit mode (contact + banking separately).
+ */
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Shield, Lock, Loader2, CheckCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Loader2, CheckCircle } from 'lucide-react'
 
 interface ProviderProfile {
   id: string
@@ -26,21 +26,42 @@ interface ProviderProfile {
   providerStatus: string
 }
 
+function ProviderStatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    ACTIVE:           { label: 'Active',                          cls: 'bg-emerald-100 text-emerald-800 border border-emerald-300' },
+    INVITED:          { label: 'Invited — complete your profile', cls: 'bg-blue-100 text-blue-800 border border-blue-300' },
+    PENDING_APPROVAL: { label: 'Pending Approval',                cls: 'bg-amber-100 text-amber-800 border border-amber-300' },
+    SUSPENDED:        { label: 'Suspended — contact support',     cls: 'bg-red-100 text-red-800 border border-red-300' },
+  }
+  const cfg = map[status] ?? { label: status, cls: 'bg-stone-100 text-stone-700 border border-stone-200' }
+  return (
+    <span className={`inline-flex text-sm font-medium px-3 py-1 rounded-full ${cfg.cls}`}>
+      {cfg.label}
+    </span>
+  )
+}
+
 export default function ProviderProfilePage(): React.JSX.Element {
   const router = useRouter()
   const [profile, setProfile] = useState<ProviderProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
-  // Editable fields
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [address, setAddress] = useState('')
+  // Contact edit state
+  const [editingContact, setEditingContact] = useState(false)
+  const [contactName, setContactName] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+  const [contactAddress, setContactAddress] = useState('')
+
+  // Banking edit state
+  const [editingBanking, setEditingBanking] = useState(false)
   const [bankBsb, setBankBsb] = useState('')
   const [bankAccount, setBankAccount] = useState('')
   const [bankAccountName, setBankAccountName] = useState('')
+
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -50,15 +71,15 @@ export default function ProviderProfilePage(): React.JSX.Element {
         return
       }
       if (!res.ok) {
-        setError('Failed to load profile')
+        setFetchError('Failed to load profile')
         setLoading(false)
         return
       }
       const data = await res.json() as { provider: ProviderProfile }
       setProfile(data.provider)
-      setName(data.provider.name)
-      setPhone(data.provider.phone ?? '')
-      setAddress(data.provider.address ?? '')
+      setContactName(data.provider.name ?? '')
+      setContactPhone(data.provider.phone ?? '')
+      setContactAddress(data.provider.address ?? '')
       setBankBsb(data.provider.bankBsb ?? '')
       setBankAccount(data.provider.bankAccount ?? '')
       setBankAccountName(data.provider.bankAccountName ?? '')
@@ -66,37 +87,63 @@ export default function ProviderProfilePage(): React.JSX.Element {
     })()
   }, [router])
 
-  async function handleSave(e: React.FormEvent): Promise<void> {
+  async function handleSaveContact(e: React.FormEvent): Promise<void> {
     e.preventDefault()
-    setError(null)
-    setSuccess(false)
+    setSaveError(null)
+    setSaveSuccess(false)
     setSaving(true)
-
     try {
       const res = await fetch('/api/provider-portal/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: name || undefined,
-          phone: phone || null,
-          address: address || null,
+          name: contactName || undefined,
+          phone: contactPhone || null,
+          address: contactAddress || null,
+        }),
+      })
+      const data = await res.json() as { provider?: ProviderProfile; error?: string }
+      if (!res.ok) {
+        setSaveError(data.error ?? 'Save failed.')
+      } else {
+        if (data.provider) setProfile(data.provider)
+        setEditingContact(false)
+        setSaveSuccess(true)
+        setTimeout(() => setSaveSuccess(false), 3000)
+      }
+    } catch {
+      setSaveError('Network error.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleSaveBanking(e: React.FormEvent): Promise<void> {
+    e.preventDefault()
+    setSaveError(null)
+    setSaveSuccess(false)
+    setSaving(true)
+    try {
+      const res = await fetch('/api/provider-portal/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           bankBsb: bankBsb || null,
           bankAccount: bankAccount || null,
           bankAccountName: bankAccountName || null,
         }),
       })
-
+      const data = await res.json() as { provider?: ProviderProfile; error?: string }
       if (!res.ok) {
-        const data = await res.json() as { error?: string }
-        throw new Error(data.error ?? 'Failed to save')
+        setSaveError(data.error ?? 'Save failed.')
+      } else {
+        if (data.provider) setProfile(data.provider)
+        setEditingBanking(false)
+        setSaveSuccess(true)
+        setTimeout(() => setSaveSuccess(false), 3000)
       }
-
-      const data = await res.json() as { provider: ProviderProfile }
-      setProfile(data.provider)
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 3000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save changes')
+    } catch {
+      setSaveError('Network error.')
     } finally {
       setSaving(false)
     }
@@ -104,180 +151,205 @@ export default function ProviderProfilePage(): React.JSX.Element {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="h-8 w-8 text-emerald-600 animate-spin" />
+      <div className="flex justify-center items-center py-20 gap-3">
+        <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+        <span className="text-stone-500">Loading your profile…</span>
       </div>
     )
   }
 
-  if (!profile) {
+  if (fetchError || !profile) {
     return (
       <Alert variant="destructive">
-        <AlertDescription>{error ?? 'Profile not found'}</AlertDescription>
+        <AlertDescription>{fetchError ?? 'Profile not found'}</AlertDescription>
       </Alert>
     )
   }
 
+  const fields = [profile.name, profile.phone, profile.address, profile.bankBsb, profile.bankAccount, profile.bankAccountName]
+  const completed = fields.filter(Boolean).length
+  const completionPct = Math.round((completed / fields.length) * 100)
+
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
-        <p className="text-gray-500 mt-1">Manage your contact and payment details.</p>
+    <div className="animate-fade-in space-y-6 max-w-2xl">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-bold text-stone-900">{profile.name}</h1>
+          <div className="mt-2">
+            <ProviderStatusBadge status={profile.providerStatus} />
+          </div>
+        </div>
       </div>
 
-      {/* Read-only business info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Business Information</CardTitle>
-          <CardDescription>These details are set by Lotus Assist and cannot be changed here.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="font-medium text-gray-500">ABN</p>
-              <p className="text-gray-900">{profile.abn}</p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-500">GST Registered</p>
-              <p className="text-gray-900">
-                {profile.gstRegistered === true
-                  ? 'Yes'
-                  : profile.gstRegistered === false
-                  ? 'No'
-                  : '—'}
-              </p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-500">Registered Business Name</p>
-              <p className="text-gray-900">{profile.abnRegisteredName ?? '—'}</p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-500">Portal Status</p>
-              <Badge className="bg-emerald-100 text-emerald-800">
-                {profile.providerStatus}
-              </Badge>
-            </div>
-            <div>
-              <p className="font-medium text-gray-500">Login Email</p>
-              <p className="text-gray-900">{profile.email ?? '—'}</p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-500">ABN Status</p>
-              <p className="text-gray-900">{profile.abnStatus ?? '—'}</p>
-            </div>
+      {/* Profile completion */}
+      {completionPct < 100 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-amber-800 text-sm font-semibold">Complete your profile</p>
+            <p className="text-amber-700 text-sm font-bold">{completionPct}%</p>
           </div>
-        </CardContent>
-      </Card>
+          <div
+            className="w-full bg-amber-200 rounded-full h-2"
+            role="progressbar"
+            aria-valuenow={completionPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className="bg-amber-500 h-2 rounded-full transition-all duration-500"
+              style={{ width: `${completionPct}%` }}
+            />
+          </div>
+          <p className="text-amber-700 text-xs mt-2">Add your contact and banking details to receive faster payments.</p>
+        </div>
+      )}
 
-      {/* Editable contact + bank details */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Contact &amp; Banking Details</CardTitle>
-          <CardDescription>Keep these up to date to ensure payments are processed correctly.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {success && (
-            <Alert className="mb-4 border-emerald-200 bg-emerald-50">
-              <CheckCircle className="h-4 w-4 text-emerald-600" />
-              <AlertDescription className="text-emerald-800 ml-2">
-                Profile updated successfully.
-              </AlertDescription>
-            </Alert>
-          )}
+      {saveSuccess && (
+        <Alert className="border-emerald-200 bg-emerald-50">
+          <CheckCircle className="h-4 w-4 text-emerald-600" />
+          <AlertDescription className="text-emerald-800 ml-2">Profile updated successfully.</AlertDescription>
+        </Alert>
+      )}
 
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Business / Trading Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                required
-                disabled={saving}
-              />
-            </div>
+      {saveError && (
+        <Alert variant="destructive">
+          <AlertDescription>{saveError}</AlertDescription>
+        </Alert>
+      )}
 
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input
-                id="phone"
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="0412 345 678"
-                disabled={saving}
-              />
-            </div>
+      {/* Verified Information */}
+      <div className="bg-stone-50 border border-stone-200 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-5">
+          <Shield className="w-5 h-5 text-stone-400" aria-hidden="true" />
+          <h2 className="font-display font-semibold text-stone-700">Verified Information</h2>
+          <span className="ml-auto text-xs text-stone-400">Read-only</span>
+        </div>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <dt className="text-stone-500 font-medium mb-1">ABN</dt>
+            <dd className="text-stone-900 font-semibold">{profile.abn}</dd>
+          </div>
+          <div>
+            <dt className="text-stone-500 font-medium mb-1">Registered Business Name</dt>
+            <dd className="text-stone-900">{profile.abnRegisteredName ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-stone-500 font-medium mb-1">GST Registered</dt>
+            <dd className="text-stone-900">
+              {profile.gstRegistered === true ? 'Yes' : profile.gstRegistered === false ? 'No' : '—'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-stone-500 font-medium mb-1">Login Email</dt>
+            <dd className="text-stone-900">{profile.email ?? '—'}</dd>
+          </div>
+        </dl>
+      </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="address">Business Address</Label>
-              <Input
-                id="address"
-                value={address}
-                onChange={e => setAddress(e.target.value)}
-                placeholder="123 Main St, Sydney NSW 2000"
-                disabled={saving}
-              />
-            </div>
-
-            <div className="border-t pt-4">
-              <p className="text-sm font-medium text-gray-700 mb-3">Bank Account Details</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="bankBsb">BSB</Label>
-                  <Input
-                    id="bankBsb"
-                    value={bankBsb}
-                    onChange={e => setBankBsb(e.target.value)}
-                    placeholder="062-001"
-                    disabled={saving}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bankAccount">Account Number</Label>
-                  <Input
-                    id="bankAccount"
-                    value={bankAccount}
-                    onChange={e => setBankAccount(e.target.value)}
-                    placeholder="12345678"
-                    disabled={saving}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2 mt-4">
-                <Label htmlFor="bankAccountName">Account Name</Label>
-                <Input
-                  id="bankAccountName"
-                  value={bankAccountName}
-                  onChange={e => setBankAccountName(e.target.value)}
-                  placeholder="Sunrise Support Pty Ltd"
-                  disabled={saving}
-                />
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700"
-              disabled={saving}
+      {/* Contact Details */}
+      <div className="bg-white border border-stone-200 rounded-xl p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-display font-semibold text-stone-900">Contact Details</h2>
+          {!editingContact && (
+            <button
+              onClick={() => setEditingContact(true)}
+              className="text-sm text-emerald-600 hover:text-emerald-800 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
             >
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save changes'
-              )}
-            </Button>
+              Edit
+            </button>
+          )}
+        </div>
+        {editingContact ? (
+          <form onSubmit={(e) => void handleSaveContact(e)} className="space-y-4">
+            <div>
+              <label htmlFor="cName" className="block text-sm font-medium text-stone-700 mb-1">Business / Trading Name</label>
+              <input id="cName" type="text" value={contactName} onChange={e => setContactName(e.target.value)} required disabled={saving}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-60" />
+            </div>
+            <div>
+              <label htmlFor="cPhone" className="block text-sm font-medium text-stone-700 mb-1">Phone (optional)</label>
+              <input id="cPhone" type="tel" value={contactPhone} onChange={e => setContactPhone(e.target.value)} disabled={saving} placeholder="0412 345 678"
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-60" />
+            </div>
+            <div>
+              <label htmlFor="cAddress" className="block text-sm font-medium text-stone-700 mb-1">Business Address (optional)</label>
+              <textarea id="cAddress" value={contactAddress} onChange={e => setContactAddress(e.target.value)} disabled={saving} rows={2} placeholder="Street, Suburb, State, Postcode"
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none disabled:opacity-60" />
+            </div>
+            <div className="flex gap-3">
+              <button type="submit" disabled={saving} className="bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+              <button type="button" onClick={() => { setEditingContact(false); setContactName(profile.name ?? ''); setContactPhone(profile.phone ?? ''); setContactAddress(profile.address ?? '') }}
+                className="text-sm text-stone-500 hover:text-stone-700 px-4 py-2 rounded-lg hover:bg-stone-100 transition-colors">
+                Cancel
+              </button>
+            </div>
           </form>
-        </CardContent>
-      </Card>
+        ) : (
+          <dl className="space-y-4 text-sm">
+            <div><dt className="text-stone-500 font-medium mb-1">Business / Trading Name</dt><dd className="text-stone-900">{profile.name || '—'}</dd></div>
+            <div><dt className="text-stone-500 font-medium mb-1">Phone</dt><dd className="text-stone-900">{profile.phone || '—'}</dd></div>
+            <div><dt className="text-stone-500 font-medium mb-1">Business Address</dt><dd className="text-stone-900 whitespace-pre-line">{profile.address || '—'}</dd></div>
+          </dl>
+        )}
+      </div>
+
+      {/* Banking Details */}
+      <div className="bg-white border border-stone-200 rounded-xl p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-display font-semibold text-stone-900">Banking Details</h2>
+          {!editingBanking && (
+            <button onClick={() => setEditingBanking(true)}
+              className="text-sm text-emerald-600 hover:text-emerald-800 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded">
+              Edit
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mb-4 text-xs text-stone-400">
+          <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+          <span>Your banking details are encrypted and used only for NDIS payment processing</span>
+        </div>
+        {editingBanking ? (
+          <form onSubmit={(e) => void handleSaveBanking(e)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="bBsb" className="block text-sm font-medium text-stone-700 mb-1">BSB</label>
+                <input id="bBsb" type="text" value={bankBsb} onChange={e => setBankBsb(e.target.value)} placeholder="062-000" disabled={saving}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-60" />
+              </div>
+              <div>
+                <label htmlFor="bAcc" className="block text-sm font-medium text-stone-700 mb-1">Account Number</label>
+                <input id="bAcc" type="text" value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder="12345678" disabled={saving}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-60" />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="bName" className="block text-sm font-medium text-stone-700 mb-1">Account Name</label>
+              <input id="bName" type="text" value={bankAccountName} onChange={e => setBankAccountName(e.target.value)} placeholder="SUNRISE SUPPORT SERVICES PTY LTD" disabled={saving}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-60" />
+            </div>
+            <div className="flex gap-3">
+              <button type="submit" disabled={saving} className="bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+              <button type="button" onClick={() => { setEditingBanking(false); setBankBsb(profile.bankBsb ?? ''); setBankAccount(profile.bankAccount ?? ''); setBankAccountName(profile.bankAccountName ?? '') }}
+                className="text-sm text-stone-500 hover:text-stone-700 px-4 py-2 rounded-lg hover:bg-stone-100 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <dl className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-4">
+              <div><dt className="text-stone-500 font-medium mb-1">BSB</dt><dd className="text-stone-900 font-mono">{profile.bankBsb || '—'}</dd></div>
+              <div><dt className="text-stone-500 font-medium mb-1">Account Number</dt><dd className="text-stone-900 font-mono">{profile.bankAccount || '—'}</dd></div>
+            </div>
+            <div><dt className="text-stone-500 font-medium mb-1">Account Name</dt><dd className="text-stone-900">{profile.bankAccountName || '—'}</dd></div>
+          </dl>
+        )}
+      </div>
     </div>
   )
 }
