@@ -66,7 +66,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'System',
     items: [
-      { title: 'Comms', href: '/comms', icon: MessageSquare, permission: 'comms:read' },
+      { title: 'Notifications', href: '/notifications', icon: MessageSquare, permission: 'comms:read' },
       { title: 'Automation', href: '/automation', icon: Zap, permission: 'automation:read' },
       { title: 'Documents', href: '/documents', icon: FolderOpen, permission: 'documents:read' },
       { title: 'Settings', href: '/settings', icon: Settings, permission: 'settings:read' },
