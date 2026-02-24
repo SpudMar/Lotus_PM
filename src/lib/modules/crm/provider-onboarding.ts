@@ -166,8 +166,9 @@ export async function sendProviderInvite(
 }
 
 /**
- * Approve a provider — sets providerStatus to ACTIVE.
- * Called by PM after reviewing a PENDING_APPROVAL provider.
+ * Approve a provider — sets providerStatus to ACTIVE, creates a CoreUser
+ * with role PROVIDER (if one does not already exist), and links it via portalUserId.
+ * Sends an activation email so the provider knows they can log in.
  */
 export async function approveProvider(
   providerId: string,
@@ -175,18 +176,55 @@ export async function approveProvider(
 ): Promise<void> {
   const provider = await prisma.crmProvider.findFirst({
     where: { id: providerId, deletedAt: null },
-    select: { id: true, providerStatus: true },
+    select: { id: true, name: true, email: true, providerStatus: true },
   })
 
   if (!provider) {
     throw new Error('Provider not found')
   }
 
+  if (!provider.email) {
+    throw new Error('Provider has no email address — cannot create portal account')
+  }
+
   const before = { providerStatus: provider.providerStatus }
+
+  // Create or find the CoreUser portal account for this provider
+  const existingUser = await prisma.coreUser.findFirst({
+    where: { email: provider.email },
+    select: { id: true },
+  })
+
+  let portalUserId: string
+  if (existingUser) {
+    portalUserId = existingUser.id
+  } else {
+    const portalUser = await prisma.coreUser.create({
+      data: {
+        email: provider.email,
+        name: provider.name,
+        role: 'PROVIDER',
+      },
+      select: { id: true },
+    })
+    portalUserId = portalUser.id
+  }
 
   await prisma.crmProvider.update({
     where: { id: providerId },
-    data: { providerStatus: 'ACTIVE' },
+    data: {
+      providerStatus: 'ACTIVE',
+      portalUserId,
+    },
+  })
+
+  // Send activation email
+  const loginUrl = `${getAppBaseUrl()}/provider-portal/login`
+  await sendSesEmail({
+    to: provider.email,
+    subject: 'Your Lotus Assist provider account is now active',
+    htmlBody: buildActivationEmailHtml(provider.name, loginUrl),
+    textBody: buildActivationEmailText(provider.name, loginUrl),
   })
 
   await createAuditLog({
@@ -195,7 +233,7 @@ export async function approveProvider(
     resource: 'CrmProvider',
     resourceId: providerId,
     before,
-    after: { providerStatus: 'ACTIVE' },
+    after: { providerStatus: 'ACTIVE', portalUserId },
   })
 }
 
@@ -401,4 +439,46 @@ function buildPmNotificationHtml(
   </div>
 </body>
 </html>`
+}
+
+function buildActivationEmailHtml(providerName: string, loginUrl: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Your Lotus Assist Provider Account is Active</title></head>
+<body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="text-align:center;margin-bottom:30px;">
+    <h1 style="color:#059669;margin:0;">Lotus Assist</h1>
+    <p style="color:#666;margin:5px 0;">NDIS Plan Management</p>
+  </div>
+  <h2>Your provider account is now active</h2>
+  <p>Hi ${escapeHtml(providerName)},</p>
+  <p>Great news! Your Lotus Assist provider account has been approved and is now active.</p>
+  <p>You can log in to the provider portal to view your invoices, track payment history, and manage your profile.</p>
+  <div style="text-align:center;margin:30px 0;">
+    <a href="${escapeHtml(loginUrl)}"
+       style="background-color:#059669;color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-size:16px;font-weight:bold;display:inline-block;">
+      Log In to Provider Portal
+    </a>
+  </div>
+  <p style="color:#666;font-size:13px;">If the button does not work, copy and paste this link:<br>
+    <a href="${escapeHtml(loginUrl)}" style="color:#059669;">${escapeHtml(loginUrl)}</a>
+  </p>
+  <hr style="border:none;border-top:1px solid #eee;margin:30px 0;">
+  <p style="color:#999;font-size:12px;">
+    Lotus Assist Pty Ltd | NDIS Plan Management
+  </p>
+</body>
+</html>`
+}
+
+function buildActivationEmailText(providerName: string, loginUrl: string): string {
+  return `Hi ${providerName},
+
+Your Lotus Assist provider account has been approved and is now active.
+
+Log in to the provider portal to view your invoices, track payment history, and manage your profile:
+${loginUrl}
+
+---
+Lotus Assist Pty Ltd | NDIS Plan Management`
 }

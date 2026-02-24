@@ -198,4 +198,33 @@ describe('RBAC permissions', () => {
       expect(globalAdminPerms.length - pmPerms.length).toBe(3)
     })
   })
+
+  describe('Provider role', () => {
+    const role = ROLES.PROVIDER
+
+    test('has portal:read and portal:write', () => {
+      expect(hasPermission(role, 'portal:read')).toBe(true)
+      expect(hasPermission(role, 'portal:write')).toBe(true)
+    })
+
+    test('cannot access internal PM permissions', () => {
+      expect(hasPermission(role, 'invoices:read')).toBe(false)
+      expect(hasPermission(role, 'invoices:approve')).toBe(false)
+      expect(hasPermission(role, 'claims:read')).toBe(false)
+      expect(hasPermission(role, 'banking:read')).toBe(false)
+      expect(hasPermission(role, 'participants:read')).toBe(false)
+      expect(hasPermission(role, 'staff:read')).toBe(false)
+      expect(hasPermission(role, 'settings:read')).toBe(false)
+    })
+
+    test('Global Admin does NOT have portal permissions', () => {
+      expect(hasPermission(ROLES.GLOBAL_ADMIN, 'portal:read')).toBe(false)
+      expect(hasPermission(ROLES.GLOBAL_ADMIN, 'portal:write')).toBe(false)
+    })
+
+    test('Plan Manager does NOT have portal permissions', () => {
+      expect(hasPermission(ROLES.PLAN_MANAGER, 'portal:read')).toBe(false)
+      expect(hasPermission(ROLES.PLAN_MANAGER, 'portal:write')).toBe(false)
+    })
+  })
 })

@@ -10,6 +10,7 @@ export const ROLES = {
   ASSISTANT: 'ASSISTANT',
   PARTICIPANT: 'PARTICIPANT',
   SUPPORT_COORDINATOR: 'SUPPORT_COORDINATOR',
+  PROVIDER: 'PROVIDER',
 } as const
 
 export type Role = typeof ROLES[keyof typeof ROLES]
@@ -117,6 +118,10 @@ const PERMISSIONS = {
   // Statements -- participant financial statements
   'statements:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
   'statements:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
+
+  // Provider portal — exclusively for the PROVIDER role (external providers)
+  'portal:read': [ROLES.PROVIDER],
+  'portal:write': [ROLES.PROVIDER],
 } as const
 
 export type Permission = keyof typeof PERMISSIONS

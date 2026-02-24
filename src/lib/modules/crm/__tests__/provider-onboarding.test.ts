@@ -13,6 +13,10 @@ jest.mock('@/lib/db', () => ({
       update: jest.fn(),
       findMany: jest.fn(),
     },
+    coreUser: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
   },
 }))
 
@@ -196,25 +200,71 @@ describe('sendProviderInvite', () => {
 describe('approveProvider', () => {
   beforeEach(() => jest.clearAllMocks())
 
-  test('sets providerStatus to ACTIVE', async () => {
+  test('sets providerStatus to ACTIVE and creates CoreUser portal account', async () => {
     ;(mockPrisma.crmProvider.findFirst as jest.Mock).mockResolvedValue({
       id: 'prov-1',
+      name: 'Sunrise Support',
+      email: 'billing@sunrise.com.au',
       providerStatus: 'PENDING_APPROVAL',
     })
+    ;(mockPrisma.coreUser.findFirst as jest.Mock).mockResolvedValue(null)
+    ;(mockPrisma.coreUser.create as jest.Mock).mockResolvedValue({ id: 'user-portal-1' })
     ;(mockPrisma.crmProvider.update as jest.Mock).mockResolvedValue({})
 
     await approveProvider('prov-1', 'user-1')
 
-    expect(mockPrisma.crmProvider.update).toHaveBeenCalledWith({
-      where: { id: 'prov-1' },
-      data: { providerStatus: 'ACTIVE' },
-    })
+    expect(mockPrisma.coreUser.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          email: 'billing@sunrise.com.au',
+          name: 'Sunrise Support',
+          role: 'PROVIDER',
+        }),
+      })
+    )
+
+    expect(mockPrisma.crmProvider.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'prov-1' },
+        data: expect.objectContaining({
+          providerStatus: 'ACTIVE',
+          portalUserId: 'user-portal-1',
+        }),
+      })
+    )
+
+    expect(mockSendSesEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'billing@sunrise.com.au',
+        subject: 'Your Lotus Assist provider account is now active',
+      })
+    )
 
     expect(mockAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'APPROVE',
         before: { providerStatus: 'PENDING_APPROVAL' },
-        after: { providerStatus: 'ACTIVE' },
+        after: expect.objectContaining({ providerStatus: 'ACTIVE' }),
+      })
+    )
+  })
+
+  test('reuses existing CoreUser if email already registered', async () => {
+    ;(mockPrisma.crmProvider.findFirst as jest.Mock).mockResolvedValue({
+      id: 'prov-2',
+      name: 'Allied Health Co',
+      email: 'existing@allied.com.au',
+      providerStatus: 'PENDING_APPROVAL',
+    })
+    ;(mockPrisma.coreUser.findFirst as jest.Mock).mockResolvedValue({ id: 'user-existing-1' })
+    ;(mockPrisma.crmProvider.update as jest.Mock).mockResolvedValue({})
+
+    await approveProvider('prov-2', 'user-1')
+
+    expect(mockPrisma.coreUser.create).not.toHaveBeenCalled()
+    expect(mockPrisma.crmProvider.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ portalUserId: 'user-existing-1' }),
       })
     )
   })
@@ -222,6 +272,18 @@ describe('approveProvider', () => {
   test('throws when provider not found', async () => {
     ;(mockPrisma.crmProvider.findFirst as jest.Mock).mockResolvedValue(null)
     await expect(approveProvider('missing', 'user-1')).rejects.toThrow('Provider not found')
+  })
+
+  test('throws when provider has no email', async () => {
+    ;(mockPrisma.crmProvider.findFirst as jest.Mock).mockResolvedValue({
+      id: 'prov-3',
+      name: 'No Email Provider',
+      email: null,
+      providerStatus: 'PENDING_APPROVAL',
+    })
+    await expect(approveProvider('prov-3', 'user-1')).rejects.toThrow(
+      'Provider has no email address'
+    )
   })
 })
 
