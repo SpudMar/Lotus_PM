@@ -1,83 +1,53 @@
 /**
- * Provider portal layout.
- *
- * Public pages (register, complete-profile, login, auth/*):
- *   Simple header + footer, no authentication check.
- *
- * Protected pages (dashboard, invoices, payments, profile):
- *   Rendered server-side — session validation happens in the individual
- *   page components via requireProviderSession(). This layout provides
- *   the authenticated navigation shell.
- *
- * The layout does NOT redirect unauthenticated users — each protected page
- * does its own session check and redirects to /provider-portal/login if needed.
- * This keeps the layout stateless and avoids double-fetching the session.
+ * Provider portal layout — "Considered Clarity" premium redesign.
+ * Sticky top bar with Bricolage Grotesque display font.
+ * PortalNav handles desktop nav + mobile bottom tab bar.
  */
 
-import Link from 'next/link'
+import { Bricolage_Grotesque } from 'next/font/google'
+import type { ReactNode } from 'react'
+import { PortalNav } from '@/components/provider-portal/portal-nav'
+
+const bricolage = Bricolage_Grotesque({
+  subsets: ['latin'],
+  variable: '--font-display',
+  weight: ['400', '500', '600', '700', '800'],
+})
 
 export default function ProviderPortalLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: ReactNode
 }): React.JSX.Element {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
-      {/* Portal header */}
-      <header className="border-b border-emerald-100 bg-white shadow-sm">
-        <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <svg
-              viewBox="0 0 32 32"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-8 w-8 text-emerald-600"
-              aria-hidden="true"
-            >
-              <path d="M16 4C16 4 12 10 12 16C12 22 16 26 16 26C16 26 20 22 20 16C20 10 16 4 16 4Z" fill="currentColor" opacity="0.9" />
-              <path d="M8 10C8 10 6 16 8 20C10 24 14 26 14 26C14 26 12 20 12 16C12 12 8 10 8 10Z" fill="currentColor" opacity="0.6" />
-              <path d="M24 10C24 10 26 16 24 20C22 24 18 26 18 26C18 26 20 20 20 16C20 12 24 10 24 10Z" fill="currentColor" opacity="0.6" />
-            </svg>
+    <div className={`${bricolage.variable} min-h-screen bg-stone-50 flex flex-col`}>
+      <header className="sticky top-0 z-30 bg-white border-b border-stone-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          {/* Logo */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 3C12 3 5 8 5 14a7 7 0 0014 0c0-6-7-11-7-11z" fill="white" opacity="0.9"/>
+                <path d="M12 3C12 3 12 10 12 17" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </div>
             <div>
-              <p className="font-bold text-gray-900">Lotus Assist</p>
-              <p className="text-xs text-gray-500">Provider Portal</p>
+              <span className="font-display font-bold text-stone-900 text-lg leading-none tracking-tight">Lotus Assist</span>
+              <span className="block text-[10px] text-emerald-600 font-semibold uppercase tracking-[0.12em] leading-none mt-0.5">Provider Portal</span>
             </div>
           </div>
-
-          <nav className="hidden md:flex items-center gap-6 text-sm">
-            <Link href="/provider-portal/dashboard" className="text-gray-600 hover:text-emerald-700 font-medium">
-              Dashboard
-            </Link>
-            <Link href="/provider-portal/invoices" className="text-gray-600 hover:text-emerald-700 font-medium">
-              My Invoices
-            </Link>
-            <Link href="/provider-portal/payments" className="text-gray-600 hover:text-emerald-700 font-medium">
-              Payments
-            </Link>
-            <Link href="/provider-portal/profile" className="text-gray-600 hover:text-emerald-700 font-medium">
-              Profile
-            </Link>
-            <Link
-              href="/api/auth/signout"
-              className="text-gray-500 hover:text-red-600 font-medium"
-            >
-              Sign Out
-            </Link>
-          </nav>
+          {/* Desktop nav + mobile bottom tab bar */}
+          <PortalNav />
         </div>
       </header>
-
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8">
         {children}
       </main>
-
-      <footer className="border-t border-emerald-100 bg-white mt-10">
-        <div className="mx-auto max-w-6xl px-4 py-4 text-center text-sm text-gray-500">
-          Lotus Assist Pty Ltd · NDIS Plan Management ·{' '}
-          <a href="mailto:support@lotusassist.com.au" className="text-emerald-600 hover:underline">
-            support@lotusassist.com.au
-          </a>
-        </div>
+      <footer className="text-center text-xs text-stone-400 py-5 border-t border-stone-100">
+        Lotus Assist Pty Ltd · NDIS Plan Management · Questions?{' '}
+        <a href="mailto:support@lotusassist.com.au" className="underline hover:text-stone-600">
+          support@lotusassist.com.au
+        </a>
       </footer>
     </div>
   )
