@@ -12,7 +12,7 @@ describe('RBAC permissions', () => {
       // Verify against a known exhaustive list of all permissions
       const expectedPerms = [
         'participants:read', 'participants:write', 'participants:delete',
-        'providers:read', 'providers:write',
+        'providers:read', 'providers:write', 'providers:approve',
         'plans:read', 'plans:write',
         'invoices:read', 'invoices:write', 'invoices:approve', 'invoices:reject',
         'claims:read', 'claims:write', 'claims:submit', 'claims:outcome',

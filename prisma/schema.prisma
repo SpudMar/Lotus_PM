@@ -215,15 +215,15 @@ model CrmParticipant {
 }
 
 model CrmProvider {
-  id              String    @id @default(cuid())
+  id              String         @id @default(cuid())
   name            String
-  abn             String    @unique
+  abn             String         @unique
   email           String?
   phone           String?
   address         String?
 
   // NDIS provider registration
-  ndisRegistered  Boolean   @default(true)
+  ndisRegistered  Boolean        @default(true)
   registrationNo  String?
 
   // Bank details for ABA payment files
@@ -231,9 +231,20 @@ model CrmProvider {
   bankAccount     String?
   bankAccountName String?
 
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  // Onboarding lifecycle
+  providerStatus    ProviderStatus @default(ACTIVE)
+  inviteToken       String?        @unique
+  inviteExpiresAt   DateTime?
+  portalUserId      String?        @unique
+
+  // ABR (Australian Business Register) data
+  abnStatus         String?        // "Active" / "Cancelled" from ABR
+  abnRegisteredName String?        // Legal name from ABR
+  gstRegistered     Boolean?
+
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
   deletedAt       DateTime?
 
   // Relations
@@ -287,6 +298,15 @@ model CrmCommLog {
   @@index([participantId])
   @@index([providerId])
   @@map("crm_comm_logs")
+}
+
+
+enum ProviderStatus {
+  DRAFT            // Created by PM from invoice, not yet invited
+  INVITED          // Invite sent, awaiting self-registration completion
+  PENDING_APPROVAL // Profile complete, awaiting PM approval
+  ACTIVE           // Live - invoices match, portal access enabled
+  SUSPENDED        // Temporarily blocked
 }
 
 enum CommType {

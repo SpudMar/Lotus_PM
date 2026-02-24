@@ -32,9 +32,10 @@ const PERMISSIONS = {
   'participants:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'participants:delete': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
 
-  // Providers — Assistants can create/edit (data entry)
+  // Providers — Assistants can create/edit (data entry); PM+ can approve onboarding
   'providers:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
   'providers:write': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
+  'providers:approve': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER],
 
   // Plans & budgets — Assistants can create/edit plans (plan entry)
   'plans:read': [ROLES.GLOBAL_ADMIN, ROLES.PLAN_MANAGER, ROLES.ASSISTANT],
