@@ -36,6 +36,8 @@ interface NavItem {
   permission?: Permission
   /** If true, show triage badge count next to this item */
   showTriageBadge?: boolean
+  /** If true, show pending providers badge count next to this item */
+  showPendingBadge?: boolean
 }
 
 interface NavGroup {
@@ -51,6 +53,7 @@ const navGroups: NavGroup[] = [
       { title: 'Participants', href: '/participants', icon: Users, permission: 'participants:read' },
       { title: 'Onboarding', href: '/participants/onboarding', icon: ClipboardList, permission: 'participants:read' },
       { title: 'Providers', href: '/providers', icon: Building2, permission: 'providers:read' },
+      { title: 'Pending Approval', href: '/providers/pending', icon: ClipboardList, permission: 'providers:approve', showPendingBadge: true },
       { title: 'Plans', href: '/plans', icon: FileText, permission: 'plans:read' },
       { title: 'Agreements', href: '/service-agreements', icon: Handshake, permission: 'service-agreements:read' },
       { title: 'Coordinators', href: '/coordinators', icon: UserCheck, permission: 'coordinator:read' },
@@ -124,6 +127,7 @@ interface SidebarProps {
 export function Sidebar({ role }: SidebarProps): React.JSX.Element {
   const pathname = usePathname()
   const [triageCount, setTriageCount] = useState<number>(0)
+  const [pendingCount, setPendingCount] = useState<number>(0)
 
   useEffect(() => {
     if (!hasPermission(role, 'invoices:read')) return
@@ -131,6 +135,16 @@ export function Sidebar({ role }: SidebarProps): React.JSX.Element {
       .then((r) => r.json())
       .then((j: { data?: { count: number } }) => {
         if (j.data?.count !== undefined) setTriageCount(j.data.count)
+      })
+      .catch(() => null)
+  }, [role])
+
+  useEffect(() => {
+    if (!hasPermission(role, 'providers:approve')) return
+    void fetch('/api/crm/providers/pending')
+      .then((r) => r.json())
+      .then((j: { data?: unknown[] }) => {
+        if (Array.isArray(j.data)) setPendingCount(j.data.length)
       })
       .catch(() => null)
   }, [role])
@@ -145,6 +159,12 @@ export function Sidebar({ role }: SidebarProps): React.JSX.Element {
     if (item.href === '/participants') {
       return pathname === '/participants' || (
         pathname.startsWith('/participants/') && !pathname.startsWith('/participants/onboarding')
+      )
+    }
+    // Avoid providers/pending matching providers
+    if (item.href === '/providers') {
+      return pathname === '/providers' || (
+        pathname.startsWith('/providers/') && !pathname.startsWith('/providers/pending')
       )
     }
     return pathname === item.href || pathname.startsWith(item.href + '/')
@@ -209,6 +229,14 @@ export function Sidebar({ role }: SidebarProps): React.JSX.Element {
                             aria-label={`${triageCount} pending email invoices`}
                           >
                             {triageCount > 99 ? '99+' : triageCount}
+                          </span>
+                        )}
+                        {item.showPendingBadge && pendingCount > 0 && (
+                          <span
+                            className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1.5 text-[10px] font-bold text-white"
+                            aria-label={`${pendingCount} providers pending approval`}
+                          >
+                            {pendingCount > 99 ? '99+' : pendingCount}
                           </span>
                         )}
                       </Link>

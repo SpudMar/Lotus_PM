@@ -35,7 +35,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Save, CheckCircle, XCircle, Flag, Plus, Trash2, FileWarning, AlertCircle, AlertTriangle, ShieldAlert, Mail, Upload, Zap } from 'lucide-react'
+import { ArrowLeft, Save, CheckCircle, XCircle, Flag, Plus, Trash2, FileWarning, AlertCircle, AlertTriangle, ShieldAlert, Mail, Upload, Zap, Building2 } from 'lucide-react'
 import { formatDateAU } from '@/lib/shared/dates'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
 
@@ -258,6 +258,113 @@ function computeAttentionItems(
   return items
 }
 
+
+// ── Create Provider from Invoice inline form ──────────────────────────────────
+
+function CreateProviderFromInvoiceForm({
+  invoiceId,
+  onCreated,
+  onCancel,
+}: {
+  invoiceId: string
+  onCreated: (providerId: string) => void
+  onCancel: () => void
+}): React.JSX.Element {
+  const [abn, setAbn] = useState('')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [abnInfo, setAbnInfo] = useState<{ entityName: string; abnStatus: string } | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  async function handleAbnBlur(): Promise<void> {
+    const clean = abn.replace(/\s/g, '')
+    if (clean.length !== 11) return
+    try {
+      const res = await fetch(`/api/crm/providers/abn-lookup?abn=${clean}`)
+      if (res.status === 503) return // ABR not configured — skip
+      if (!res.ok) return
+      const json = (await res.json()) as { data: { entityName: string; abnStatus: string } | null }
+      if (json.data) {
+        setAbnInfo(json.data)
+        if (!name) setName(json.data.entityName)
+      }
+    } catch {
+      // ABR lookup failure is non-fatal
+    }
+  }
+
+  async function handleCreate(): Promise<void> {
+    setCreating(true)
+    setFormError(null)
+    try {
+      const res = await fetch('/api/crm/providers/create-from-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ abn: abn || undefined, name: name || undefined, email: email || undefined, invoiceId }),
+      })
+      const json = (await res.json()) as { data?: { providerId: string }; error?: string }
+      if (!res.ok) {
+        setFormError(json.error ?? 'Failed to create provider.')
+        return
+      }
+      if (json.data?.providerId) {
+        onCreated(json.data.providerId)
+      }
+    } catch {
+      setFormError('Network error — please try again.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="cp-abn">ABN (optional)</Label>
+        <Input
+          id="cp-abn"
+          placeholder="e.g. 51 824 753 556"
+          value={abn}
+          onChange={(e) => setAbn(e.target.value)}
+          onBlur={() => void handleAbnBlur()}
+        />
+        {abnInfo && (
+          <p className="text-xs text-emerald-600">{abnInfo.entityName} ({abnInfo.abnStatus})</p>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="cp-name">Business Name</Label>
+        <Input
+          id="cp-name"
+          placeholder="Provider name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="cp-email">Email (optional)</Label>
+        <Input
+          id="cp-email"
+          type="email"
+          placeholder="invoices@provider.com.au"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
+      {formError && <p className="text-sm text-red-600">{formError}</p>}
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel} disabled={creating}>
+          Cancel
+        </Button>
+        <Button onClick={() => void handleCreate()} disabled={creating || (!abn && !name)}>
+          {creating ? 'Creating...' : 'Create Provider'}
+        </Button>
+      </DialogFooter>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function InvoiceReviewDetailPage({
@@ -302,6 +409,8 @@ export default function InvoiceReviewDetailPage({
   const [rejectReason, setRejectReason] = useState('')
   const [showFlagDialog, setShowFlagDialog] = useState(false)
   const [flagNote, setFlagNote] = useState('')
+  const [showCreateProviderModal, setShowCreateProviderModal] = useState(false)
+  const [creatingProvider, setCreatingProvider] = useState(false)
 
   // Validation & flags
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
@@ -744,6 +853,50 @@ export default function InvoiceReviewDetailPage({
             </Alert>
           ))}
         </div>
+      )}
+
+      {/* ── Unknown Provider Banner ─────────────────────────────────────── */}
+      {!invoice.providerId && isEditable && (
+        <Alert className="border-blue-300 bg-blue-50 text-blue-900">
+          <Building2 className="h-4 w-4 text-blue-600" aria-hidden="true" />
+          <AlertTitle className="text-blue-800">Unknown Provider</AlertTitle>
+          <AlertDescription className="text-blue-700 flex items-center justify-between gap-4 flex-wrap">
+            <span>
+              {invoice.provider
+                ? 'Provider matched with low confidence. Consider creating a formal provider record.'
+                : 'No provider matched to this invoice. Create a provider record to enable full processing.'}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-blue-300 text-blue-700 hover:bg-blue-100 shrink-0"
+              onClick={() => setShowCreateProviderModal(true)}
+            >
+              <Building2 className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+              Create Provider
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Create Provider Modal */}
+      {showCreateProviderModal && (
+        <Dialog open={showCreateProviderModal} onOpenChange={setShowCreateProviderModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create Provider from Invoice</DialogTitle>
+            </DialogHeader>
+            <CreateProviderFromInvoiceForm
+              invoiceId={invoice.id}
+              onCreated={(providerId) => {
+                setSelectedProviderId(providerId)
+                setShowCreateProviderModal(false)
+                void loadInvoice()
+              }}
+              onCancel={() => setShowCreateProviderModal(false)}
+            />
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* ── Step 2: Auto-Match Results Card ──────────────────────────────── */}
