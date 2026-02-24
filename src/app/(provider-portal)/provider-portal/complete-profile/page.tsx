@@ -1,15 +1,15 @@
 'use client'
 
+/**
+ * Provider portal — complete profile page — premium redesign.
+ * Token-gated via invite link.
+ */
+
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Loader2, AlertCircle, Shield, Lock } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { CheckCircle, Loader2, AlertCircle } from 'lucide-react'
 
 interface ProviderData {
   id: string
@@ -31,7 +31,6 @@ function CompleteProfileForm(): React.JSX.Element {
   const [tokenError, setTokenError] = useState<string | null>(null)
   const [provider, setProvider] = useState<ProviderData | null>(null)
 
-  // Form fields
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -85,9 +84,7 @@ function CompleteProfileForm(): React.JSX.Element {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          token,
-          name,
-          email,
+          token, name, email,
           phone: phone || undefined,
           address: address || undefined,
           bankBsb: bankBsb || undefined,
@@ -122,200 +119,182 @@ function CompleteProfileForm(): React.JSX.Element {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
-        <span className="ml-2 text-gray-600">Loading your invitation...</span>
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-stone-500">
+          <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+          <span>Loading your invitation…</span>
+        </div>
       </div>
     )
   }
 
   if (tokenError) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Invalid Invitation</h2>
-          <p className="text-gray-600">{tokenError}</p>
-          <p className="text-sm text-gray-500 mt-4">
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-8">
+        <div className="bg-white rounded-2xl shadow-sm p-10 max-w-md w-full text-center animate-fade-slide-up">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-5">
+            <AlertCircle className="h-8 w-8 text-red-500" aria-hidden="true" />
+          </div>
+          <h2 className="font-display text-2xl font-bold text-stone-900 mb-3">Invalid Invitation</h2>
+          <p className="text-stone-600 mb-6">{tokenError}</p>
+          <p className="text-stone-400 text-sm">
             Contact{' '}
             <a href="mailto:support@lotusassist.com.au" className="text-emerald-600 hover:underline">
               support@lotusassist.com.au
             </a>{' '}
             if you need a new invitation link.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     )
   }
 
   if (success) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <CheckCircle className="h-12 w-12 text-emerald-600 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Profile Submitted</h2>
-          <p className="text-gray-600">
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-8">
+        <div className="bg-white rounded-2xl shadow-sm p-10 max-w-md w-full text-center animate-fade-slide-up">
+          <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-6">
+            <svg viewBox="0 0 40 40" fill="none" className="w-10 h-10">
+              <circle cx="20" cy="20" r="18" stroke="#10b981" strokeWidth="2"/>
+              <path d="M12 20l5.5 5.5L28 14" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <h2 className="font-display text-3xl font-bold text-stone-900 mb-3">Profile Submitted</h2>
+          <p className="text-stone-600 max-w-sm mx-auto mb-6 leading-relaxed">
             Thank you! Your profile has been submitted for review. We will be in touch shortly to
             confirm your account activation.
           </p>
-        </CardContent>
-      </Card>
+          <p className="text-stone-400 text-sm">
+            Questions? Email{' '}
+            <a href="mailto:support@lotusassist.com.au" className="text-emerald-600 underline">
+              support@lotusassist.com.au
+            </a>
+          </p>
+        </div>
+      </div>
     )
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Complete Your Provider Profile</CardTitle>
-        <CardDescription>
+    <div className="min-h-screen bg-stone-50 flex items-center justify-center p-6 py-12">
+      <div className="bg-white rounded-2xl shadow-sm p-8 sm:p-10 max-w-lg w-full">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+              <path d="M12 3C12 3 5 8 5 14a7 7 0 0014 0c0-6-7-11-7-11z" fill="white"/>
+              <path d="M12 3C12 3 12 10 12 17" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <span className="font-display font-bold text-stone-900">Lotus Assist Provider Portal</span>
+        </div>
+
+        <h1 className="font-display text-2xl font-bold text-stone-900 mb-1">Complete Your Profile</h1>
+        <p className="text-stone-500 text-sm mb-6">
           {provider
-            ? `You've been invited to complete your profile for ${provider.abn}. Filling in your details helps us process your invoices faster.`
+            ? `You've been invited to complete your profile for ABN ${provider.abn}.`
             : 'Fill in your provider details to get started.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </p>
+
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
           {/* Business Details */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 pb-1 border-b">
-              Business Details
-            </h3>
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-stone-100">
+              <Shield className="w-4 h-4 text-stone-400" aria-hidden="true" />
+              <h2 className="font-display font-semibold text-stone-700 text-sm">Business Details</h2>
+            </div>
             <div className="space-y-4">
               {provider?.abn && (
-                <div className="space-y-1.5">
-                  <Label>ABN</Label>
-                  <p className="text-sm font-mono bg-gray-50 px-3 py-2 rounded border">
-                    {provider.abn}
-                  </p>
+                <div>
+                  <p className="text-xs font-medium text-stone-500 mb-1">ABN</p>
+                  <p className="text-sm font-mono bg-stone-50 px-3 py-2 rounded-lg border border-stone-200 text-stone-700">{provider.abn}</p>
                 </div>
               )}
-              <div className="space-y-1.5">
-                <Label htmlFor="name">Business / Trading Name</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
+              <div>
+                <label htmlFor="name" className="block text-sm font-semibold text-stone-700 mb-1.5">Business / Trading Name</label>
+                <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required
+                  className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition" />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="address">Business Address</Label>
-                <Textarea
-                  id="address"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  rows={2}
+              <div>
+                <label htmlFor="address" className="block text-sm font-semibold text-stone-700 mb-1.5">Business Address</label>
+                <textarea id="address" value={address} onChange={(e) => setAddress(e.target.value)} rows={2}
                   placeholder="Street, Suburb, State, Postcode"
-                />
+                  className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition resize-none" />
               </div>
             </div>
           </div>
 
           {/* Contact Details */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 pb-1 border-b">
-              Contact Details
-            </h3>
+            <h2 className="font-display font-semibold text-stone-700 text-sm mb-4 pb-3 border-b border-stone-100">Contact Details</h2>
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Business Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
+              <div>
+                <label htmlFor="email" className="block text-sm font-semibold text-stone-700 mb-1.5">Business Email</label>
+                <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
+                  className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition" />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="phone">Phone (optional)</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
+              <div>
+                <label htmlFor="phone" className="block text-sm font-semibold text-stone-700 mb-1.5">
+                  Phone <span className="font-normal text-stone-400">(optional)</span>
+                </label>
+                <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                  className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition" />
               </div>
             </div>
           </div>
 
           {/* Bank Details */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 pb-1 border-b">
-              Bank Details
-            </h3>
-            <p className="text-xs text-muted-foreground mb-3">
-              Your bank details are used for payment of approved invoices. This information is
-              stored securely.
-            </p>
+            <h2 className="font-display font-semibold text-stone-700 text-sm mb-4 pb-3 border-b border-stone-100">Bank Details</h2>
+            <div className="flex items-center gap-2 mb-4 text-xs text-stone-400">
+              <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Your bank details are encrypted and used only for NDIS payment processing</span>
+            </div>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="bankBsb">BSB</Label>
-                  <Input
-                    id="bankBsb"
-                    placeholder="e.g. 062-000"
-                    value={bankBsb}
-                    onChange={(e) => setBankBsb(e.target.value)}
-                  />
+                <div>
+                  <label htmlFor="bankBsb" className="block text-sm font-semibold text-stone-700 mb-1.5">BSB</label>
+                  <input id="bankBsb" type="text" placeholder="e.g. 062-000" value={bankBsb} onChange={(e) => setBankBsb(e.target.value)}
+                    className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition" />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="bankAccount">Account Number</Label>
-                  <Input
-                    id="bankAccount"
-                    placeholder="e.g. 12345678"
-                    value={bankAccount}
-                    onChange={(e) => setBankAccount(e.target.value)}
-                  />
+                <div>
+                  <label htmlFor="bankAccount" className="block text-sm font-semibold text-stone-700 mb-1.5">Account Number</label>
+                  <input id="bankAccount" type="text" placeholder="e.g. 12345678" value={bankAccount} onChange={(e) => setBankAccount(e.target.value)}
+                    className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition" />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="bankAccountName">Account Name</Label>
-                <Input
-                  id="bankAccountName"
-                  placeholder="e.g. SUNRISE SUPPORT SERVICES PTY LTD"
-                  value={bankAccountName}
-                  onChange={(e) => setBankAccountName(e.target.value)}
-                />
+              <div>
+                <label htmlFor="bankAccountName" className="block text-sm font-semibold text-stone-700 mb-1.5">Account Name</label>
+                <input id="bankAccountName" type="text" placeholder="e.g. SUNRISE SUPPORT SERVICES PTY LTD" value={bankAccountName} onChange={(e) => setBankAccountName(e.target.value)}
+                  className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition" />
               </div>
             </div>
           </div>
 
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+          {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
-          <Button
-            type="submit"
-            className="w-full bg-emerald-600 hover:bg-emerald-700"
-            disabled={submitting}
+          <button type="submit" disabled={submitting}
+            className="w-full bg-emerald-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 text-base"
           >
             {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Submitting...
-              </>
-            ) : (
-              'Submit Profile'
-            )}
-          </Button>
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Submitting…
+              </span>
+            ) : 'Submit Profile'}
+          </button>
         </form>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
 export default function CompleteProfilePage(): React.JSX.Element {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
-        </div>
-      }
-    >
+    <Suspense fallback={
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+      </div>
+    }>
       <CompleteProfileForm />
     </Suspense>
   )

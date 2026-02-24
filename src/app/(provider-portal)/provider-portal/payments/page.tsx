@@ -1,5 +1,5 @@
 /**
- * Provider portal payments history page.
+ * Provider portal payments history page — premium redesign.
  * Server component — requires PROVIDER session.
  */
 
@@ -9,7 +9,8 @@ import { authOptions } from '@/lib/auth/config'
 import { getProviderForSession } from '@/lib/modules/crm/provider-session'
 import { prisma } from '@/lib/db'
 import { formatAUD } from '@/lib/shared/currency'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatDateAU } from '@/lib/shared/dates'
+import { Check } from 'lucide-react'
 
 export default async function ProviderPaymentsPage(): Promise<React.JSX.Element> {
   const session = await getServerSession(authOptions)
@@ -28,10 +29,7 @@ export default async function ProviderPaymentsPage(): Promise<React.JSX.Element>
     where: {
       status: 'CLEARED',
       claim: {
-        invoice: {
-          providerId: provider.id,
-          deletedAt: null,
-        },
+        invoice: { providerId: provider.id, deletedAt: null },
       },
     },
     select: {
@@ -41,79 +39,88 @@ export default async function ProviderPaymentsPage(): Promise<React.JSX.Element>
       reference: true,
       claim: {
         select: {
-          invoice: {
-            select: {
-              id: true,
-              invoiceNumber: true,
-            },
-          },
+          invoice: { select: { invoiceNumber: true } },
         },
       },
     },
     orderBy: { processedAt: 'desc' },
   })
 
-  const totalPaid = payments.reduce((sum, p) => sum + p.amountCents, 0)
+  const totalPaidCents = payments.reduce((sum, p) => sum + p.amountCents, 0)
+  const now = new Date()
+  const fyStart = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1
+
+  // Group by month label
+  const grouped = payments.reduce<Record<string, typeof payments>>((acc, p) => {
+    const monthKey = new Date(p.processedAt!).toLocaleDateString('en-AU', {
+      month: 'long',
+      year: 'numeric',
+    })
+    if (!acc[monthKey]) acc[monthKey] = []
+    acc[monthKey]!.push(p)
+    return acc
+  }, {})
 
   return (
-    <div className="space-y-6">
+    <div className="animate-fade-in space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Payment History</h1>
-        <p className="text-gray-500 mt-1">
-          {payments.length} cleared payment{payments.length !== 1 ? 's' : ''} ·{' '}
-          <span className="font-medium text-emerald-700">{formatAUD(totalPaid)} total</span>
-        </p>
+        <h1 className="font-display text-3xl font-bold text-stone-900">Payments</h1>
+        <p className="text-stone-500 mt-1">Your complete payment history</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Cleared Payments</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {payments.length === 0 ? (
-            <p className="text-gray-500 text-sm py-8 text-center">
-              No cleared payments found.
+      {/* Summary banner */}
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-emerald-700 text-xs font-semibold uppercase tracking-[0.12em] mb-1">Total Received</p>
+          <p className="font-display text-4xl font-bold text-emerald-800">{formatAUD(totalPaidCents)}</p>
+          <p className="text-emerald-600 text-sm mt-1">
+            {payments.length} payment{payments.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <div className="text-sm text-emerald-700">
+          <p className="font-semibold">Financial Year</p>
+          <p>1 Jul {fyStart} – 30 Jun {fyStart + 1}</p>
+        </div>
+      </div>
+
+      {payments.length === 0 ? (
+        <div className="bg-white rounded-xl p-12 text-center shadow-sm">
+          <p className="font-display font-semibold text-stone-700 mb-1">No payments yet</p>
+          <p className="text-stone-400 text-sm">Cleared payments will appear here.</p>
+        </div>
+      ) : (
+        Object.entries(grouped).map(([month, monthPayments]) => (
+          <div key={month}>
+            <p className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-400 pb-3 border-b border-stone-200 mb-1">
+              {month}
             </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-gray-500">
-                    <th className="pb-3 font-medium">Date Paid</th>
-                    <th className="pb-3 font-medium">Invoice #</th>
-                    <th className="pb-3 font-medium">Reference</th>
-                    <th className="pb-3 font-medium text-right">Amount</th>
-                    <th className="pb-3 font-medium">Remittance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map(p => (
-                    <tr key={p.id} className="border-b last:border-0">
-                      <td className="py-3 text-gray-600">
-                        {p.processedAt
-                          ? p.processedAt.toLocaleDateString('en-AU')
-                          : '—'}
-                      </td>
-                      <td className="py-3 font-medium">
-                        {p.claim.invoice.invoiceNumber}
-                      </td>
-                      <td className="py-3 text-gray-600">
-                        {p.reference ?? '—'}
-                      </td>
-                      <td className="py-3 text-right font-medium text-emerald-700">
-                        {formatAUD(p.amountCents)}
-                      </td>
-                      <td className="py-3 text-gray-500 text-xs">
-                        Remittance available via your plan manager
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              {monthPayments.map((payment, idx) => (
+                <div
+                  key={payment.id}
+                  className={`flex items-center justify-between px-6 py-4 hover:bg-stone-50 transition-colors ${idx !== 0 ? 'border-t border-stone-50' : ''}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0" aria-hidden="true">
+                      <Check className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-stone-900 text-sm">
+                        {payment.claim.invoice.invoiceNumber}
+                      </p>
+                      <p className="text-xs text-stone-500 mt-0.5">
+                        {payment.processedAt ? formatDateAU(payment.processedAt) : '—'}
+                        {payment.reference && ` · Ref: ${payment.reference}`}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="font-bold text-emerald-700 text-base">{formatAUD(payment.amountCents)}</p>
+                </div>
+              ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        ))
+      )}
     </div>
   )
 }
