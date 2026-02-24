@@ -82,6 +82,37 @@ export const authOptions: NextAuthOptions = {
         return null
       },
     }),
+
+    // Provider portal magic link authentication.
+    // Provider enters their email → receives a one-time link → link exchanges for session.
+    // The token is verified by this CredentialsProvider using the magic link table.
+    CredentialsProvider({
+      id: 'provider-magic-link',
+      name: 'Provider Magic Link',
+      credentials: {
+        token: { label: 'Token', type: 'text' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.token) {
+          return null
+        }
+
+        try {
+          const { verifyProviderMagicLink } = await import(
+            '@/lib/modules/crm/provider-magic-link'
+          )
+          const result = await verifyProviderMagicLink(credentials.token)
+          return {
+            id: result.userId,
+            email: result.email,
+            name: result.name,
+            role: result.role as CoreRole,
+          }
+        } catch {
+          return null
+        }
+      },
+    }),
   ],
   callbacks: {
     async jwt({ token, user }) {

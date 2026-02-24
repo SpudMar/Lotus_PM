@@ -34,6 +34,7 @@ model CoreUser {
   // Auth relations (NextAuth)
   accounts      CoreAccount[]
   sessions      CoreSession[]
+  magicLinks    CoreProviderMagicLink[]
 
   // Audit trail — every action this user takes
   auditLogs     CoreAuditLog[]
@@ -74,6 +75,7 @@ enum CoreRole {
   ASSISTANT
   PARTICIPANT
   SUPPORT_COORDINATOR
+  PROVIDER
 }
 
 model CoreAccount {
@@ -114,6 +116,21 @@ model CoreVerificationToken {
 
   @@unique([identifier, token])
   @@map("core_verification_tokens")
+}
+
+// Magic link tokens for provider portal passwordless authentication.
+// Tokens are short-lived (15 min) and single-use (deleted on consumption).
+model CoreProviderMagicLink {
+  id        String   @id @default(cuid())
+  userId    String
+  user      CoreUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@map("core_provider_magic_links")
 }
 
 model CoreAuditLog {
