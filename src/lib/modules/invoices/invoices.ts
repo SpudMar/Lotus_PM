@@ -21,8 +21,10 @@ export async function listInvoices(params: {
   providerId?: string
   ingestSource?: string
   search?: string
+  /** Filter by AI processing category (NEEDS_CODES, NEEDS_REVIEW, AUTO_APPROVED, AUTO_REJECTED, PARTICIPANT_APPROVAL) */
+  processingCategory?: string
 }) {
-  const { page, pageSize, status, statusIn, participantId, providerId, ingestSource, search } = params
+  const { page, pageSize, status, statusIn, participantId, providerId, ingestSource, search, processingCategory } = params
 
   // statusIn (array) takes precedence over single status
   const statusFilter =
@@ -38,6 +40,11 @@ export async function listInvoices(params: {
     ...(participantId ? { participantId } : {}),
     ...(providerId ? { providerId } : {}),
     ...(ingestSource ? { ingestSource: ingestSource as 'EMAIL' | 'MANUAL' | 'API' } : {}),
+    ...(processingCategory !== undefined
+      ? processingCategory === 'UNPROCESSED'
+        ? { processingCategory: null }
+        : { processingCategory }
+      : {}),
     ...(search ? {
       OR: [
         { invoiceNumber: { contains: search, mode: 'insensitive' as const } },
@@ -53,6 +60,17 @@ export async function listInvoices(params: {
         participant: { select: { id: true, firstName: true, lastName: true, ndisNumber: true } },
         provider: { select: { id: true, name: true } },
         approvedBy: { select: { id: true, name: true } },
+        lines: {
+          select: {
+            id: true,
+            supportItemCode: true,
+            supportItemName: true,
+            categoryCode: true,
+            totalCents: true,
+            aiSuggestedCode: true,
+            aiCodeConfidence: true,
+          },
+        },
       },
       orderBy: { receivedAt: 'desc' },
       skip: (page - 1) * pageSize,
