@@ -189,6 +189,7 @@ export default function DocumentsPage(): React.JSX.Element {
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<DocCategory | 'all'>('all')
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<DocDocument | null>(null)
@@ -282,12 +283,18 @@ export default function DocumentsPage(): React.JSX.Element {
 
   async function handleDownload(doc: DocDocument): Promise<void> {
     setDownloading(doc.id)
+    setError(null)
     try {
       const res = await fetch(`/api/documents/${doc.id}/download`)
-      if (res.ok) {
-        const json = await res.json() as { data: { downloadUrl: string; filename: string } }
-        window.open(json.data.downloadUrl, '_blank', 'noreferrer')
+      if (!res.ok) {
+        const json = await res.json().catch(() => null) as { error?: string } | null
+        setError(json?.error ?? 'Failed to download document')
+        return
       }
+      const json = await res.json() as { data: { downloadUrl: string; filename: string } }
+      window.open(json.data.downloadUrl, '_blank', 'noreferrer')
+    } catch {
+      setError('Failed to download document')
     } finally {
       setDownloading(null)
     }
@@ -298,10 +305,18 @@ export default function DocumentsPage(): React.JSX.Element {
   async function handleDelete(): Promise<void> {
     if (!deleteTarget) return
     setDeleting(true)
+    setError(null)
     try {
-      await fetch(`/api/documents/${deleteTarget.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/documents/${deleteTarget.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json().catch(() => null) as { error?: string } | null
+        setError(json?.error ?? 'Failed to delete document')
+        return
+      }
       setDeleteTarget(null)
       void loadDocuments(search, categoryFilter, pagination.page)
+    } catch {
+      setError('Failed to delete document')
     } finally {
       setDeleting(false)
     }
@@ -524,6 +539,16 @@ export default function DocumentsPage(): React.JSX.Element {
             </Button>
           )}
         </div>
+
+        {/* Error banner */}
+        {error && (
+          <div className="flex items-center justify-between rounded-md border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm text-destructive" role="alert">
+            <span>{error}</span>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setError(null)} aria-label="Dismiss error">
+              <X className="h-3 w-3" aria-hidden="true" />
+            </Button>
+          </div>
+        )}
 
         {/* Table */}
         <div className="rounded-md border">

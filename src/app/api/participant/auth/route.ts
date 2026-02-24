@@ -16,7 +16,7 @@ import { generateParticipantToken } from '@/lib/modules/participant-api/auth'
 
 const LoginSchema = z.object({
   ndisNumber: z.string().min(1, 'NDIS number is required'),
-  dateOfBirth: z.string().min(1, 'Date of birth is required'),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be YYYY-MM-DD format'),
 })
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -63,20 +63,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     )
   }
 
-  // 3. Verify date of birth — compare date portion only (ignore time)
-  const inputDob = new Date(dateOfBirth)
-  if (isNaN(inputDob.getTime())) {
-    return NextResponse.json(
-      { error: 'Invalid date of birth format', code: 'INVALID_INPUT' },
-      { status: 400 }
-    )
-  }
-
+  // 3. Verify date of birth — compare UTC date strings to avoid timezone drift
   const storedDob = participant.dateOfBirth
-  const dobMatches =
-    inputDob.getFullYear() === storedDob.getFullYear() &&
-    inputDob.getMonth() === storedDob.getMonth() &&
-    inputDob.getDate() === storedDob.getDate()
+  const storedDobStr = storedDob.toISOString().slice(0, 10) // YYYY-MM-DD in UTC
+  const dobMatches = dateOfBirth === storedDobStr
 
   if (!dobMatches) {
     return NextResponse.json(
