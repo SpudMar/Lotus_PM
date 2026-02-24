@@ -1,6 +1,7 @@
 /**
  * Shared types for the Lotus PM Participant App.
  * REQ-018: Separate participant-facing mobile app.
+ * Types mirror the backend API response shapes exactly.
  */
 
 export interface Participant {
@@ -34,8 +35,17 @@ export interface Invoice {
   id: string
   invoiceNumber: string
   invoiceDate: string
+  receivedAt: string
   totalCents: number
-  status: 'RECEIVED' | 'PROCESSING' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'CLAIMED' | 'PAID'
+  status:
+    | 'RECEIVED'
+    | 'PROCESSING'
+    | 'PENDING_REVIEW'
+    | 'PENDING_PARTICIPANT_APPROVAL'
+    | 'APPROVED'
+    | 'REJECTED'
+    | 'CLAIMED'
+    | 'PAID'
   provider: {
     name: string
   }
@@ -43,7 +53,7 @@ export interface Invoice {
 
 export interface CommLog {
   id: string
-  type: 'EMAIL' | 'PHONE' | 'SMS' | 'IN_PERSON' | 'NOTE'
+  type: 'EMAIL' | 'PHONE' | 'SMS' | 'IN_PERSON' | 'PORTAL_MESSAGE' | 'NOTE'
   direction: 'INBOUND' | 'OUTBOUND' | 'INTERNAL'
   subject: string
   body: string | null
@@ -58,6 +68,20 @@ export interface Document {
   sizeBytes: number
   version: number
   createdAt: string
+}
+
+export interface ParticipantProfile {
+  id: string
+  firstName: string
+  lastName: string
+  ndisNumber: string
+  email: string | null
+  phone: string | null
+  planManager: {
+    name: string
+    email: string | null
+    phone: string | null
+  } | null
 }
 
 export interface AuthSession {

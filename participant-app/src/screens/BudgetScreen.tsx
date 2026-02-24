@@ -1,6 +1,10 @@
 /**
- * Budget screen — shows participant's active plan and budget category breakdown.
- * REQ-012: WCAG 2.1 AA accessible.
+ * Budget / My Plan screen.
+ * Shows the participant's active plan period, total budget progress,
+ * and a breakdown of budget by support category.
+ *
+ * REQ-012: WCAG 2.1 AA — progress bars have accessibilityRole + accessibilityValue.
+ * Emerald theme (#059669) to match Lotus PM brand.
  */
 
 import React, { useEffect, useState } from 'react'
@@ -16,12 +20,22 @@ import {
 import { getActivePlan } from '@/api/client'
 import type { Plan, BudgetLine } from '@/types'
 
+const EMERALD = '#059669'
+
 function formatAUD(cents: number): string {
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
     currency: 'AUD',
     minimumFractionDigits: 2,
   }).format(cents / 100)
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
 }
 
 function planStatusLabel(status: Plan['status']): string {
@@ -36,12 +50,18 @@ function planStatusLabel(status: Plan['status']): string {
 
 function planStatusColor(status: Plan['status']): string {
   switch (status) {
-    case 'ACTIVE': return '#16a34a'
-    case 'EXPIRING_SOON': return '#d97706'
-    case 'EXPIRED': return '#dc2626'
-    case 'UNDER_REVIEW': return '#2563eb'
-    case 'INACTIVE': return '#6b7280'
+    case 'ACTIVE': return '#10b981' // emerald-500
+    case 'EXPIRING_SOON': return '#f59e0b'
+    case 'EXPIRED': return '#ef4444'
+    case 'UNDER_REVIEW': return '#3b82f6'
+    case 'INACTIVE': return '#9ca3af'
   }
+}
+
+function barColor(pct: number): string {
+  if (pct >= 90) return '#ef4444'
+  if (pct >= 75) return '#f59e0b'
+  return EMERALD
 }
 
 interface BudgetBarProps {
@@ -50,17 +70,13 @@ interface BudgetBarProps {
 
 function BudgetBar({ line }: BudgetBarProps): React.JSX.Element {
   const pct = Math.min(line.usedPercent, 100)
-  const barColor = pct >= 90 ? '#dc2626' : pct >= 75 ? '#d97706' : '#16a34a'
+  const color = barColor(pct)
   const a11yLabel = `${line.categoryName}: ${formatAUD(line.spentCents)} spent of ${formatAUD(line.allocatedCents)} allocated. ${Math.round(pct)} percent used.`
 
   return (
-    <View
-      style={styles.budgetCard}
-      accessible
-      accessibilityLabel={a11yLabel}
-    >
+    <View style={styles.budgetCard} accessible accessibilityLabel={a11yLabel}>
       <View style={styles.budgetCardHeader}>
-        <Text style={styles.categoryName} numberOfLines={1}>
+        <Text style={styles.categoryName} numberOfLines={2}>
           {line.categoryName}
         </Text>
         <Text style={styles.categoryCode}>{line.categoryCode}</Text>
@@ -72,21 +88,26 @@ function BudgetBar({ line }: BudgetBarProps): React.JSX.Element {
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: 100, now: Math.round(pct) }}
       >
-        <View style={[styles.progressFill, { width: `${pct}%` as `${number}%`, backgroundColor: barColor }]} />
+        <View
+          style={[
+            styles.progressFill,
+            { width: `${pct}%` as `${number}%`, backgroundColor: color },
+          ]}
+        />
       </View>
 
       <View style={styles.budgetAmounts}>
         <Text style={styles.spentLabel}>
-          <Text style={[styles.spentValue, { color: barColor }]}>{formatAUD(line.spentCents)}</Text>
+          <Text style={[styles.spentValue, { color }]}>{formatAUD(line.spentCents)}</Text>
           {' spent'}
         </Text>
         <Text style={styles.availableLabel}>
-          {formatAUD(line.availableCents)} left
+          {formatAUD(line.availableCents)} available
         </Text>
       </View>
 
       <Text style={styles.allocatedLabel}>
-        Allocated: {formatAUD(line.allocatedCents)}
+        Total allocated: {formatAUD(line.allocatedCents)}
       </Text>
     </View>
   )
@@ -126,7 +147,7 @@ export function BudgetScreen(): React.JSX.Element {
   if (loading) {
     return (
       <View style={styles.centred}>
-        <ActivityIndicator size="large" color="#2563eb" accessibilityLabel="Loading plan data" />
+        <ActivityIndicator size="large" color={EMERALD} accessibilityLabel="Loading plan data" />
       </View>
     )
   }
@@ -150,55 +171,84 @@ export function BudgetScreen(): React.JSX.Element {
   const totalAllocated = plan.budgetLines.reduce((s, l) => s + l.allocatedCents, 0)
   const totalSpent = plan.budgetLines.reduce((s, l) => s + l.spentCents, 0)
   const totalAvailable = totalAllocated - totalSpent
+  const overallPct = totalAllocated > 0 ? Math.round((totalSpent / totalAllocated) * 100) : 0
+
+  const statusColor = planStatusColor(plan.status)
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={EMERALD} />}
     >
-      {/* Plan summary card */}
+      {/* Plan summary hero card */}
       <View
-        style={styles.summaryCard}
+        style={styles.heroCard}
         accessible
         accessibilityLabel={`Plan status: ${planStatusLabel(plan.status)}. Total budget: ${formatAUD(totalAllocated)}. Spent: ${formatAUD(totalSpent)}. Available: ${formatAUD(totalAvailable)}.`}
       >
-        <View style={styles.summaryHeader}>
-          <Text style={styles.summaryTitle}>My Plan</Text>
-          <View style={[styles.statusBadge, { backgroundColor: planStatusColor(plan.status) + '20', borderColor: planStatusColor(plan.status) }]}>
-            <Text style={[styles.statusText, { color: planStatusColor(plan.status) }]}>
+        <View style={styles.heroHeader}>
+          <Text style={styles.heroTitle}>My Plan</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + '25', borderColor: statusColor }]}>
+            <Text style={[styles.statusText, { color: statusColor }]}>
               {planStatusLabel(plan.status)}
             </Text>
           </View>
         </View>
 
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{formatAUD(totalAllocated)}</Text>
-            <Text style={styles.summaryLabel}>Total budget</Text>
+        {/* Plan dates */}
+        <Text style={styles.heroDates}>
+          {formatDate(plan.startDate)} — {formatDate(plan.endDate)}
+        </Text>
+
+        {/* Total progress bar */}
+        <View style={styles.heroProgressSection}>
+          <View style={styles.heroProgressHeader}>
+            <Text style={styles.heroProgressLabel}>Total budget used</Text>
+            <Text style={styles.heroProgressPct}>{overallPct}%</Text>
           </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{formatAUD(totalSpent)}</Text>
-            <Text style={styles.summaryLabel}>Spent</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryValue, { color: '#16a34a' }]}>{formatAUD(totalAvailable)}</Text>
-            <Text style={styles.summaryLabel}>Available</Text>
+          <View
+            style={styles.heroProgressTrack}
+            accessibilityRole="progressbar"
+            accessibilityValue={{ min: 0, max: 100, now: overallPct }}
+          >
+            <View
+              style={[
+                styles.heroProgressFill,
+                { width: `${overallPct}%` as `${number}%`, backgroundColor: barColor(overallPct) },
+              ]}
+            />
           </View>
         </View>
 
-        <Text style={styles.planDates}>
-          {new Date(plan.startDate).toLocaleDateString('en-AU')} – {new Date(plan.endDate).toLocaleDateString('en-AU')}
-        </Text>
+        {/* Summary row */}
+        <View style={styles.heroStats}>
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatValue}>{formatAUD(totalAllocated)}</Text>
+            <Text style={styles.heroStatLabel}>Total</Text>
+          </View>
+          <View style={styles.heroStatDivider} />
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatValue}>{formatAUD(totalSpent)}</Text>
+            <Text style={styles.heroStatLabel}>Spent</Text>
+          </View>
+          <View style={styles.heroStatDivider} />
+          <View style={styles.heroStat}>
+            <Text style={[styles.heroStatValue, { color: '#34d399' }]}>{formatAUD(totalAvailable)}</Text>
+            <Text style={styles.heroStatLabel}>Available</Text>
+          </View>
+        </View>
       </View>
 
-      {/* Budget lines */}
+      {/* Budget category breakdown */}
       <Text style={styles.sectionTitle} accessibilityRole="header">
-        Budget by support category
+        By support category
       </Text>
 
       {plan.budgetLines.length === 0 ? (
-        <Text style={styles.emptyText}>No budget lines found.</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>No budget categories found.</Text>
+        </View>
       ) : (
         plan.budgetLines.map((line) => <BudgetBar key={line.id} line={line} />)
       )}
@@ -207,63 +257,100 @@ export function BudgetScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  content: { padding: 16, paddingBottom: 32 },
+  container: { flex: 1, backgroundColor: '#f0fdf4' }, // emerald-50
+  content: { padding: 16, paddingBottom: 36 },
   centred: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  errorText: { color: '#dc2626', fontSize: 15, textAlign: 'center' },
+  errorText: { color: '#ef4444', fontSize: 15, textAlign: 'center' },
   emptyText: { color: '#6b7280', fontSize: 15, textAlign: 'center' },
 
-  summaryCard: {
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
+  heroCard: {
+    backgroundColor: '#065f46', // emerald-800
+    borderRadius: 16,
     padding: 20,
     marginBottom: 20,
+    shadowColor: '#064e3b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  summaryHeader: {
+  heroHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 4,
   },
-  summaryTitle: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
+  heroTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800' },
   statusBadge: {
     borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  summaryItem: { alignItems: 'center', flex: 1 },
-  summaryValue: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
-  summaryLabel: { color: '#bfdbfe', fontSize: 12, marginTop: 2 },
-  planDates: { color: '#bfdbfe', fontSize: 12, textAlign: 'center' },
+  statusText: { fontSize: 12, fontWeight: '700' },
+  heroDates: { color: '#a7f3d0', fontSize: 13, marginBottom: 16 }, // emerald-200
+
+  heroProgressSection: { marginBottom: 16 },
+  heroProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  heroProgressLabel: { color: '#d1fae5', fontSize: 12 }, // emerald-100
+  heroProgressPct: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+  heroProgressTrack: {
+    height: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  heroProgressFill: { height: 10, borderRadius: 5 },
+
+  heroStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroStat: { flex: 1, alignItems: 'center' },
+  heroStatValue: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
+  heroStatLabel: { color: '#a7f3d0', fontSize: 11, marginTop: 2 },
+  heroStatDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.2)' },
 
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#111827',
-    marginBottom: 12,
+    color: '#064e3b',
+    marginBottom: 10,
+    marginTop: 4,
   },
+  emptyState: { paddingVertical: 32, alignItems: 'center' },
+
   budgetCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
-    elevation: 1,
+    elevation: 2,
   },
   budgetCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 10,
   },
-  categoryName: { fontSize: 14, fontWeight: '600', color: '#111827', flex: 1 },
-  categoryCode: { fontSize: 12, color: '#6b7280', marginLeft: 8 },
+  categoryName: { fontSize: 14, fontWeight: '600', color: '#111827', flex: 1, marginRight: 8 },
+  categoryCode: {
+    fontSize: 11,
+    color: '#9ca3af',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
   progressTrack: {
     height: 8,
     backgroundColor: '#e5e7eb',
@@ -272,9 +359,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   progressFill: { height: 8, borderRadius: 4 },
-  budgetAmounts: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
+  budgetAmounts: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
   spentLabel: { fontSize: 13, color: '#374151' },
   spentValue: { fontWeight: '600' },
-  availableLabel: { fontSize: 13, color: '#16a34a', fontWeight: '600' },
-  allocatedLabel: { fontSize: 12, color: '#9ca3af' },
+  availableLabel: { fontSize: 13, color: EMERALD, fontWeight: '600' },
+  allocatedLabel: { fontSize: 11, color: '#9ca3af' },
 })
