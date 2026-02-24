@@ -1,9 +1,12 @@
 /**
- * Profile screen — shows participant info and sign-out.
+ * Profile screen — participant's own info and plan manager contact details.
  * REQ-012: WCAG 2.1 AA accessible.
+ *
+ * Fetches live profile data from /api/participant/profile.
+ * Falls back to session data if fetch fails (name + NDIS number always available).
  */
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -11,13 +14,39 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native'
-import type { AuthSession } from '@/types'
+import { getProfile } from '@/api/client'
+import type { AuthSession, ParticipantProfile } from '@/types'
+
+const EMERALD = '#059669'
 
 function formatNdisNumber(n: string): string {
   const digits = n.replace(/\D/g, '')
   if (digits.length !== 9) return n
-  return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
+}
+
+interface InfoRowProps {
+  label: string
+  value: string
+  last?: boolean
+}
+
+function InfoRow({ label, value, last }: InfoRowProps): React.JSX.Element {
+  return (
+    <>
+      <View
+        style={styles.infoRow}
+        accessible
+        accessibilityLabel={`${label}: ${value}`}
+      >
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue} numberOfLines={1}>{value}</Text>
+      </View>
+      {!last && <View style={styles.separator} />}
+    </>
+  )
 }
 
 interface Props {
@@ -26,6 +55,24 @@ interface Props {
 }
 
 export function ProfileScreen({ session, onSignOut }: Props): React.JSX.Element {
+  const [profile, setProfile] = useState<ParticipantProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    void loadProfile()
+  }, [])
+
+  async function loadProfile(): Promise<void> {
+    try {
+      const res = await getProfile()
+      setProfile(res.data)
+    } catch {
+      // Non-fatal — fall back to session data
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function handleSignOut(): void {
     Alert.alert(
       'Sign out',
@@ -37,50 +84,77 @@ export function ProfileScreen({ session, onSignOut }: Props): React.JSX.Element 
     )
   }
 
+  // Use API data where available, fall back to session values
+  const displayName = profile
+    ? `${profile.firstName} ${profile.lastName}`
+    : session.name
+  const displayNdis = profile?.ndisNumber ?? session.ndisNumber
+  const initials = displayName.charAt(0).toUpperCase()
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Avatar placeholder */}
-      <View style={styles.avatarContainer} accessible accessibilityLabel={`Profile for ${session.name}`}>
+      {/* Avatar + name */}
+      <View
+        style={styles.avatarContainer}
+        accessible
+        accessibilityLabel={`Profile for ${displayName}`}
+      >
         <View style={styles.avatar} accessibilityElementsHidden>
-          <Text style={styles.avatarInitial}>
-            {session.name.charAt(0).toUpperCase()}
-          </Text>
+          <Text style={styles.avatarInitial}>{initials}</Text>
         </View>
-        <Text style={styles.name}>{session.name}</Text>
-        <Text style={styles.ndisNumber}>{formatNdisNumber(session.ndisNumber)}</Text>
+        <Text style={styles.name}>{displayName}</Text>
+        <Text style={styles.ndisDisplay}>{formatNdisNumber(displayNdis)}</Text>
       </View>
 
-      {/* Info rows */}
+      {/* Account details */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle} accessibilityRole="header">Account details</Text>
-
-        <View style={styles.infoRow} accessible accessibilityLabel={`Name: ${session.name}`}>
-          <Text style={styles.infoLabel}>Name</Text>
-          <Text style={styles.infoValue}>{session.name}</Text>
-        </View>
-
-        <View style={styles.separator} />
-
-        <View style={styles.infoRow} accessible accessibilityLabel={`NDIS number: ${formatNdisNumber(session.ndisNumber)}`}>
-          <Text style={styles.infoLabel}>NDIS number</Text>
-          <Text style={styles.infoValue}>{formatNdisNumber(session.ndisNumber)}</Text>
-        </View>
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          Account details
+        </Text>
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={EMERALD} />
+          </View>
+        ) : (
+          <>
+            <InfoRow label="Name" value={displayName} />
+            <InfoRow label="NDIS number" value={formatNdisNumber(displayNdis)} />
+            {profile?.email ? (
+              <InfoRow label="Email" value={profile.email} />
+            ) : null}
+            {profile?.phone ? (
+              <InfoRow label="Phone" value={profile.phone} last={!profile?.email} />
+            ) : null}
+          </>
+        )}
       </View>
 
-      {/* Help */}
+      {/* Plan manager */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle} accessibilityRole="header">Support</Text>
-        <View style={styles.infoRow} accessible>
-          <Text style={styles.infoLabel}>Plan manager</Text>
-          <Text style={styles.infoValue}>Lotus Assist</Text>
-        </View>
-        <View style={styles.separator} />
-        <View style={styles.infoRow} accessible accessibilityLabel="Contact: 1300 000 000">
-          <Text style={styles.infoLabel}>Contact</Text>
-          <Text style={styles.infoValue}>1300 000 000</Text>
-        </View>
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          Plan manager
+        </Text>
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={EMERALD} />
+          </View>
+        ) : (
+          <>
+            <InfoRow
+              label="Organisation"
+              value={profile?.planManager?.name ?? 'Lotus Assist'}
+            />
+            {profile?.planManager?.email ? (
+              <InfoRow label="Email" value={profile.planManager.email} />
+            ) : null}
+            {profile?.planManager?.phone ? (
+              <InfoRow label="Phone" value={profile.planManager.phone} last />
+            ) : null}
+          </>
+        )}
       </View>
 
+      {/* Sign out */}
       <TouchableOpacity
         style={styles.signOutButton}
         onPress={handleSignOut}
@@ -90,70 +164,85 @@ export function ProfileScreen({ session, onSignOut }: Props): React.JSX.Element 
         <Text style={styles.signOutText}>Sign out</Text>
       </TouchableOpacity>
 
-      <Text style={styles.version}>Lotus PM v1.0 · REQ-012 WCAG 2.1 AA</Text>
+      <Text style={styles.version}>Lotus PM v1.0 · WCAG 2.1 AA</Text>
     </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
+  container: { flex: 1, backgroundColor: '#f0fdf4' }, // emerald-50
   content: { padding: 16, paddingBottom: 40 },
 
-  avatarContainer: { alignItems: 'center', paddingVertical: 24 },
+  avatarContainer: { alignItems: 'center', paddingVertical: 28 },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#2563eb',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: EMERALD,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: EMERALD,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  avatarInitial: { color: '#ffffff', fontSize: 30, fontWeight: '700' },
-  name: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  ndisNumber: { fontSize: 14, color: '#6b7280', marginTop: 4 },
+  avatarInitial: { color: '#ffffff', fontSize: 34, fontWeight: '800' },
+  name: { fontSize: 22, fontWeight: '800', color: '#064e3b' },
+  ndisDisplay: { fontSize: 14, color: '#059669', marginTop: 4, fontWeight: '500' },
 
   section: {
     backgroundColor: '#ffffff',
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 12,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
-    elevation: 1,
+    elevation: 2,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: '#9ca3af',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 8,
+  },
+  loadingRow: {
+    paddingVertical: 16,
+    alignItems: 'center',
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 13,
+    minHeight: 48, // WCAG touch target
   },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#e5e7eb', marginHorizontal: 16 },
-  infoLabel: { fontSize: 14, color: '#374151' },
-  infoValue: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#e5e7eb',
+    marginHorizontal: 16,
+  },
+  infoLabel: { fontSize: 14, color: '#374151', fontWeight: '500' },
+  infoValue: { fontSize: 14, color: '#6b7280', flex: 1, textAlign: 'right', marginLeft: 16 },
 
   signOutButton: {
     backgroundColor: '#fef2f2',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#fecaca',
-    borderRadius: 10,
-    paddingVertical: 14,
+    borderRadius: 12,
+    paddingVertical: 15,
     alignItems: 'center',
     marginBottom: 16,
+    minHeight: 50,
   },
-  signOutText: { color: '#dc2626', fontSize: 15, fontWeight: '600' },
+  signOutText: { color: '#dc2626', fontSize: 15, fontWeight: '700' },
   version: { textAlign: 'center', fontSize: 11, color: '#d1d5db' },
 })

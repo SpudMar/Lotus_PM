@@ -5,7 +5,7 @@
  */
 
 import * as SecureStore from 'expo-secure-store'
-import type { Plan, Invoice, CommLog, Document } from '@/types'
+import type { Plan, Invoice, CommLog, Document, ParticipantProfile } from '@/types'
 
 const API_BASE_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'https://planmanager.lotusassist.com.au'
 
@@ -54,29 +54,38 @@ export interface LoginResponse {
   }
 }
 
-export async function login(ndisNumber: string, pin: string): Promise<LoginResponse> {
-  return apiFetch<LoginResponse>('/api/participant/auth/login', {
+/** Login with NDIS number and date of birth (ISO format: YYYY-MM-DD). */
+export async function login(ndisNumber: string, dateOfBirth: string): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>('/api/participant/auth', {
     method: 'POST',
-    body: JSON.stringify({ ndisNumber, pin }),
+    body: JSON.stringify({ ndisNumber, dateOfBirth }),
   })
 }
 
 // ─── Budget / Plans ───────────────────────────────────────────────────────────
 
 export async function getActivePlan(): Promise<{ data: Plan }> {
-  return apiFetch<{ data: Plan }>('/api/participant/plan/active')
+  return apiFetch<{ data: Plan }>('/api/participant/plan')
 }
 
 // ─── Invoices ─────────────────────────────────────────────────────────────────
 
-export async function getInvoices(): Promise<{ data: Invoice[] }> {
-  return apiFetch<{ data: Invoice[] }>('/api/participant/invoices')
+export async function getInvoices(page = 1, pageSize = 20): Promise<{ data: Invoice[]; total: number; page: number; pageSize: number }> {
+  return apiFetch<{ data: Invoice[]; total: number; page: number; pageSize: number }>(
+    `/api/participant/invoices?page=${page}&pageSize=${pageSize}`
+  )
 }
 
 // ─── Communications ───────────────────────────────────────────────────────────
 
 export async function getMessages(): Promise<{ data: CommLog[] }> {
   return apiFetch<{ data: CommLog[] }>('/api/participant/messages')
+}
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
+
+export async function getProfile(): Promise<{ data: ParticipantProfile }> {
+  return apiFetch<{ data: ParticipantProfile }>('/api/participant/profile')
 }
 
 // ─── Documents ────────────────────────────────────────────────────────────────
