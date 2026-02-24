@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { Loader2, XCircle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 
-export default function ProviderAuthVerifyPage(): React.JSX.Element {
+function VerifyContent(): React.JSX.Element {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
@@ -77,5 +77,28 @@ export default function ProviderAuthVerifyPage(): React.JSX.Element {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function ProviderAuthVerifyPage(): React.JSX.Element {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <Card className="w-full max-w-md">
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <Loader2 className="h-12 w-12 text-emerald-600 animate-spin" />
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Loading...</h2>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      }
+    >
+      <VerifyContent />
+    </Suspense>
   )
 }
