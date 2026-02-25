@@ -130,6 +130,7 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 - Staff SMS test numbers: `+61411941699` (director@ and pm@)
 - `CRON_SECRET` needed in `.env.local` + GitHub Actions secrets to activate cron
 - RBAC: 50 permissions total (Global Admin: all 50, Plan Manager: 47, Assistant: subset)
+- WCAG audit complete (participant app only per REQ-012) — contrast fixes needed (~8 locations), accessibility structure is solid
 
 **Staging (ap-southeast-2) — LIVE, CD auto-deploys on merge to main:**
 - CloudFront: `d2iv01jt8w4gxn.cloudfront.net`
@@ -170,6 +171,7 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | `.github/workflows/cron.yml` | GH Actions schedule — POSTs to staging every 5 min |
 | `.github/workflows/ci.yml` | CI pipeline (lint, type-check, test, build) |
 | `infrastructure/lib/config.ts` | CDK environment configs |
+| `.env.example` | Environment variable template — keep in sync with `process.env` references |
 
 ---
 
@@ -182,6 +184,8 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 - **Linter interference**: ESLint auto-fix causes Write tool "File modified since read". Write to `/tmp/` then `cp` in.
 - **Prisma Json fields**: Cast with `as unknown as Prisma.InputJsonValue`.
 - **Model field names**: `CrmProvider.name` (not `businessName`), `PlanStatus.ACTIVE`, `BnkPaymentStatus.CLEARED` (not COMPLETED), `ParticipantOnboardingStatus.COMPLETE` (not ACTIVE). Always check schema before field access.
+- **Env var sync**: When adding new `process.env` references, also update `.env.example`. Known alias traps: code uses `SES_FROM_EMAIL` and `AWS_S3_BUCKET`, not the old names.
+- **WCAG scope**: REQ-012 applies to participant-facing app (Expo) ONLY, not the main PM dashboard or provider portal. Minimum contrast: never use `#9ca3af` / gray-400 on white (~2.8:1) — use `#6b7280` / gray-500 (~4.6:1).
 
 ---
 
