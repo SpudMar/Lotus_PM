@@ -30,6 +30,7 @@ import { Progress } from '@/components/ui/progress'
 import { ArrowLeft, Plus, Trash2, Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles } from 'lucide-react'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
 import { formatDateAU } from '@/lib/shared/dates'
+import { PdfViewer } from '@/components/invoices/PdfViewer'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,8 @@ interface ExtractedLineItem {
 }
 
 interface ExtractedInvoiceFields {
+  s3Key: string | null
+  s3Bucket: string | null
   providerName: string | null
   providerAbn: string | null
   invoiceNumber: string | null
@@ -305,6 +308,12 @@ export default function InvoiceUploadPage(): React.JSX.Element {
 
       const json = (await res.json()) as { data: ExtractedInvoiceFields }
       const extracted = json.data
+
+      // Capture S3 location returned by the extraction endpoint
+      if (extracted.s3Key && extracted.s3Bucket) {
+        setUploadedS3Key(extracted.s3Key)
+        setUploadedS3Bucket(extracted.s3Bucket)
+      }
 
       // Auto-populate invoice header fields
       if (extracted.invoiceNumber) {
@@ -670,6 +679,22 @@ export default function InvoiceUploadPage(): React.JSX.Element {
             <AlertTitle className="text-amber-800">PDF extraction incomplete</AlertTitle>
             <AlertDescription className="text-amber-700">{extractionWarning}</AlertDescription>
           </Alert>
+        )}
+
+        {/* PDF viewer — shown after extraction completes so PM can see the source document */}
+        {fieldsAutoPopulated && (uploadedS3Key && uploadedS3Bucket) && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">Invoice PDF Preview</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <PdfViewer
+                s3Key={uploadedS3Key}
+                s3Bucket={uploadedS3Bucket}
+                height={700}
+              />
+            </CardContent>
+          </Card>
         )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
