@@ -586,9 +586,9 @@ model InvInvoice {
   xeroSyncedAt    DateTime?     // Timestamp of last successful Xero sync
 
   // AI processing engine -- Wave 1
-  processingCategory    String?       // AUTO_APPROVED | PARTICIPANT_APPROVAL | NEEDS_CODES | NEEDS_REVIEW | AUTO_REJECTED
-  aiProcessingResult    Json?         // Full structured output from Bedrock Claude
-  processedAt           DateTime?     // When the processing engine completed
+  processingCategory    String?       @map("processing_category") // AUTO_APPROVED | PARTICIPANT_APPROVAL | NEEDS_CODES | NEEDS_REVIEW | AUTO_REJECTED
+  aiProcessingResult    Json?         @map("ai_processing_result") // Full structured output from Bedrock Claude
+  processedAt           DateTime?     @map("processed_at") // When the processing engine completed
 
   // Analytics tracking
   statusHistory     InvStatusHistory[]
@@ -689,15 +689,15 @@ model InvInvoiceLine {
   userOverrideCode    String?  // if PM chose differently from suggestion
 
   // AI processing engine -- Wave 1
-  aiSuggestedCode     String?  // AI-suggested NDIS support code
-  aiCodeConfidence    String?  // HIGH | MEDIUM | LOW | NONE
-  aiCodeReasoning     String?  // AI reasoning for the suggestion
-  validationStatus    String?  @default("PENDING") // PENDING | VALID | INVALID
-  validationNotes     Json?    // Per-line validation details
-  priceCapCents       Int?     // NDIS price cap for this support item
-  lineStatus          String?  @default("PENDING") // PENDING | APPROVED | REJECTED | ADJUSTED
-  rejectionReason     String?  // Reason for line rejection
-  adjustedAmountCents Int?     // Override amount if adjusted
+  aiSuggestedCode     String?  @map("ai_suggested_code") // AI-suggested NDIS support code
+  aiCodeConfidence    String?  @map("ai_code_confidence") // HIGH | MEDIUM | LOW | NONE
+  aiCodeReasoning     String?  @map("ai_code_reasoning") // AI reasoning for the suggestion
+  validationStatus    String?  @default("PENDING") @map("validation_status") // PENDING | VALID | INVALID
+  validationNotes     Json?    @map("validation_notes") // Per-line validation details
+  priceCapCents       Int?     @map("price_cap_cents") // NDIS price cap for this support item
+  lineStatus          String?  @default("PENDING") @map("line_status") // PENDING | APPROVED | REJECTED | ADJUSTED
+  rejectionReason     String?  @map("rejection_reason") // Reason for line rejection
+  adjustedAmountCents Int?     @map("adjusted_amount_cents") // Override amount if adjusted
 
   claimLines      ClmClaimLine[]
 
