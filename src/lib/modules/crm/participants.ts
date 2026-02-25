@@ -83,6 +83,9 @@ export async function updateParticipant(id: string, input: UpdateInput, userId: 
       ...input,
       email: input.email || undefined,
       dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : undefined,
+      ndisRegistrationDate: input.ndisRegistrationDate !== undefined
+        ? (input.ndisRegistrationDate ? new Date(input.ndisRegistrationDate) : null)
+        : undefined,
     },
   })
 

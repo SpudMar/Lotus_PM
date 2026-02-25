@@ -6,6 +6,7 @@ import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import {
@@ -36,6 +37,8 @@ import {
   Receipt,
   Building2,
   Send,
+  Pencil,
+  Info,
 } from 'lucide-react'
 import { formatDateAU, formatDateTimeAU } from '@/lib/shared/dates'
 import { formatAUD } from '@/lib/shared/currency'
@@ -119,6 +122,19 @@ const NOTE_TYPE_OPTIONS: { value: CorrespondenceType; label: string }[] = [
   { value: 'SMS_OUTBOUND', label: 'Outbound SMS' },
 ]
 
+// ── Inline edit form types ────────────────────────────────────────────────────
+
+interface BusinessFormData {
+  name: string
+  abn: string
+  email: string
+  phone: string
+}
+
+interface AddressFormData {
+  address: string
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProviderDetailPage({
@@ -142,14 +158,29 @@ export default function ProviderDetailPage({
   const [noteSaving, setNoteSaving] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
 
+  // -- Inline editing state --
+  const [editingSection, setEditingSection] = useState<string | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const [businessForm, setBusinessForm] = useState<BusinessFormData>({
+    name: '', abn: '', email: '', phone: '',
+  })
+  const [addressForm, setAddressForm] = useState<AddressFormData>({
+    address: '',
+  })
+
   // ── Load data ─────────────────────────────────────────────────────────────
 
-  useEffect(() => {
+  function loadProvider(): void {
     void fetch(`/api/crm/providers/${id}`)
       .then((r) => r.json())
       .then((j: { data: Provider }) => setProvider(j.data))
       .catch(() => null)
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadProvider()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   function loadCorrespondence(filterType?: CorrespondenceType | 'all'): void {
@@ -191,6 +222,61 @@ export default function ProviderDetailPage({
       loadCorrespondence(typeFilter)
     } finally {
       setNoteSaving(false)
+    }
+  }
+
+  // ── Inline editing helpers ──────────────────────────────────────────────────
+
+  function startEdit(section: string): void {
+    if (!provider) return
+    setEditingSection(section)
+    if (section === 'business') {
+      setBusinessForm({
+        name: provider.name,
+        abn: provider.abn,
+        email: provider.email ?? '',
+        phone: provider.phone ?? '',
+      })
+    } else if (section === 'address') {
+      setAddressForm({
+        address: provider.address ?? '',
+      })
+    }
+  }
+
+  function cancelEdit(): void {
+    setEditingSection(null)
+  }
+
+  async function saveSection(section: string): Promise<void> {
+    setEditSaving(true)
+    try {
+      let payload: Record<string, unknown> = {}
+      if (section === 'business') {
+        payload = {
+          name: businessForm.name,
+          abn: businessForm.abn,
+          email: businessForm.email || '',
+          phone: businessForm.phone || undefined,
+        }
+      } else if (section === 'address') {
+        payload = {
+          address: addressForm.address || undefined,
+        }
+      }
+
+      const res = await fetch(`/api/crm/providers/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (res.ok) {
+        setEditingSection(null)
+        loadProvider()
+      }
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -259,50 +345,164 @@ export default function ProviderDetailPage({
         {/* ── Overview ──────────────────────────────────────────────────────── */}
         <TabsContent value="overview" className="space-y-4 mt-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* ── Business Details ────────────────────────────────────────── */}
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Contact</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="h-4 w-4" aria-hidden="true" />
-                  {provider.email ?? '—'}
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="h-4 w-4" aria-hidden="true" />
-                  {provider.phone ?? '—'}
-                </div>
-                {provider.address && (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Building2 className="h-4 w-4" aria-hidden="true" />
-                    {provider.address}
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-sm font-semibold">Business Details</CardTitle>
+                {editingSection !== 'business' ? (
+                  <Button variant="outline" size="sm" onClick={() => startEdit('business')}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" /> Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={cancelEdit} disabled={editSaving}>Cancel</Button>
+                    <Button size="sm" onClick={() => void saveSection('business')} disabled={editSaving}>
+                      {editSaving ? 'Saving...' : 'Save'}
+                    </Button>
                   </div>
                 )}
-                {provider.registrationNo && (
-                  <div className="text-muted-foreground">
-                    Registration No: {provider.registrationNo}
-                  </div>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {editingSection === 'business' ? (
+                  <>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-name" className="text-xs">Business name</Label>
+                      <Input
+                        id="edit-name"
+                        value={businessForm.name}
+                        onChange={(e) => setBusinessForm(prev => ({ ...prev, name: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-abn" className="text-xs">ABN</Label>
+                      <Input
+                        id="edit-abn"
+                        value={businessForm.abn}
+                        onChange={(e) => setBusinessForm(prev => ({ ...prev, abn: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-email" className="text-xs">Email</Label>
+                      <Input
+                        id="edit-email"
+                        type="email"
+                        value={businessForm.email}
+                        onChange={(e) => setBusinessForm(prev => ({ ...prev, email: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-phone" className="text-xs">Phone</Label>
+                      <Input
+                        id="edit-phone"
+                        value={businessForm.phone}
+                        onChange={(e) => setBusinessForm(prev => ({ ...prev, phone: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Business name</span>
+                      <span className="font-medium">{provider.name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">ABN</span>
+                      <span className="font-mono">{provider.abn}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Mail className="h-4 w-4" aria-hidden="true" />
+                      {provider.email ?? '—'}
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Phone className="h-4 w-4" aria-hidden="true" />
+                      {provider.phone ?? '—'}
+                    </div>
+                    {provider.registrationNo && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Registration No</span>
+                        <span>{provider.registrationNo}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
 
+            {/* ── Address ─────────────────────────────────────────────────── */}
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Banking</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1 text-sm text-muted-foreground">
-                {provider.bankBsb ? (
-                  <>
-                    <div>BSB: {provider.bankBsb}</div>
-                    <div>Account: {provider.bankAccount}</div>
-                    <div>Name: {provider.bankAccountName}</div>
-                  </>
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-sm font-semibold">Address</CardTitle>
+                {editingSection !== 'address' ? (
+                  <Button variant="outline" size="sm" onClick={() => startEdit('address')}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" /> Edit
+                  </Button>
                 ) : (
-                  <span>No bank details recorded</span>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={cancelEdit} disabled={editSaving}>Cancel</Button>
+                    <Button size="sm" onClick={() => void saveSection('address')} disabled={editSaving}>
+                      {editSaving ? 'Saving...' : 'Save'}
+                    </Button>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {editingSection === 'address' ? (
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-address" className="text-xs">Full address</Label>
+                    <Input
+                      id="edit-address"
+                      value={addressForm.address}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, address: e.target.value }))}
+                      className="h-8 text-sm"
+                      placeholder="123 Example St, Sydney NSW 2000"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Building2 className="h-4 w-4" aria-hidden="true" />
+                    {provider.address ?? '—'}
+                  </div>
                 )}
               </CardContent>
             </Card>
           </div>
+
+          {/* ── Banking Details (read-only) ────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Banking Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              {provider.bankBsb ? (
+                <>
+                  <div className="flex justify-between">
+                    <span>BSB</span>
+                    <span className="font-mono">{provider.bankBsb}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Account</span>
+                    <span className="font-mono">{provider.bankAccount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Account name</span>
+                    <span>{provider.bankAccountName}</span>
+                  </div>
+                </>
+              ) : (
+                <span>No bank details recorded</span>
+              )}
+              <div className="flex items-start gap-2 rounded-md bg-muted/50 p-2.5 mt-2">
+                <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
+                <p className="text-xs text-muted-foreground">
+                  Sensitive banking details should be updated via the provider portal or by contacting the provider directly.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ── Correspondence ─────────────────────────────────────────────────── */}
