@@ -1,11 +1,16 @@
 /**
  * Public participant invoice approval page — WS7.
  * No authentication required. Accessible via the token link sent by email/SMS.
+ *
+ * Side-by-side layout:
+ *   Left: PDF viewer showing the invoice (if PDF attached)
+ *   Right: Invoice details + Approve/Reject buttons
  */
 'use client'
 
 import { useEffect, useState, use } from 'react'
 import { formatAUD } from '@/lib/shared/currency'
+import { PdfViewer } from '@/components/shared/PdfViewer'
 
 interface ApprovalStatus {
   invoiceId: string
@@ -31,11 +36,16 @@ export default function ApprovalPage({
   const { token } = use(params)
   const [state, setState] = useState<PageState>({ type: 'loading' })
   const [submitting, setSubmitting] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [hasPdf, setHasPdf] = useState(false)
 
   useEffect(() => {
-    async function loadStatus() {
+    let cancelled = false
+
+    async function loadStatus(): Promise<void> {
       try {
         const res = await fetch(`/api/invoices/approval/status?token=${encodeURIComponent(token)}`)
+        if (cancelled) return
         if (!res.ok) {
           const body = (await res.json()) as { error?: string }
           if (res.status === 410) {
@@ -58,13 +68,36 @@ export default function ApprovalPage({
           setState({ type: 'ready', data })
         }
       } catch {
-        setState({ type: 'error', message: 'An unexpected error occurred. Please try again.' })
+        if (!cancelled) {
+          setState({ type: 'error', message: 'An unexpected error occurred. Please try again.' })
+        }
       }
     }
+
+    async function loadPdf(): Promise<void> {
+      try {
+        const res = await fetch(`/api/approval/${encodeURIComponent(token)}/pdf`)
+        if (cancelled) return
+        if (res.ok) {
+          const body = (await res.json()) as { data: { url: string } }
+          if (!cancelled) {
+            setPdfUrl(body.data.url)
+            setHasPdf(true)
+          }
+        }
+        // If 404 (no PDF attached) or error, just don't show the PDF viewer
+      } catch {
+        // PDF preview is non-critical — fail silently
+      }
+    }
+
     void loadStatus()
+    void loadPdf()
+
+    return () => { cancelled = true }
   }, [token])
 
-  async function handleDecision(decision: 'APPROVED' | 'REJECTED') {
+  async function handleDecision(decision: 'APPROVED' | 'REJECTED'): Promise<void> {
     setSubmitting(true)
     try {
       const res = await fetch('/api/invoices/approval/respond', {
@@ -91,8 +124,10 @@ export default function ApprovalPage({
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+  // ─── Invoice details card (right panel content) ─────────────────────────────
+
+  function renderDetails(): React.JSX.Element {
+    return (
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border p-8">
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-semibold text-gray-900">Invoice Approval</h1>
@@ -199,6 +234,38 @@ export default function ApprovalPage({
           </div>
         )}
       </div>
+    )
+  }
+
+  // ─── Layout ─────────────────────────────────────────────────────────────────
+
+  // Side-by-side layout when PDF is available; centered card otherwise
+  if (hasPdf) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
+        {/* Left: PDF viewer */}
+        <div className="flex-1 p-4 lg:p-6 flex flex-col min-h-[400px] lg:min-h-screen">
+          <h2 className="text-sm font-medium text-gray-500 mb-2">Invoice PDF</h2>
+          <PdfViewer
+            pdfUrl={pdfUrl}
+            height="100%"
+            className="flex-1"
+            title="Invoice PDF preview"
+          />
+        </div>
+
+        {/* Right: Approval details */}
+        <div className="w-full lg:w-[440px] shrink-0 p-4 lg:p-6 flex items-start lg:items-center justify-center">
+          {renderDetails()}
+        </div>
+      </div>
+    )
+  }
+
+  // No PDF — centered layout (original design)
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      {renderDetails()}
     </div>
   )
 }
