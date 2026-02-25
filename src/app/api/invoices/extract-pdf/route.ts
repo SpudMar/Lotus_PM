@@ -194,7 +194,8 @@ ${extractedText.slice(0, 4000)}
           ? Math.round(parsed['totalAmountCents'])
           : null,
     }
-  } catch {
+  } catch (err) {
+    console.error('[extract-pdf] Fallback extraction failed:', err instanceof Error ? err.message : err)
     return null
   }
 }

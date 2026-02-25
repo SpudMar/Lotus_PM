@@ -393,9 +393,10 @@ export async function processWithAI(input: AIProcessingInput): Promise<AIProcess
     }
 
     return parseToolUseResponse(response.output.message.content)
-  } catch {
+  } catch (err) {
     // Graceful degradation — return null on any Bedrock failure
     // Caller (processing-engine) will fall back to NEEDS_REVIEW
+    console.error('[ai-processor] Bedrock call failed:', err instanceof Error ? err.message : err)
     return null
   }
 }
