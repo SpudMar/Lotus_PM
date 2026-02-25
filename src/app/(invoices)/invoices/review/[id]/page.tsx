@@ -95,6 +95,9 @@ interface Invoice {
     budgetLines?: { id: string; categoryCode: string; categoryName: string; allocatedCents: number; spentCents: number }[]
   } | null
   lines: InvoiceLine[]
+  processingCategory: string | null
+  aiProcessingResult: Record<string, unknown> | null
+  processedAt: string | null
 }
 
 interface Participant {
@@ -423,6 +426,9 @@ export default function InvoiceReviewDetailPage({
   const [pendingLineReason, setPendingLineReason] = useState('')
   const [pendingLineAdjusted, setPendingLineAdjusted] = useState('')
 
+  // AI processing
+  const [aiProcessing, setAiProcessing] = useState(false)
+
   // -- Data loading ---
 
   const loadInvoice = useCallback(async (): Promise<void> => {
@@ -659,6 +665,16 @@ export default function InvoiceReviewDetailPage({
       await loadInvoice()
     } finally {
       setActionLoading(null)
+    }
+  }
+
+  async function handleRunAiAnalysis(): Promise<void> {
+    setAiProcessing(true)
+    try {
+      await fetch(`/api/invoices/${id}/process`, { method: 'POST' })
+      await loadInvoice()
+    } finally {
+      setAiProcessing(false)
     }
   }
 
@@ -992,6 +1008,68 @@ export default function InvoiceReviewDetailPage({
                 </div>
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── AI Analysis Card ──────────────────────────────────────────────── */}
+      <Card data-testid="ai-analysis-card">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Zap className="h-4 w-4" aria-hidden="true" />
+            AI Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {invoice.processingCategory ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {invoice.processingCategory === 'AUTO_APPROVED' && (
+                  <Badge className="bg-green-100 text-green-800 border-green-300 border">Auto Approved</Badge>
+                )}
+                {invoice.processingCategory === 'PARTICIPANT_APPROVAL' && (
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-300 border">Participant Approval Required</Badge>
+                )}
+                {invoice.processingCategory === 'NEEDS_CODES' && (
+                  <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 border">Needs NDIS Codes</Badge>
+                )}
+                {invoice.processingCategory === 'NEEDS_REVIEW' && (
+                  <Badge className="bg-orange-100 text-orange-800 border-orange-300 border">Needs Review</Badge>
+                )}
+                {invoice.processingCategory === 'AUTO_REJECTED' && (
+                  <Badge className="bg-red-100 text-red-800 border-red-300 border">Auto Rejected</Badge>
+                )}
+                {invoice.processedAt && (
+                  <span className="text-xs text-muted-foreground">
+                    Processed {formatDateAU(new Date(invoice.processedAt))}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (invoice.status === 'RECEIVED' || invoice.status === 'PENDING_REVIEW') ? (
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-muted-foreground">No AI analysis has been run on this invoice yet.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleRunAiAnalysis()}
+                disabled={aiProcessing}
+              >
+                {aiProcessing ? (
+                  <>
+                    <span className="mr-2 h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+                    Analysing...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+                    Run AI Analysis
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">AI analysis not available for this invoice status.</p>
           )}
         </CardContent>
       </Card>
