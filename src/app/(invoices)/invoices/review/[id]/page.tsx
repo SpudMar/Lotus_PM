@@ -38,7 +38,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, Save, CheckCircle, XCircle, Flag, Plus, Trash2, FileWarning, AlertCircle, AlertTriangle, ShieldAlert, Mail, Upload, Zap, Building2 } from 'lucide-react'
 import { formatDateAU } from '@/lib/shared/dates'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
-import { PdfViewer } from '@/components/shared/PdfViewer'
+import { PdfViewer } from '@/components/invoices/PdfViewer'
+import { ParticipantCombobox } from '@/components/comboboxes/ParticipantCombobox'
+import { ProviderCombobox } from '@/components/comboboxes/ProviderCombobox'
+import { PlanCombobox } from '@/components/comboboxes/PlanCombobox'
+import { SupportItemCombobox, type SupportItemResult } from '@/components/comboboxes/SupportItemCombobox'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -99,26 +103,6 @@ interface Invoice {
   processingCategory: string | null
   aiProcessingResult: Record<string, unknown> | null
   processedAt: string | null
-}
-
-interface Participant {
-  id: string
-  firstName: string
-  lastName: string
-  ndisNumber: string
-}
-
-interface Provider {
-  id: string
-  name: string
-  abn: string
-}
-
-interface Plan {
-  id: string
-  startDate: string
-  endDate: string
-  status: string
 }
 
 // ── Validation types ─────────────────────────────────────────────────────────
@@ -399,11 +383,6 @@ export default function InvoiceReviewDetailPage({
   // Budget lines for the selected plan
   const [budgetLines, setBudgetLines] = useState<BudgetLineRef[]>([])
 
-  // Dropdowns
-  const [participants, setParticipants] = useState<Participant[]>([])
-  const [providers, setProviders] = useState<Provider[]>([])
-  const [plans, setPlans] = useState<Plan[]>([])
-
   // Dialogs
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
@@ -460,30 +439,6 @@ export default function InvoiceReviewDetailPage({
   useEffect(() => {
     void loadInvoice()
   }, [loadInvoice])
-
-  // Load participants and providers for dropdowns
-  useEffect(() => {
-    void fetch('/api/crm/participants?pageSize=200')
-      .then(r => r.json())
-      .then((j: { data: Participant[] }) => setParticipants(j.data))
-      .catch(() => null)
-    void fetch('/api/crm/providers?pageSize=200')
-      .then(r => r.json())
-      .then((j: { data: Provider[] }) => setProviders(j.data))
-      .catch(() => null)
-  }, [])
-
-  // Load plans filtered by selected participant
-  useEffect(() => {
-    if (!selectedParticipantId) {
-      setPlans([])
-      return
-    }
-    void fetch(`/api/plans?participantId=${selectedParticipantId}&pageSize=50`)
-      .then(r => r.json())
-      .then((j: { data: Plan[] }) => setPlans(j.data))
-      .catch(() => null)
-  }, [selectedParticipantId])
 
   // Load budget lines when plan changes
   useEffect(() => {
@@ -680,6 +635,21 @@ export default function InvoiceReviewDetailPage({
       if (field === 'quantity' || field === 'unitPriceCents') {
         line.totalCents = Math.round(line.quantity * line.unitPriceCents)
       }
+      updated[idx] = line
+      return updated
+    })
+  }
+
+  function handleSupportItemSelect(idx: number, item: SupportItemResult): void {
+    setLines((prev) => {
+      const updated = [...prev]
+      const line = { ...(updated[idx] as FormLine) }
+      line.supportItemCode = item.itemNumber
+      line.supportItemName = item.name
+      line.categoryCode = item.categoryCode.slice(0, 2)
+      line.unitPriceCents = item.unitPriceCents
+      // Recalculate total
+      line.totalCents = Math.round(line.quantity * line.unitPriceCents)
       updated[idx] = line
       return updated
     })
@@ -1206,71 +1176,38 @@ export default function InvoiceReviewDetailPage({
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-1">
-                <Label htmlFor="participant-select">
+                <Label>
                   Participant{' '}
                   <span className="text-xs text-muted-foreground">(required to approve)</span>
                 </Label>
-                <Select
+                <ParticipantCombobox
                   value={selectedParticipantId}
                   onValueChange={(val) => {
                     setSelectedParticipantId(val)
-                    setSelectedPlanId('') // reset plan when participant changes
+                    setSelectedPlanId('')
                   }}
                   disabled={!isEditable}
-                >
-                  <SelectTrigger id="participant-select">
-                    <SelectValue placeholder="Select participant..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {participants.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.firstName} {p.lastName} -- {p.ndisNumber}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="provider-select">Provider</Label>
-                <Select
+                <Label>Provider</Label>
+                <ProviderCombobox
                   value={selectedProviderId}
                   onValueChange={setSelectedProviderId}
                   disabled={!isEditable}
-                >
-                  <SelectTrigger id="provider-select">
-                    <SelectValue placeholder="Select provider..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {providers.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name} (ABN {p.abn})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
 
-              {selectedParticipantId && plans.length > 0 && (
+              {selectedParticipantId && (
                 <div className="space-y-1">
-                  <Label htmlFor="plan-select">Plan</Label>
-                  <Select
+                  <Label>Plan</Label>
+                  <PlanCombobox
                     value={selectedPlanId}
                     onValueChange={setSelectedPlanId}
+                    participantId={selectedParticipantId}
                     disabled={!isEditable}
-                  >
-                    <SelectTrigger id="plan-select">
-                      <SelectValue placeholder="Select plan..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {plans.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {formatDateAU(new Date(p.startDate))} - {formatDateAU(new Date(p.endDate))}{' '}
-                          <Badge variant="outline" className="ml-1 text-xs">{p.status}</Badge>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
               )}
             </CardContent>
@@ -1331,12 +1268,10 @@ export default function InvoiceReviewDetailPage({
                             <TableCell className="p-1">
                               {isEditable ? (
                                 <div className="flex flex-col gap-0.5">
-                                  <Input
+                                  <SupportItemCombobox
                                     value={line.supportItemCode}
-                                    onChange={(e) => updateLine(idx, 'supportItemCode', e.target.value)}
-                                    className={`h-7 text-xs font-mono w-32 ${isMissingCode ? 'border-amber-400' : ''}`}
-                                    placeholder="01_011_..."
-                                    aria-label="Support item code"
+                                    onValueChange={(item) => handleSupportItemSelect(idx, item)}
+                                    className={isMissingCode ? 'border-amber-400' : ''}
                                   />
                                   {hasSuggestion && isMissingCode && (
                                     <button
