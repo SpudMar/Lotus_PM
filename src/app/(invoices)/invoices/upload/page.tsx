@@ -29,30 +29,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { ArrowLeft, Plus, Trash2, Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles } from 'lucide-react'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
-import { formatDateAU } from '@/lib/shared/dates'
 import { PdfViewer } from '@/components/invoices/PdfViewer'
+import { ParticipantCombobox } from '@/components/comboboxes/ParticipantCombobox'
+import { ProviderCombobox } from '@/components/comboboxes/ProviderCombobox'
+import { PlanCombobox } from '@/components/comboboxes/PlanCombobox'
+import { SupportItemCombobox, type SupportItemResult } from '@/components/comboboxes/SupportItemCombobox'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-
-interface Participant {
-  id: string
-  firstName: string
-  lastName: string
-  ndisNumber: string
-}
-
-interface Provider {
-  id: string
-  name: string
-  abn: string
-}
-
-interface Plan {
-  id: string
-  startDate: string
-  endDate: string
-  status: string
-}
 
 interface BudgetLine {
   id: string
@@ -145,14 +128,9 @@ export default function InvoiceUploadPage(): React.JSX.Element {
   const [selectedParticipantId, setSelectedParticipantId] = useState('')
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('')
-  const [participantSearch, setParticipantSearch] = useState('')
-  const [providerSearch, setProviderSearch] = useState('')
 
-  // ── Dropdown data ──────────────────────────────────────────────────────────
+  // ── Dropdown data (budget lines still loaded traditionally) ────────────────
 
-  const [participants, setParticipants] = useState<Participant[]>([])
-  const [providers, setProviders] = useState<Provider[]>([])
-  const [plans, setPlans] = useState<Plan[]>([])
   const [budgetLines, setBudgetLines] = useState<BudgetLine[]>([])
 
   // ── PDF upload ────────────────────────────────────────────────────────────
@@ -185,57 +163,7 @@ export default function InvoiceUploadPage(): React.JSX.Element {
     }
   }, [subtotalStr, gstStr, totalManuallyEdited])
 
-  // ── Data loading ──────────────────────────────────────────────────────────
-
-  const loadParticipants = useCallback(async (): Promise<void> => {
-    try {
-      const params = new URLSearchParams({ pageSize: '200' })
-      if (participantSearch.trim()) params.set('search', participantSearch.trim())
-      const res = await fetch(`/api/crm/participants?${params.toString()}`)
-      if (res.ok) {
-        const json = (await res.json()) as { data: Participant[] }
-        setParticipants(json.data)
-      }
-    } catch {
-      // Silent fail for search
-    }
-  }, [participantSearch])
-
-  const loadProviders = useCallback(async (): Promise<void> => {
-    try {
-      const params = new URLSearchParams({ pageSize: '200' })
-      if (providerSearch.trim()) params.set('search', providerSearch.trim())
-      const res = await fetch(`/api/crm/providers?${params.toString()}`)
-      if (res.ok) {
-        const json = (await res.json()) as { data: Provider[] }
-        setProviders(json.data)
-      }
-    } catch {
-      // Silent fail for search
-    }
-  }, [providerSearch])
-
-  useEffect(() => {
-    void loadParticipants()
-  }, [loadParticipants])
-
-  useEffect(() => {
-    void loadProviders()
-  }, [loadProviders])
-
-  // Load plans filtered by selected participant
-  useEffect(() => {
-    if (!selectedParticipantId) {
-      setPlans([])
-      setSelectedPlanId('')
-      setBudgetLines([])
-      return
-    }
-    void fetch(`/api/plans?participantId=${selectedParticipantId}&pageSize=50`)
-      .then((r) => r.json())
-      .then((j: { data: Plan[] }) => setPlans(j.data))
-      .catch(() => null)
-  }, [selectedParticipantId])
+  // ── Data loading (plans and budget lines still traditional) ────────────────
 
   // Load budget lines filtered by selected plan
   useEffect(() => {
@@ -253,29 +181,6 @@ export default function InvoiceUploadPage(): React.JSX.Element {
   useEffect(() => {
     setSelectedPlanId('')
   }, [selectedParticipantId])
-
-  // ── Filtered dropdowns ────────────────────────────────────────────────────
-
-  const filteredParticipants = useMemo(() => {
-    if (!participantSearch.trim()) return participants
-    const q = participantSearch.toLowerCase()
-    return participants.filter(
-      (p) =>
-        p.firstName.toLowerCase().includes(q) ||
-        p.lastName.toLowerCase().includes(q) ||
-        p.ndisNumber.includes(q)
-    )
-  }, [participants, participantSearch])
-
-  const filteredProviders = useMemo(() => {
-    if (!providerSearch.trim()) return providers
-    const q = providerSearch.toLowerCase()
-    return providers.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.abn.includes(q)
-    )
-  }, [providers, providerSearch])
 
   // ── PDF extraction handler ────────────────────────────────────────────────
 
@@ -344,15 +249,20 @@ export default function InvoiceUploadPage(): React.JSX.Element {
         setLines(populatedLines)
       }
 
-      // Auto-select provider by ABN if present
+      // Auto-select provider by ABN if present — search via API
       if (extracted.providerAbn) {
-        // Normalize: strip spaces
         const abn = extracted.providerAbn.replace(/\s/g, '')
-        const match = providers.find(
-          (p) => p.abn.replace(/\s/g, '') === abn,
-        )
-        if (match) {
-          setSelectedProviderId(match.id)
+        try {
+          const provRes = await fetch(`/api/crm/providers/search?q=${encodeURIComponent(abn)}&limit=1`)
+          if (provRes.ok) {
+            const provJson = (await provRes.json()) as { data: Array<{ id: string; abn: string }> }
+            const match = provJson.data.find((p) => p.abn.replace(/\s/g, '') === abn)
+            if (match) {
+              setSelectedProviderId(match.id)
+            }
+          }
+        } catch {
+          // Non-fatal: provider auto-match is best-effort
         }
       }
 
@@ -364,7 +274,7 @@ export default function InvoiceUploadPage(): React.JSX.Element {
     } finally {
       setExtracting(false)
     }
-  }, [providers])
+  }, [])
 
   // ── PDF file selection + extraction trigger ────────────────────────────────
 
@@ -472,6 +382,21 @@ export default function InvoiceUploadPage(): React.JSX.Element {
       if (field === 'quantity' || field === 'unitPriceCents') {
         line.totalCents = Math.round(line.quantity * line.unitPriceCents)
       }
+      updated[idx] = line
+      return updated
+    })
+  }
+
+  function handleSupportItemSelect(idx: number, item: SupportItemResult): void {
+    setLines((prev) => {
+      const updated = [...prev]
+      const line = { ...(updated[idx] as FormLine) }
+      line.supportItemCode = item.itemNumber
+      line.supportItemName = item.name
+      line.categoryCode = item.categoryCode.slice(0, 2)
+      line.unitPriceCents = item.unitPriceCents
+      // Recalculate total
+      line.totalCents = Math.round(line.quantity * line.unitPriceCents)
       updated[idx] = line
       return updated
     })
@@ -885,83 +810,37 @@ export default function InvoiceUploadPage(): React.JSX.Element {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <Label htmlFor="participant-search">
+                    <Label>
                       Participant <span className="text-destructive">*</span>
                     </Label>
-                    <Input
-                      id="participant-search"
-                      value={participantSearch}
-                      onChange={(e) => setParticipantSearch(e.target.value)}
-                      placeholder="Search by name or NDIS number..."
-                      className="mb-1"
-                    />
-                    <Select
+                    <ParticipantCombobox
                       value={selectedParticipantId}
-                      onValueChange={(val) => {
-                        setSelectedParticipantId(val)
+                      onValueChange={(id) => {
+                        setSelectedParticipantId(id)
                         setSelectedPlanId('')
                       }}
-                    >
-                      <SelectTrigger id="participant-select" aria-required="true">
-                        <SelectValue placeholder="Select participant..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredParticipants.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.firstName} {p.lastName} — {p.ndisNumber}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    />
                   </div>
 
                   <div className="space-y-1">
-                    <Label htmlFor="provider-search">
+                    <Label>
                       Provider <span className="text-destructive">*</span>
                     </Label>
-                    <Input
-                      id="provider-search"
-                      value={providerSearch}
-                      onChange={(e) => setProviderSearch(e.target.value)}
-                      placeholder="Search by name or ABN..."
-                      className="mb-1"
-                    />
-                    <Select
+                    <ProviderCombobox
                       value={selectedProviderId}
                       onValueChange={setSelectedProviderId}
-                    >
-                      <SelectTrigger id="provider-select" aria-required="true">
-                        <SelectValue placeholder="Select provider..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredProviders.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} (ABN {p.abn})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    />
                   </div>
                 </div>
 
-                {selectedParticipantId && plans.length > 0 && (
+                {selectedParticipantId && (
                   <div className="space-y-1">
-                    <Label htmlFor="plan-select">Plan</Label>
-                    <Select
+                    <Label>Plan</Label>
+                    <PlanCombobox
                       value={selectedPlanId}
                       onValueChange={setSelectedPlanId}
-                    >
-                      <SelectTrigger id="plan-select">
-                        <SelectValue placeholder="Select plan (optional)..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {plans.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {formatDateAU(new Date(p.startDate))} – {formatDateAU(new Date(p.endDate))} ({p.status})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      participantId={selectedParticipantId}
+                    />
                   </div>
                 )}
               </CardContent>
@@ -1008,12 +887,9 @@ export default function InvoiceUploadPage(): React.JSX.Element {
                         lines.map((line, idx) => (
                           <TableRow key={idx}>
                             <TableCell className="p-1">
-                              <Input
+                              <SupportItemCombobox
                                 value={line.supportItemCode}
-                                onChange={(e) => updateLine(idx, 'supportItemCode', e.target.value)}
-                                className="h-7 text-xs font-mono w-32"
-                                placeholder="01_011_..."
-                                aria-label="Support item code"
+                                onValueChange={(item) => handleSupportItemSelect(idx, item)}
                               />
                             </TableCell>
                             <TableCell className="p-1">
