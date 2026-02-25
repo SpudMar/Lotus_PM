@@ -40,15 +40,18 @@ export function PdfViewer({
   const [state, setState] = useState<FetchState>('idle')
 
   useEffect(() => {
-    // Reset when props change
-    setPresignedUrl(null)
-    setState('idle')
+    let cancelled = false
 
-    // Mode 1: fetch by invoice ID
-    if (invoiceId) {
-      setState('loading')
-      fetch(`/api/invoices/${invoiceId}/pdf`)
-        .then(async (res) => {
+    async function loadPdf(): Promise<void> {
+      // Reset when props change
+      setPresignedUrl(null)
+
+      // Mode 1: fetch by invoice ID
+      if (invoiceId) {
+        setState('loading')
+        try {
+          const res = await fetch(`/api/invoices/${invoiceId}/pdf`)
+          if (cancelled) return
           if (res.status === 404) {
             setState('no-document')
             return
@@ -58,33 +61,44 @@ export function PdfViewer({
             return
           }
           const json = (await res.json()) as { data: { url: string } }
-          setPresignedUrl(json.data.url)
-          setState('ready')
-        })
-        .catch(() => setState('error'))
-      return
-    }
+          if (!cancelled) {
+            setPresignedUrl(json.data.url)
+            setState('ready')
+          }
+        } catch {
+          if (!cancelled) setState('error')
+        }
+        return
+      }
 
-    // Mode 2: fetch by s3Key + s3Bucket (upload page, before save)
-    if (s3Key && s3Bucket) {
-      setState('loading')
-      const params = new URLSearchParams({ s3Key, s3Bucket })
-      fetch(`/api/invoices/extract-pdf/preview-url?${params.toString()}`)
-        .then(async (res) => {
+      // Mode 2: fetch by s3Key + s3Bucket (upload page, before save)
+      if (s3Key && s3Bucket) {
+        setState('loading')
+        try {
+          const params = new URLSearchParams({ s3Key, s3Bucket })
+          const res = await fetch(`/api/invoices/extract-pdf/preview-url?${params.toString()}`)
+          if (cancelled) return
           if (!res.ok) {
             setState('error')
             return
           }
           const json = (await res.json()) as { data: { url: string } }
-          setPresignedUrl(json.data.url)
-          setState('ready')
-        })
-        .catch(() => setState('error'))
-      return
+          if (!cancelled) {
+            setPresignedUrl(json.data.url)
+            setState('ready')
+          }
+        } catch {
+          if (!cancelled) setState('error')
+        }
+        return
+      }
+
+      // No source provided
+      setState('no-document')
     }
 
-    // No source provided
-    setState('no-document')
+    void loadPdf()
+    return () => { cancelled = true }
   }, [invoiceId, s3Key, s3Bucket])
 
   const heightStyle = typeof height === 'number' ? `${height}px` : height

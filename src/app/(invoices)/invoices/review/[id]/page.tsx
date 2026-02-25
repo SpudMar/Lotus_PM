@@ -410,7 +410,6 @@ export default function InvoiceReviewDetailPage({
   const [showFlagDialog, setShowFlagDialog] = useState(false)
   const [flagNote, setFlagNote] = useState('')
   const [showCreateProviderModal, setShowCreateProviderModal] = useState(false)
-  const [creatingProvider, setCreatingProvider] = useState(false)
 
   // Validation & flags
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
@@ -1122,11 +1121,11 @@ export default function InvoiceReviewDetailPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* ── Left: PDF Preview ──────────────────────────────────────────── */}
-        <div className="space-y-2">
+        <div className="space-y-2 lg:sticky lg:top-4 lg:self-start">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Invoice Document
           </h2>
-          <PdfViewer invoiceId={id} height="70vh" />
+          <PdfViewer invoiceId={id} height="80vh" />
         </div>
 
         {/* ── Right: Edit Form ───────────────────────────────────────────── */}
