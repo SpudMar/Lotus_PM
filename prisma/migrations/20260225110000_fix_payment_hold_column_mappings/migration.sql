@@ -1,0 +1,5 @@
+-- No-op migration: adds @map annotations to schema.prisma only.
+-- The DB columns hold_reason and held_at already exist (created by
+-- 20260225010000_payment_hold). Prisma was querying for camelCase
+-- column names (holdReason, heldAt) which don't exist.
+-- Fix: @map("hold_reason") and @map("held_at") on BnkPayment model.
