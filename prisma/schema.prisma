@@ -777,7 +777,7 @@ model ClmClaimLine {
   gstCents        Int         @default(0)
 
   // Outcome (filled when PRODA responds)
-  status          ClmStatus?
+  status          ClmLineStatus?
   approvedCents   Int?
   outcomeNotes    String?
 
@@ -821,6 +821,13 @@ enum ClmStatus {
   PARTIAL
   PAID
   CANCELLED
+}
+
+enum ClmLineStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PARTIAL
 }
 
 // ─────────────────────────────────────────────
