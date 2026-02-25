@@ -17,7 +17,7 @@ const Tab = createBottomTabNavigator()
 // Simple icon components — replace with a real icon library when assets are available
 function TabIcon({ symbol, focused }: { symbol: string; focused: boolean }): React.JSX.Element {
   return (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }} accessibilityElementsHidden>
+    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }} accessibilityElementsHidden importantForAccessibility="no">
       {symbol}
     </Text>
   )
@@ -36,7 +36,7 @@ export function TabNavigator({ session, onSignOut }: Props): React.JSX.Element {
         headerTintColor: '#ffffff',
         headerTitleStyle: { fontWeight: '700' },
         tabBarActiveTintColor: '#2563eb',
-        tabBarInactiveTintColor: '#9ca3af',
+        tabBarInactiveTintColor: '#6b7280',
         tabBarStyle: { borderTopColor: '#e5e7eb' },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
