@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CreditCard, Send, CheckCircle, FolderPlus, AlertCircle } from 'lucide-react'
+import { CreditCard, Send, CheckCircle, FolderPlus, AlertCircle, Search } from 'lucide-react'
 import { formatAUD } from '@/lib/shared/currency'
 
 interface Claim {
@@ -65,6 +65,7 @@ export default function ClaimsPage(): React.JSX.Element {
   const [loading, setLoading] = useState(true)
   const [statusCounts, setStatusCounts] = useState<StatusCounts>({})
   const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Submit dialog state
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
@@ -197,6 +198,18 @@ export default function ClaimsPage(): React.JSX.Element {
   const approvedCount = (statusCounts['APPROVED'] ?? 0) + (statusCounts['PARTIAL'] ?? 0)
   const totalClaimedCents = claims.reduce((sum, c) => sum + c.claimedCents, 0)
 
+  const q = searchQuery.toLowerCase()
+  const filteredClaims = searchQuery
+    ? claims.filter(
+        (c) =>
+          c.claimReference.toLowerCase().includes(q) ||
+          c.invoice.invoiceNumber.toLowerCase().includes(q) ||
+          c.invoice.provider.name.toLowerCase().includes(q) ||
+          `${c.participant.firstName} ${c.participant.lastName}`.toLowerCase().includes(q) ||
+          c.participant.ndisNumber.includes(q)
+      )
+    : claims
+
   return (
     <DashboardShell>
       <div className="space-y-4">
@@ -288,6 +301,16 @@ export default function ClaimsPage(): React.JSX.Element {
           </Card>
         </div>
 
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search claims..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
         <Tabs value={statusFilter} onValueChange={setStatusFilter}>
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
@@ -324,14 +347,14 @@ export default function ClaimsPage(): React.JSX.Element {
                 <TableRow>
                   <TableCell colSpan={10} className="text-center text-muted-foreground">Loading...</TableCell>
                 </TableRow>
-              ) : claims.length === 0 ? (
+              ) : filteredClaims.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center text-muted-foreground">
-                    No claims found. Claims are created from approved invoices.
+                    {searchQuery ? 'No claims match your search.' : 'No claims found. Claims are created from approved invoices.'}
                   </TableCell>
                 </TableRow>
               ) : (
-                claims.map((claim) => (
+                filteredClaims.map((claim) => (
                   <TableRow key={claim.id}>
                     {statusFilter === 'PENDING' || statusFilter === 'all' ? (
                       <TableCell>

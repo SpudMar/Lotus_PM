@@ -15,6 +15,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
@@ -79,6 +80,9 @@ export function BudgetAllocationsSection({ agreementId, participantPlanId, canWr
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Remove confirmation dialog state
+  const [showRemoveDialog, setShowRemoveDialog] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null)
   const [selectedBudgetLineId, setSelectedBudgetLineId] = useState('')
   const [amountDollars, setAmountDollars] = useState('')
   const [note, setNote] = useState('')
@@ -169,12 +173,17 @@ export function BudgetAllocationsSection({ agreementId, participantPlanId, canWr
     }
   }
 
-  async function handleRemove(allocationId: string): Promise<void> {
-    if (!confirm('Remove this budget allocation?')) return
+  function openRemoveDialog(allocationId: string): void {
+    setRemoveTarget(allocationId)
+    setShowRemoveDialog(true)
+  }
 
+  async function handleRemove(): Promise<void> {
+    if (!removeTarget) return
+    setShowRemoveDialog(false)
     try {
       const res = await fetch(
-        `/api/service-agreements/${agreementId}/budget-allocations/${allocationId}`,
+        `/api/service-agreements/${agreementId}/budget-allocations/${removeTarget}`,
         { method: 'DELETE' }
       )
       if (res.ok) {
@@ -183,9 +192,10 @@ export function BudgetAllocationsSection({ agreementId, participantPlanId, canWr
       }
     } catch {
       // silent
+    } finally {
+      setRemoveTarget(null)
     }
   }
-
   const selectedLine = budgetLines.find((l) => l.id === selectedBudgetLineId)
   const availableForSelected = selectedLine ? selectedLine.remainingCents : null
 
@@ -264,7 +274,7 @@ export function BudgetAllocationsSection({ agreementId, participantPlanId, canWr
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => void handleRemove(alloc.id)}
+                        onClick={() => openRemoveDialog(alloc.id)}
                         aria-label="Remove allocation"
                       >
                         <Trash2 className="w-4 h-4 text-destructive" />
@@ -371,6 +381,23 @@ export function BudgetAllocationsSection({ agreementId, participantPlanId, canWr
             <Button onClick={() => void handleSubmit()} disabled={submitting}>
               {submitting ? 'Saving...' : 'Save Allocation'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Confirmation Dialog */}
+      <Dialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Budget Allocation</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove this budget allocation? The budget will be returned
+              to the available pool on the plan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRemoveDialog(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => void handleRemove()}>Remove Allocation</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

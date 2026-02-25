@@ -18,7 +18,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import Link from 'next/link'
-import { UserCheck, Plus, Pencil, UserX } from 'lucide-react'
+import { UserCheck, Plus, Pencil, UserX, Search } from 'lucide-react'
 
 interface CoordinatorRow {
   id: string
@@ -39,6 +39,7 @@ export default function CoordinatorsPage(): React.JSX.Element {
   const { data: session } = useSession()
   const [coordinators, setCoordinators] = useState<CoordinatorRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Dialog state
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
@@ -180,6 +181,16 @@ export default function CoordinatorsPage(): React.JSX.Element {
   const userRole = session?.user?.role as string | undefined
   const hasWriteAccess = canWrite(userRole)
 
+  const q = searchQuery.toLowerCase()
+  const filteredCoordinators = searchQuery
+    ? coordinators.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q) ||
+          (c.phone && c.phone.includes(q))
+      )
+    : coordinators
+
   return (
     <DashboardShell>
       <div className="space-y-4">
@@ -196,14 +207,30 @@ export default function CoordinatorsPage(): React.JSX.Element {
           }
         />
 
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search coordinators..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
         {loading ? (
           <div className="text-muted-foreground py-8 text-center text-sm">Loading coordinators…</div>
-        ) : coordinators.length === 0 ? (
+        ) : filteredCoordinators.length === 0 ? (
           <div className="text-muted-foreground py-8 text-center text-sm">
-            No support coordinators found.{' '}
-            {hasWriteAccess
-              ? 'Use the "Add Coordinator" button to create one.'
-              : 'Contact your administrator to add coordinators.'}
+            {searchQuery
+              ? 'No coordinators match your search.'
+              : (
+                <>
+                  No support coordinators found.{' '}
+                  {hasWriteAccess
+                    ? 'Use the "Add Coordinator" button to create one.'
+                    : 'Contact your administrator to add coordinators.'}
+                </>
+              )}
           </div>
         ) : (
           <div className="rounded-md border">
@@ -219,7 +246,7 @@ export default function CoordinatorsPage(): React.JSX.Element {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {coordinators.map((coordinator) => (
+                {filteredCoordinators.map((coordinator) => (
                   <TableRow key={coordinator.id}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">

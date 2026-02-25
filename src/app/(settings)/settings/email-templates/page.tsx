@@ -83,6 +83,9 @@ export default function EmailTemplatesPage(): React.JSX.Element {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 
+  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false)
+  const [deactivateTarget, setDeactivateTarget] = useState<NotifEmailTemplate | null>(null)
+
   const loadTemplates = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -176,13 +179,21 @@ export default function EmailTemplatesPage(): React.JSX.Element {
     }
   }
 
-  async function handleDeactivate(t: NotifEmailTemplate): Promise<void> {
-    if (!confirm(`Deactivate template "${t.name}"? It will no longer be available for sending.`)) return
+  function openDeactivateDialog(t: NotifEmailTemplate): void {
+    setDeactivateTarget(t)
+    setShowDeactivateDialog(true)
+  }
+
+  async function handleDeactivate(): Promise<void> {
+    if (!deactivateTarget) return
+    setShowDeactivateDialog(false)
     try {
-      await fetch(`/api/email-templates/${t.id}`, { method: 'DELETE' })
+      await fetch(`/api/email-templates/${deactivateTarget.id}`, { method: 'DELETE' })
       void loadTemplates()
     } catch {
       // ignore
+    } finally {
+      setDeactivateTarget(null)
     }
   }
 
@@ -291,7 +302,7 @@ export default function EmailTemplatesPage(): React.JSX.Element {
                     Edit
                   </Button>
                   {t.isActive && (
-                    <Button variant="ghost" size="sm" onClick={() => void handleDeactivate(t)}>
+                    <Button variant="ghost" size="sm" onClick={() => openDeactivateDialog(t)}>
                       <Power className="mr-1 h-4 w-4" />
                       Deactivate
                     </Button>
@@ -411,6 +422,24 @@ export default function EmailTemplatesPage(): React.JSX.Element {
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editingTemplate ? 'Save Changes' : 'Create Template'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivate Confirmation Dialog */}
+      <Dialog open={showDeactivateDialog} onOpenChange={setShowDeactivateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deactivate Template</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to deactivate{' '}
+              <span className="font-semibold">{deactivateTarget?.name}</span>?
+              It will no longer be available for sending.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeactivateDialog(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => void handleDeactivate()}>Deactivate</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

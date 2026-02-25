@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Landmark, FileDown, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Landmark, FileDown, CheckCircle2, AlertTriangle, Search } from 'lucide-react'
 import { formatAUD } from '@/lib/shared/currency'
 import { formatDateTimeAU } from '@/lib/shared/dates'
 
@@ -75,6 +75,7 @@ export default function BankingPage(): React.JSX.Element {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedPayments, setSelectedPayments] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
 
   // ABA submit dialog
   const [submitAbaOpen, setSubmitAbaOpen] = useState(false)
@@ -210,6 +211,26 @@ export default function BankingPage(): React.JSX.Element {
   const pendingPayments = payments.filter((p) => p.status === 'PENDING')
   const totalPendingCents = pendingPayments.reduce((sum, p) => sum + p.amountCents, 0)
 
+  const q = searchQuery.toLowerCase()
+  const filteredPayments = searchQuery
+    ? payments.filter(
+        (p) =>
+          p.claim.claimReference.toLowerCase().includes(q) ||
+          p.claim.invoice.provider.name.toLowerCase().includes(q) ||
+          `${p.claim.invoice.participant.firstName} ${p.claim.invoice.participant.lastName}`.toLowerCase().includes(q) ||
+          p.accountName.toLowerCase().includes(q) ||
+          (p.reference && p.reference.toLowerCase().includes(q))
+      )
+    : payments
+
+  const filteredAbaFiles = searchQuery
+    ? abaFiles.filter(
+        (f) =>
+          f.filename.toLowerCase().includes(q) ||
+          (f.bankReference && f.bankReference.toLowerCase().includes(q))
+      )
+    : abaFiles
+
   return (
     <DashboardShell>
       <div className="space-y-4">
@@ -283,7 +304,17 @@ export default function BankingPage(): React.JSX.Element {
           </Card>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActiveTab)}>
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder={activeTab === 'payments' ? 'Search payments...' : 'Search ABA files...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as ActiveTab); setSearchQuery('') }}>
           <TabsList>
             <TabsTrigger value="payments">Payments</TabsTrigger>
             <TabsTrigger value="aba-files">ABA Files</TabsTrigger>
@@ -323,14 +354,14 @@ export default function BankingPage(): React.JSX.Element {
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground">Loading...</TableCell>
                     </TableRow>
-                  ) : payments.length === 0 ? (
+                  ) : filteredPayments.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground">
-                        No payments found. Payments are created from approved claims.
+                        {searchQuery ? 'No payments match your search.' : 'No payments found. Payments are created from approved claims.'}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    payments.map((payment) => (
+                    filteredPayments.map((payment) => (
                       <TableRow key={payment.id}>
                         <TableCell>
                           {(payment.status === 'PENDING' || payment.status === 'SUBMITTED_TO_BANK') && (
@@ -388,14 +419,14 @@ export default function BankingPage(): React.JSX.Element {
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground">Loading...</TableCell>
                   </TableRow>
-                ) : abaFiles.length === 0 ? (
+                ) : filteredAbaFiles.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground">
-                      No ABA files generated yet. Select pending payments and generate an ABA file.
+                      {searchQuery ? 'No ABA files match your search.' : 'No ABA files generated yet. Select pending payments and generate an ABA file.'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  abaFiles.map((file) => (
+                  filteredAbaFiles.map((file) => (
                     <TableRow key={file.id}>
                       <TableCell className="font-medium font-mono text-sm">{file.filename}</TableCell>
                       <TableCell>{file._count.payments}</TableCell>

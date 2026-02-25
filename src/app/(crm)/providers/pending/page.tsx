@@ -13,6 +13,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { formatDateAU } from '@/lib/shared/dates'
 import { CheckCircle, XCircle } from 'lucide-react'
 
@@ -35,6 +45,11 @@ export default function ProviderPendingPage(): React.JSX.Element {
   const [providers, setProviders] = useState<PendingProvider[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
+
+  // Reject dialog state
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
 
   function loadPending(): void {
     setLoading(true)
@@ -61,20 +76,28 @@ export default function ProviderPendingPage(): React.JSX.Element {
     }
   }
 
-  async function handleReject(id: string): Promise<void> {
-    const reason = window.prompt('Reason for rejection (optional):') ?? undefined
-    setProcessingId(id)
+  function openRejectDialog(id: string): void {
+    setRejectTarget(id)
+    setRejectReason('')
+    setShowRejectDialog(true)
+  }
+
+  async function handleReject(): Promise<void> {
+    if (!rejectTarget) return
+    setProcessingId(rejectTarget)
+    setShowRejectDialog(false)
     try {
-      const res = await fetch(`/api/crm/providers/${id}/reject`, {
+      const res = await fetch(`/api/crm/providers/${rejectTarget}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ reason: rejectReason || undefined }),
       })
       if (res.ok) {
-        setProviders((prev) => prev.filter((p) => p.id !== id))
+        setProviders((prev) => prev.filter((p) => p.id !== rejectTarget))
       }
     } finally {
       setProcessingId(null)
+      setRejectTarget(null)
     }
   }
 
@@ -192,7 +215,7 @@ export default function ProviderPendingPage(): React.JSX.Element {
                         variant="outline"
                         className="text-red-600 border-red-200 hover:bg-red-50"
                         disabled={processingId === provider.id}
-                        onClick={() => void handleReject(provider.id)}
+                        onClick={() => openRejectDialog(provider.id)}
                       >
                         <XCircle className="h-3.5 w-3.5 mr-1" />
                         Reject
@@ -205,6 +228,34 @@ export default function ProviderPendingPage(): React.JSX.Element {
           </Table>
         </div>
       )}
+
+      {/* Reject Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Provider</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to reject this provider? You can optionally provide a reason.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="reject-reason">Reason (optional)</Label>
+            <Textarea
+              id="reject-reason"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Reason for rejection..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => void handleReject()}>
+              Reject Provider
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardShell>
   )
 }
