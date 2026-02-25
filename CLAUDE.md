@@ -54,7 +54,7 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
-| Framework | **Next.js 14+ (App Router)** | Full-stack. Frontend + API in one codebase. |
+| Framework | **Next.js 16 (App Router)** | Full-stack. Frontend + API in one codebase. |
 | Language | **TypeScript (strict mode)** | `strict: true`, `noUncheckedIndexedAccess: true`. No `any`. |
 | Database | **PostgreSQL via AWS RDS** | ACID for financial data. |
 | ORM | **Prisma** | Type-safe. Migration management. |
@@ -112,17 +112,17 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | Onboarding Queue | ✅ | **PR #48** — WordPress webhook DRAFT participant activation page |
 | Provider Portal | ✅ | **PRs #49-53** — Onboarding, dashboard, invoices, payments, profile, magic-link auth, premium redesign |
 | Analytics Data Infra | ✅ | **PR #51** — InvStatusHistory, phase timing, hold categorisation, disability categories |
-| Analytics Dashboard | ✅ | **PR #55** — Recharts dashboard (5th tab on /reports), 4 KPI cards, 5 charts, phase timing, hold categories |
-| Data Retention | ✅ | **PR #56** — REQ-010 purge mechanism, audit log (7yr), financial (5yr), data retention settings UI |
-| Documents UI | ✅ | **PR #54** — Upload (presigned S3), download, delete, category badges, participant linking, pagination |
-| Participant API | ✅ | **PR #57-58** — Expo scaffold, NDIS+DOB auth, JWT scoping, /plans /invoices /profile endpoints |
+| Analytics Dashboard | ✅ | **PR #56** — Recharts dashboard (5th tab on /reports), 4 KPI cards, 5 charts, phase timing, hold categories |
+| Data Retention | ✅ | **PR #57** — REQ-010 purge mechanism, audit log (7yr), financial (5yr), data retention settings UI |
+| Documents UI | ✅ | **PR #55** — Upload (presigned S3), download, delete, category badges, participant linking, pagination |
+| Participant API | ✅ | **PR #58** — Expo scaffold, NDIS+DOB auth, JWT scoping, /plans /invoices /profile endpoints |
 | EventBridge Wiring | ✅ | **PR #59** — 5 missing event emissions wired (invoices.received, budget-alert, emails.sent), naming fixes |
 
 ---
 
 ## CURRENT STATE
 
-- **1051/1051 tests** (64 suites) | **36 migrations** | Last merged: PR #61
+- **1051/1051 tests** (64 suites) | **36 migrations** | Last merged: PR #62
 - All CareSquare Tier 1 + Tier 2 gaps cleared — Lotus PM matches/exceeds CareSquare on all operational workflows
 - Provider Portal complete (PRs #49-53) — magic-link auth, premium redesign, full provider self-service
 - Analytics data infrastructure complete (PR #51) — status history tracking instrumented across all 9 transitions
@@ -219,5 +219,5 @@ gh run view <id> --log-failed
 
 ---
 
-*Last updated: 25 February 2026 — 1051/1051 tests, 36 migrations, 64 suites. PRs #34–61 merged. All major features + comprehensive seed data complete. Next: PACE B2B when PRODA approved.*
+*Last updated: 25 February 2026 — 1051/1051 tests, 36 migrations, 64 suites. PRs #34–62 merged. All major features + comprehensive seed data complete. Next: PACE B2B when PRODA approved.*
 *All decisions in this file were made deliberately. Update with care.*
