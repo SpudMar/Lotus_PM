@@ -494,7 +494,7 @@ export default function InvoiceUploadPage(): React.JSX.Element {
         })
       }
 
-      router.push('/invoices')
+      router.push(`/invoices/review/${json.data.id}`)
     } catch {
       setApiError('An unexpected error occurred. Please try again.')
     } finally {
