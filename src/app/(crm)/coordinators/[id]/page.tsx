@@ -16,6 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ParticipantCombobox } from '@/components/comboboxes/ParticipantCombobox'
+import { ProviderCombobox } from '@/components/comboboxes/ProviderCombobox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -641,29 +643,19 @@ export default function CoordinatorDetailPage({
             )}
 
             <div className="space-y-1">
-              <Label htmlFor="note-participant">
-                Link to participant (optional — participant ID)
-              </Label>
-              <Input
-                id="note-participant"
-                type="text"
+              <Label>Link to participant (optional)</Label>
+              <ParticipantCombobox
                 value={noteParticipantId}
-                onChange={(e) => setNoteParticipantId(e.target.value)}
-                placeholder="Participant ID"
+                onValueChange={setNoteParticipantId}
                 disabled={noteSaving}
               />
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="note-provider">
-                Link to provider (optional — provider ID)
-              </Label>
-              <Input
-                id="note-provider"
-                type="text"
+              <Label>Link to provider (optional)</Label>
+              <ProviderCombobox
                 value={noteProviderId}
-                onChange={(e) => setNoteProviderId(e.target.value)}
-                placeholder="Provider ID"
+                onValueChange={setNoteProviderId}
                 disabled={noteSaving}
               />
             </div>
