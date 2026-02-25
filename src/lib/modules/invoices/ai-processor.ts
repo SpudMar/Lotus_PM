@@ -148,7 +148,7 @@ const TOOL_CONFIG: ToolConfiguration = {
   toolChoice: { tool: { name: 'extract_invoice_data' } },
 }
 
-// ── NDIS Catalogue Loading ────────────────────────────────────────────────────
+// ── NDIS Catalogue Loading (with in-memory TTL cache) ────────────────────────
 
 interface CatalogueItem {
   itemNumber: string
@@ -160,12 +160,35 @@ interface CatalogueItem {
   gstCode: string | null
 }
 
+interface CatalogueCache {
+  items: CatalogueItem[]
+  catalogueText: string
+  cachedAt: number
+}
+
+/** Cache TTL: 30 minutes. Price guide changes are rare (quarterly). */
+const CATALOGUE_CACHE_TTL_MS = 30 * 60 * 1000
+let catalogueCache: CatalogueCache | null = null
+
+/** Test helper: clear the catalogue cache */
+export function _clearCatalogueCache(): void {
+  catalogueCache = null
+}
+
 /**
  * Load the active NDIS support catalogue from the database.
  * Active version is determined by effectiveFrom/effectiveTo date range (no isActive field).
  * Returns a compact text representation for the AI system prompt.
+ *
+ * Results are cached in-memory for 30 minutes to avoid redundant DB queries
+ * when processing multiple invoices in quick succession.
  */
 async function loadNdisCatalogue(): Promise<{ items: CatalogueItem[]; catalogueText: string }> {
+  // Return cached result if still fresh
+  if (catalogueCache && Date.now() - catalogueCache.cachedAt < CATALOGUE_CACHE_TTL_MS) {
+    return { items: catalogueCache.items, catalogueText: catalogueCache.catalogueText }
+  }
+
   const now = new Date()
 
   const activeVersion = await prisma.ndisPriceGuideVersion.findFirst({
@@ -215,6 +238,9 @@ async function loadNdisCatalogue(): Promise<{ items: CatalogueItem[]; catalogueT
   })
 
   const catalogueText = `NDIS Support Catalogue (${activeVersion.label}, ${items.length} items):\nCode | Description | Category | Unit | Price Cap\n${lines.join('\n')}`
+
+  // Cache the result
+  catalogueCache = { items, catalogueText, cachedAt: Date.now() }
 
   return { items, catalogueText }
 }
@@ -377,7 +403,12 @@ export async function processWithAI(input: AIProcessingInput): Promise<AIProcess
 
     const command = new ConverseCommand({
       modelId,
-      system: [{ text: systemPrompt }],
+      system: [
+        { text: systemPrompt },
+        // Bedrock prompt caching: cache the system prompt (NDIS catalogue)
+        // to reduce latency and cost by ~90% on subsequent calls within 5 min
+        { cachePoint: { type: 'default' } },
+      ],
       messages,
       toolConfig: TOOL_CONFIG,
       inferenceConfig: {
@@ -393,9 +424,10 @@ export async function processWithAI(input: AIProcessingInput): Promise<AIProcess
     }
 
     return parseToolUseResponse(response.output.message.content)
-  } catch {
+  } catch (err) {
     // Graceful degradation — return null on any Bedrock failure
     // Caller (processing-engine) will fall back to NEEDS_REVIEW
+    console.error('[ai-processor] Bedrock call failed:', err instanceof Error ? err.message : err)
     return null
   }
 }

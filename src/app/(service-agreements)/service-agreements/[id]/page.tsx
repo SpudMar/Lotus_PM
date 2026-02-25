@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/auth/config'
 import { hasPermission, type Role } from '@/lib/auth/rbac'
 import { getServiceAgreement } from '@/lib/modules/service-agreements/service-agreements'
 import { prisma } from '@/lib/db'
+import { DashboardShell } from '@/components/layout/dashboard-shell'
+import { PageHeader } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -62,42 +64,31 @@ export default async function ServiceAgreementDetailPage({
   const isActive = agreement.status === 'ACTIVE'
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <Link
-              href="/service-agreements"
-              className="text-sm text-muted-foreground hover:underline"
-            >
-              Service Agreements
-            </Link>
-            <span className="text-muted-foreground">/</span>
-            <span className="font-mono text-sm font-medium">{agreement.agreementRef}</span>
-          </div>
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            {agreement.agreementRef}
+    <DashboardShell>
+      <PageHeader
+        title={agreement.agreementRef}
+        description={`${agreement.participant?.firstName} ${agreement.participant?.lastName} — ${agreement.provider?.name}`}
+        actions={
+          <div className="flex items-center gap-2">
             <Badge variant={statusVariant(agreement.status)}>{agreement.status}</Badge>
-          </h1>
-        </div>
-
-        {canWrite && (
-          <div className="flex gap-2">
-            {isDraft && (
+            <Button variant="outline" asChild>
+              <Link href="/service-agreements">← Service Agreements</Link>
+            </Button>
+            {canWrite && isDraft && (
               <form action={`/api/service-agreements/${agreement.id}/activate`} method="POST">
                 <Button type="submit" variant="default">Activate</Button>
               </form>
             )}
-            {isActive && (
+            {canWrite && isActive && (
               <form action={`/api/service-agreements/${agreement.id}/terminate`} method="POST">
                 <Button type="submit" variant="destructive">Terminate</Button>
               </form>
             )}
           </div>
-        )}
-      </div>
+        }
+      />
 
+      <div className="space-y-6">
       {/* Info cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
@@ -237,6 +228,7 @@ export default async function ServiceAgreementDetailPage({
         participantPlanId={activePlan?.id ?? null}
         canWrite={canWrite}
       />
-    </div>
+      </div>
+    </DashboardShell>
   )
 }
