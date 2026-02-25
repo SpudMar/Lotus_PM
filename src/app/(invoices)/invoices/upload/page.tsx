@@ -27,7 +27,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { ArrowLeft, Plus, Trash2, Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles } from 'lucide-react'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
 import { formatDateAU } from '@/lib/shared/dates'
 
@@ -87,6 +87,24 @@ interface ApiError {
   details?: unknown
 }
 
+interface ExtractedLineItem {
+  supportItemCode: string | null
+  supportItemName: string
+  quantity: number
+  unitPriceCents: number
+  totalCents: number
+  serviceDate: string | null
+}
+
+interface ExtractedInvoiceFields {
+  providerName: string | null
+  providerAbn: string | null
+  invoiceNumber: string | null
+  invoiceDate: string | null
+  totalAmountCents: number | null
+  lineItems: ExtractedLineItem[]
+}
+
 // ── Empty line template ────────────────────────────────────────────────────────
 
 function emptyLine(): FormLine {
@@ -141,6 +159,12 @@ export default function InvoiceUploadPage(): React.JSX.Element {
   const [uploadedS3Key, setUploadedS3Key] = useState<string | null>(null)
   const [uploadedS3Bucket, setUploadedS3Bucket] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  // ── PDF extraction state ──────────────────────────────────────────────────
+
+  const [extracting, setExtracting] = useState(false)
+  const [extractionWarning, setExtractionWarning] = useState<string | null>(null)
+  const [fieldsAutoPopulated, setFieldsAutoPopulated] = useState(false)
 
   // ── Submission state ──────────────────────────────────────────────────────
 
@@ -250,7 +274,90 @@ export default function InvoiceUploadPage(): React.JSX.Element {
     )
   }, [providers, providerSearch])
 
-  // ── PDF upload handler ────────────────────────────────────────────────────
+  // ── PDF extraction handler ────────────────────────────────────────────────
+
+  /**
+   * Send the PDF to /api/invoices/extract-pdf and auto-populate form fields
+   * with the returned data. Non-blocking: failures show a warning but do not
+   * prevent the PM from continuing with manual entry.
+   */
+  const handleExtractPdf = useCallback(async (file: File): Promise<void> => {
+    setExtracting(true)
+    setExtractionWarning(null)
+    setFieldsAutoPopulated(false)
+
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+
+      const res = await fetch('/api/invoices/extract-pdf', {
+        method: 'POST',
+        body: fd,
+      })
+
+      if (!res.ok) {
+        const err = (await res.json()) as ApiError
+        setExtractionWarning(
+          err.error || 'Could not extract data from the PDF. Please fill in the fields manually.',
+        )
+        return
+      }
+
+      const json = (await res.json()) as { data: ExtractedInvoiceFields }
+      const extracted = json.data
+
+      // Auto-populate invoice header fields
+      if (extracted.invoiceNumber) {
+        setInvoiceNumber(extracted.invoiceNumber)
+      }
+      if (extracted.invoiceDate) {
+        setInvoiceDate(extracted.invoiceDate)
+      }
+      if (extracted.totalAmountCents != null) {
+        const dollars = (extracted.totalAmountCents / 100).toFixed(2)
+        setTotalStr(dollars)
+        setTotalManuallyEdited(true)
+      }
+
+      // Auto-populate line items if AI found any
+      if (extracted.lineItems.length > 0) {
+        const populatedLines: FormLine[] = extracted.lineItems.map((item) => ({
+          supportItemCode: item.supportItemCode ?? '',
+          supportItemName: item.supportItemName,
+          categoryCode: item.supportItemCode ? item.supportItemCode.slice(0, 2) : '01',
+          serviceDate: item.serviceDate ?? new Date().toISOString().split('T')[0] ?? '',
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents,
+          totalCents: item.totalCents,
+          gstCents: 0,
+          budgetLineId: '',
+        }))
+        setLines(populatedLines)
+      }
+
+      // Auto-select provider by ABN if present
+      if (extracted.providerAbn) {
+        // Normalize: strip spaces
+        const abn = extracted.providerAbn.replace(/\s/g, '')
+        const match = providers.find(
+          (p) => p.abn.replace(/\s/g, '') === abn,
+        )
+        if (match) {
+          setSelectedProviderId(match.id)
+        }
+      }
+
+      setFieldsAutoPopulated(true)
+    } catch {
+      setExtractionWarning(
+        'Could not extract data from the PDF. Please fill in the fields manually.',
+      )
+    } finally {
+      setExtracting(false)
+    }
+  }, [providers])
+
+  // ── PDF file selection + extraction trigger ────────────────────────────────
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -269,7 +376,11 @@ export default function InvoiceUploadPage(): React.JSX.Element {
     setUploadError(null)
     setUploadedS3Key(null)
     setUploadedS3Bucket(null)
-  }, [])
+    setFieldsAutoPopulated(false)
+
+    // Trigger extraction immediately on file selection
+    void handleExtractPdf(file)
+  }, [handleExtractPdf])
 
   const uploadPdf = useCallback(async (): Promise<{ s3Key: string; s3Bucket: string } | null> => {
     if (!pdfFile) return null
@@ -543,9 +654,105 @@ export default function InvoiceUploadPage(): React.JSX.Element {
           </Alert>
         )}
 
+        {fieldsAutoPopulated && (
+          <Alert className="border-emerald-200 bg-emerald-50 text-emerald-800">
+            <Sparkles className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+            <AlertTitle className="text-emerald-800">Fields auto-populated from PDF</AlertTitle>
+            <AlertDescription className="text-emerald-700">
+              Invoice fields have been extracted from your PDF. Please review all values before saving.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {extractionWarning && (
+          <Alert className="border-amber-200 bg-amber-50 text-amber-800">
+            <AlertCircle className="h-4 w-4 text-amber-600" aria-hidden="true" />
+            <AlertTitle className="text-amber-800">PDF extraction incomplete</AlertTitle>
+            <AlertDescription className="text-amber-700">{extractionWarning}</AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* ── Left column: form (2/3 width) ───────────────────────────── */}
           <div className="lg:col-span-2 space-y-6">
+            {/* PDF attach + extract — shown at top to trigger auto-populate */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">Attach Invoice PDF</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Attach the invoice PDF and fields will be automatically extracted using AI.
+                  You can still edit any field before saving.
+                </p>
+                <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-6 text-center">
+                  {pdfFile ? (
+                    <>
+                      <FileText className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                      <div>
+                        <p className="text-sm font-medium">{pdfFile.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(pdfFile.size / 1024).toFixed(0)} KB
+                        </p>
+                      </div>
+                      {extracting && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          Extracting invoice details...
+                        </div>
+                      )}
+                      {!extracting && fieldsAutoPopulated && (
+                        <div className="flex items-center gap-1 text-sm text-emerald-600">
+                          <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                          Extraction complete
+                        </div>
+                      )}
+                      {!extracting && extractionWarning && (
+                        <div className="flex items-center gap-1 text-sm text-amber-600">
+                          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                          Extraction failed — enter fields manually
+                        </div>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setPdfFile(null)
+                          setUploadedS3Key(null)
+                          setUploadedS3Bucket(null)
+                          setUploadProgress(null)
+                          setUploadError(null)
+                          setFieldsAutoPopulated(false)
+                          setExtractionWarning(null)
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Select a PDF to extract invoice data
+                        </p>
+                        <p className="text-xs text-muted-foreground">Max 20 MB</p>
+                      </div>
+                    </>
+                  )}
+                  <Input
+                    id="pdf-file-extract"
+                    type="file"
+                    accept="application/pdf"
+                    onChange={handleFileSelect}
+                    className="cursor-pointer"
+                    disabled={extracting}
+                    aria-label="Attach invoice PDF for extraction"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Invoice details */}
             <Card>
               <CardHeader className="pb-3">
@@ -910,77 +1117,54 @@ export default function InvoiceUploadPage(): React.JSX.Element {
             </Card>
           </div>
 
-          {/* ── Right column: PDF upload + actions (1/3 width) ─────────── */}
+          {/* ── Right column: PDF status + actions (1/3 width) ─────────── */}
           <div className="space-y-6">
-            {/* PDF upload */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">PDF Attachment</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="pdf-file">Invoice PDF</Label>
-                  <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-6 text-center">
-                    {pdfFile ? (
-                      <>
-                        <FileText className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-                        <div>
-                          <p className="text-sm font-medium">{pdfFile.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(pdfFile.size / 1024).toFixed(0)} KB
-                          </p>
-                        </div>
-                        {uploadedS3Key && (
-                          <div className="flex items-center gap-1 text-sm text-emerald-600">
-                            <CheckCircle className="h-4 w-4" aria-hidden="true" />
-                            Uploaded
-                          </div>
-                        )}
-                        {uploadProgress !== null && !uploadedS3Key && (
-                          <div className="w-full space-y-1">
-                            <Progress value={uploadProgress} className="h-2" />
-                            <p className="text-xs text-muted-foreground">Uploading...</p>
-                          </div>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setPdfFile(null)
-                            setUploadedS3Key(null)
-                            setUploadedS3Bucket(null)
-                            setUploadProgress(null)
-                            setUploadError(null)
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            Select a PDF to attach
-                          </p>
-                          <p className="text-xs text-muted-foreground">Max 20 MB</p>
-                        </div>
-                      </>
-                    )}
-                    <Input
-                      id="pdf-file"
-                      type="file"
-                      accept="application/pdf"
-                      onChange={handleFileSelect}
-                      className="cursor-pointer"
-                    />
+            {/* PDF status (shown only when a file is selected) */}
+            {pdfFile && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold">PDF Attachment</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <FileText className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{pdfFile.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(pdfFile.size / 1024).toFixed(0)} KB
+                      </p>
+                    </div>
                   </div>
-                  {uploadError && (
-                    <p className="text-sm text-destructive">{uploadError}</p>
+                  {extracting && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                      Extracting invoice details...
+                    </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
+                  {!extracting && fieldsAutoPopulated && (
+                    <div className="flex items-center gap-1 text-xs text-emerald-600">
+                      <Sparkles className="h-3 w-3" aria-hidden="true" />
+                      Fields auto-populated — review before saving
+                    </div>
+                  )}
+                  {uploadedS3Key && (
+                    <div className="flex items-center gap-1 text-xs text-emerald-600">
+                      <CheckCircle className="h-3 w-3" aria-hidden="true" />
+                      PDF uploaded to storage
+                    </div>
+                  )}
+                  {uploadProgress !== null && !uploadedS3Key && (
+                    <div className="space-y-1">
+                      <Progress value={uploadProgress} className="h-1.5" />
+                      <p className="text-xs text-muted-foreground">Uploading to storage...</p>
+                    </div>
+                  )}
+                  {uploadError && (
+                    <p className="text-xs text-destructive">{uploadError}</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Actions */}
             <Card>
