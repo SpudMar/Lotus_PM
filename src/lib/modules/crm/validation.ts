@@ -18,6 +18,8 @@ export const createParticipantSchema = z.object({
   emergencyContactRel: z.string().max(50).optional(),
   gender: z.string().max(50).optional(),
   disability: z.string().max(500).optional(),
+  disabilityCategory: z.string().max(200).optional(),
+  ndisRegistrationDate: z.coerce.date().optional().nullable(),
   alias: z.string().max(100).optional(),
 })
 

@@ -6,6 +6,7 @@ import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import {
@@ -38,6 +39,7 @@ import {
   Flag,
   CheckCircle2,
   Send,
+  Pencil,
 } from 'lucide-react'
 import { formatDateAU, formatDateTimeAU } from '@/lib/shared/dates'
 import { formatNdisNumber } from '@/lib/shared/ndis'
@@ -89,6 +91,8 @@ interface Participant {
   invoiceApprovalMethod?: 'APP' | 'EMAIL' | 'SMS' | null
   gender?: string | null
   disability?: string | null
+  disabilityCategory?: string | null
+  ndisRegistrationDate?: string | null
   alias?: string | null
 }
 
@@ -106,6 +110,11 @@ interface CrmFlag {
   resolvedBy: { firstName: string; lastName: string } | null
   resolveNote: string | null
 }
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const GENDER_OPTIONS = ['Male', 'Female', 'Non-binary', 'Prefer not to say', 'Other']
+const AU_STATES = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT']
 
 // ── Correspondence icon/label helpers ─────────────────────────────────────────
 
@@ -139,6 +148,31 @@ const NOTE_TYPE_OPTIONS: { value: CorrespondenceType; label: string }[] = [
   { value: 'EMAIL_OUTBOUND', label: 'Outbound email' },
   { value: 'SMS_OUTBOUND', label: 'Outbound SMS' },
 ]
+
+// ── Inline edit form types ────────────────────────────────────────────────────
+
+interface PersonalFormData {
+  firstName: string
+  lastName: string
+  dateOfBirth: string
+  gender: string
+  disabilityCategory: string
+  alias: string
+}
+
+interface ContactFormData {
+  email: string
+  phone: string
+  address: string
+  suburb: string
+  state: string
+  postcode: string
+}
+
+interface NdisFormData {
+  ndisNumber: string
+  ndisRegistrationDate: string
+}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -182,14 +216,32 @@ export default function ParticipantDetailPage({
   const [resolveNote, setResolveNote] = useState('')
   const [resolveLoading, setResolveLoading] = useState(false)
 
+  // -- Inline editing state --
+  const [editingSection, setEditingSection] = useState<string | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const [personalForm, setPersonalForm] = useState<PersonalFormData>({
+    firstName: '', lastName: '', dateOfBirth: '', gender: '', disabilityCategory: '', alias: '',
+  })
+  const [contactForm, setContactForm] = useState<ContactFormData>({
+    email: '', phone: '', address: '', suburb: '', state: '', postcode: '',
+  })
+  const [ndisForm, setNdisForm] = useState<NdisFormData>({
+    ndisNumber: '', ndisRegistrationDate: '',
+  })
+
   // ── Load data ─────────────────────────────────────────────────────────────
 
-  useEffect(() => {
+  function loadParticipant(): void {
     void fetch(`/api/crm/participants/${id}`)
       .then((r) => r.json())
       .then((j: { data: Participant }) => setParticipant(j.data))
       .catch(() => null)
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadParticipant()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   function loadCorrespondence(filterType?: CorrespondenceType | 'all'): void {
@@ -340,6 +392,87 @@ export default function ParticipantDetailPage({
     }
   }
 
+  // ── Inline editing helpers ──────────────────────────────────────────────────
+
+  function startEdit(section: string): void {
+    if (!participant) return
+    setEditingSection(section)
+    if (section === 'personal') {
+      setPersonalForm({
+        firstName: participant.firstName,
+        lastName: participant.lastName,
+        dateOfBirth: participant.dateOfBirth ? participant.dateOfBirth.slice(0, 10) : '',
+        gender: participant.gender ?? '',
+        disabilityCategory: participant.disabilityCategory ?? '',
+        alias: participant.alias ?? '',
+      })
+    } else if (section === 'contact') {
+      setContactForm({
+        email: participant.email ?? '',
+        phone: participant.phone ?? '',
+        address: participant.address ?? '',
+        suburb: participant.suburb ?? '',
+        state: participant.state ?? '',
+        postcode: participant.postcode ?? '',
+      })
+    } else if (section === 'ndis') {
+      setNdisForm({
+        ndisNumber: participant.ndisNumber,
+        ndisRegistrationDate: participant.ndisRegistrationDate
+          ? participant.ndisRegistrationDate.slice(0, 10)
+          : '',
+      })
+    }
+  }
+
+  function cancelEdit(): void {
+    setEditingSection(null)
+  }
+
+  async function saveSection(section: string): Promise<void> {
+    setEditSaving(true)
+    try {
+      let payload: Record<string, unknown> = {}
+      if (section === 'personal') {
+        payload = {
+          firstName: personalForm.firstName,
+          lastName: personalForm.lastName,
+          dateOfBirth: personalForm.dateOfBirth,
+          gender: personalForm.gender || undefined,
+          disabilityCategory: personalForm.disabilityCategory || undefined,
+          alias: personalForm.alias || undefined,
+        }
+      } else if (section === 'contact') {
+        payload = {
+          email: contactForm.email || '',
+          phone: contactForm.phone || undefined,
+          address: contactForm.address || undefined,
+          suburb: contactForm.suburb || undefined,
+          state: contactForm.state || undefined,
+          postcode: contactForm.postcode || undefined,
+        }
+      } else if (section === 'ndis') {
+        payload = {
+          ndisNumber: ndisForm.ndisNumber,
+          ndisRegistrationDate: ndisForm.ndisRegistrationDate || null,
+        }
+      }
+
+      const res = await fetch(`/api/crm/participants/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (res.ok) {
+        setEditingSection(null)
+        loadParticipant()
+      }
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -459,72 +592,308 @@ export default function ParticipantDetailPage({
         {/* ── Overview ──────────────────────────────────────────────────────── */}
         <TabsContent value="overview" className="space-y-4 mt-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* ── Personal Information ────────────────────────────────────── */}
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Contact</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="h-4 w-4" aria-hidden="true" />
-                  {participant.email ?? '—'}
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="h-4 w-4" aria-hidden="true" />
-                  {participant.phone ?? '—'}
-                </div>
-                {participant.address && (
-                  <div className="text-muted-foreground">
-                    {participant.address}, {participant.suburb} {participant.state} {participant.postcode}
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-sm font-semibold">Personal Information</CardTitle>
+                {editingSection !== 'personal' ? (
+                  <Button variant="outline" size="sm" onClick={() => startEdit('personal')}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" /> Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={cancelEdit} disabled={editSaving}>Cancel</Button>
+                    <Button size="sm" onClick={() => void saveSection('personal')} disabled={editSaving}>
+                      {editSaving ? 'Saving...' : 'Save'}
+                    </Button>
                   </div>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {editingSection === 'personal' ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="edit-firstName" className="text-xs">First name</Label>
+                        <Input
+                          id="edit-firstName"
+                          value={personalForm.firstName}
+                          onChange={(e) => setPersonalForm(prev => ({ ...prev, firstName: e.target.value }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="edit-lastName" className="text-xs">Last name</Label>
+                        <Input
+                          id="edit-lastName"
+                          value={personalForm.lastName}
+                          onChange={(e) => setPersonalForm(prev => ({ ...prev, lastName: e.target.value }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-alias" className="text-xs">Preferred name</Label>
+                      <Input
+                        id="edit-alias"
+                        value={personalForm.alias}
+                        onChange={(e) => setPersonalForm(prev => ({ ...prev, alias: e.target.value }))}
+                        className="h-8 text-sm"
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-dob" className="text-xs">Date of birth</Label>
+                      <Input
+                        id="edit-dob"
+                        type="date"
+                        value={personalForm.dateOfBirth}
+                        onChange={(e) => setPersonalForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-gender" className="text-xs">Gender</Label>
+                      <Select
+                        value={personalForm.gender}
+                        onValueChange={(v) => setPersonalForm(prev => ({ ...prev, gender: v }))}
+                      >
+                        <SelectTrigger id="edit-gender" className="h-8 text-sm">
+                          <SelectValue placeholder="Select gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GENDER_OPTIONS.map((g) => (
+                            <SelectItem key={g} value={g}>{g}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-disabilityCategory" className="text-xs">Disability category</Label>
+                      <Input
+                        id="edit-disabilityCategory"
+                        value={personalForm.disabilityCategory}
+                        onChange={(e) => setPersonalForm(prev => ({ ...prev, disabilityCategory: e.target.value }))}
+                        className="h-8 text-sm"
+                        placeholder="Optional"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Name</span>
+                      <span>{participant.firstName} {participant.lastName}</span>
+                    </div>
+                    {participant.alias && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Preferred name</span>
+                        <span>{participant.alias}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Date of birth</span>
+                      <span>{formatDateAU(new Date(participant.dateOfBirth))}</span>
+                    </div>
+                    {participant.gender && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Gender</span>
+                        <span>{participant.gender}</span>
+                      </div>
+                    )}
+                    {participant.disabilityCategory && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Disability category</span>
+                        <span>{participant.disabilityCategory}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
 
+            {/* ── Contact Details ─────────────────────────────────────────── */}
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Plan Manager</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {participant.assignedTo ? (
-                  <div>
-                    <div className="font-medium text-foreground">{participant.assignedTo.name}</div>
-                    <div>{participant.assignedTo.email}</div>
-                  </div>
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-sm font-semibold">Contact Details</CardTitle>
+                {editingSection !== 'contact' ? (
+                  <Button variant="outline" size="sm" onClick={() => startEdit('contact')}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" /> Edit
+                  </Button>
                 ) : (
-                  <span>Unassigned</span>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={cancelEdit} disabled={editSaving}>Cancel</Button>
+                    <Button size="sm" onClick={() => void saveSection('contact')} disabled={editSaving}>
+                      {editSaving ? 'Saving...' : 'Save'}
+                    </Button>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {editingSection === 'contact' ? (
+                  <>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-email" className="text-xs">Email</Label>
+                      <Input
+                        id="edit-email"
+                        type="email"
+                        value={contactForm.email}
+                        onChange={(e) => setContactForm(prev => ({ ...prev, email: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-phone" className="text-xs">Phone</Label>
+                      <Input
+                        id="edit-phone"
+                        value={contactForm.phone}
+                        onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-address" className="text-xs">Street address</Label>
+                      <Input
+                        id="edit-address"
+                        value={contactForm.address}
+                        onChange={(e) => setContactForm(prev => ({ ...prev, address: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="edit-suburb" className="text-xs">Suburb</Label>
+                        <Input
+                          id="edit-suburb"
+                          value={contactForm.suburb}
+                          onChange={(e) => setContactForm(prev => ({ ...prev, suburb: e.target.value }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="edit-state" className="text-xs">State</Label>
+                        <Select
+                          value={contactForm.state}
+                          onValueChange={(v) => setContactForm(prev => ({ ...prev, state: v }))}
+                        >
+                          <SelectTrigger id="edit-state" className="h-8 text-sm">
+                            <SelectValue placeholder="State" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {AU_STATES.map((s) => (
+                              <SelectItem key={s} value={s}>{s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="edit-postcode" className="text-xs">Postcode</Label>
+                        <Input
+                          id="edit-postcode"
+                          value={contactForm.postcode}
+                          onChange={(e) => setContactForm(prev => ({ ...prev, postcode: e.target.value }))}
+                          className="h-8 text-sm"
+                          maxLength={4}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Mail className="h-4 w-4" aria-hidden="true" />
+                      {participant.email ?? '—'}
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Phone className="h-4 w-4" aria-hidden="true" />
+                      {participant.phone ?? '—'}
+                    </div>
+                    <div className="text-muted-foreground">
+                      {participant.address
+                        ? `${participant.address}, ${participant.suburb ?? ''} ${participant.state ?? ''} ${participant.postcode ?? ''}`
+                        : '—'}
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Additional Details */}
-          {(participant.gender || participant.disability || participant.alias) && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Additional Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {participant.alias && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Preferred name</span>
-                    <span>{participant.alias}</span>
+          {/* ── NDIS Details ──────────────────────────────────────────────── */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-sm font-semibold">NDIS Details</CardTitle>
+              {editingSection !== 'ndis' ? (
+                <Button variant="outline" size="sm" onClick={() => startEdit('ndis')}>
+                  <Pencil className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" /> Edit
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={cancelEdit} disabled={editSaving}>Cancel</Button>
+                  <Button size="sm" onClick={() => void saveSection('ndis')} disabled={editSaving}>
+                    {editSaving ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {editingSection === 'ndis' ? (
+                <>
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-ndisNumber" className="text-xs">NDIS number</Label>
+                    <Input
+                      id="edit-ndisNumber"
+                      value={ndisForm.ndisNumber}
+                      onChange={(e) => setNdisForm(prev => ({ ...prev, ndisNumber: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
                   </div>
-                )}
-                {participant.gender && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Gender</span>
-                    <span>{participant.gender}</span>
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-ndisRegDate" className="text-xs">NDIS registration date</Label>
+                    <Input
+                      id="edit-ndisRegDate"
+                      type="date"
+                      value={ndisForm.ndisRegistrationDate}
+                      onChange={(e) => setNdisForm(prev => ({ ...prev, ndisRegistrationDate: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
                   </div>
-                )}
-                {participant.disability && (
+                </>
+              ) : (
+                <>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Disability</span>
-                    <span>{participant.disability}</span>
+                    <span className="text-muted-foreground">NDIS number</span>
+                    <span className="font-mono">{formatNdisNumber(participant.ndisNumber)}</span>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Registration date</span>
+                    <span>
+                      {participant.ndisRegistrationDate
+                        ? formatDateAU(new Date(participant.ndisRegistrationDate))
+                        : '—'}
+                    </span>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Plan Manager Assignment ───────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Plan Manager</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {participant.assignedTo ? (
+                <div>
+                  <div className="font-medium text-foreground">{participant.assignedTo.name}</div>
+                  <div>{participant.assignedTo.email}</div>
+                </div>
+              ) : (
+                <span>Unassigned</span>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Plans */}
           {participant.plans.length > 0 && (
