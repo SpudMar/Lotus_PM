@@ -1,0 +1,6 @@
+-- Fix: Add @map annotations for snake_case columns added by invoice processing engine migration.
+-- The migration 20260224070000_invoice_processing_engine created columns with snake_case names
+-- (processing_category, ai_processing_result, etc.) but schema.prisma had no @map annotations,
+-- causing Prisma to look for camelCase column names that don't exist.
+-- This migration is a no-op SQL-wise — the DB columns already have the correct names.
+-- The fix is purely in schema.prisma (@map annotations) + Prisma client regeneration.
