@@ -99,6 +99,7 @@ function XeroTab({ isPMOrAdmin, canSync }: { isPMOrAdmin: boolean; canSync: bool
   const [disconnecting, setDisconnecting] = useState(false)
   const [syncResult, setSyncResult] = useState<XeroSyncApiResponse | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showDisconnectDialog, setShowDisconnectDialog] = useState(false)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -134,7 +135,7 @@ function XeroTab({ isPMOrAdmin, canSync }: { isPMOrAdmin: boolean; canSync: bool
   }
 
   async function handleDisconnect(): Promise<void> {
-    if (!confirm('Are you sure you want to disconnect Xero? Existing synced records in Xero will not be deleted.')) return
+    setShowDisconnectDialog(false)
     try {
       setDisconnecting(true)
       const res = await fetch('/api/xero/disconnect', { method: 'DELETE' })
@@ -241,7 +242,7 @@ function XeroTab({ isPMOrAdmin, canSync }: { isPMOrAdmin: boolean; canSync: bool
                   </Button>
                 )}
                 {isPMOrAdmin && (
-                  <Button variant="outline" onClick={handleDisconnect} disabled={disconnecting} size="sm">
+                  <Button variant="outline" onClick={() => setShowDisconnectDialog(true)} disabled={disconnecting} size="sm">
                     {disconnecting ? (
                       <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Disconnecting...</>
                     ) : (
@@ -288,6 +289,25 @@ function XeroTab({ isPMOrAdmin, canSync }: { isPMOrAdmin: boolean; canSync: bool
           )}
         </CardContent>
       </Card>
+
+      {/* Disconnect Confirmation Dialog */}
+      <Dialog open={showDisconnectDialog} onOpenChange={setShowDisconnectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Disconnect Xero</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to disconnect Xero? Existing synced records in Xero will not be
+              deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDisconnectDialog(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => void handleDisconnect()} disabled={disconnecting}>
+              {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

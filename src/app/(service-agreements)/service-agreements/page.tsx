@@ -14,6 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { DashboardShell } from '@/components/layout/dashboard-shell'
+import { PageHeader } from '@/components/layout/page-header'
 import type { SaStatusValue } from '@/lib/modules/service-agreements/types'
 
 function statusVariant(status: SaStatusValue): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -48,76 +50,76 @@ export default async function ServiceAgreementsPage({
   const statuses: SaStatusValue[] = ['DRAFT', 'ACTIVE', 'EXPIRED', 'TERMINATED']
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Service Agreements</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Manage provider-participant service agreements
-          </p>
-        </div>
-        {canWrite && (
-          <Button asChild>
-            <Link href="/service-agreements/new">New Agreement</Link>
-          </Button>
-        )}
-      </div>
+    <DashboardShell>
+      <div className="space-y-6">
+        <PageHeader
+          title="Service Agreements"
+          description="Manage provider-participant service agreements"
+          actions={
+            canWrite ? (
+              <Button asChild>
+                <Link href="/service-agreements/new">New Agreement</Link>
+              </Button>
+            ) : undefined
+          }
+        />
 
-      {/* Status filter */}
-      <div className="flex gap-2 flex-wrap">
-        <Link href="/service-agreements">
-          <Badge variant={!status ? 'default' : 'outline'} className="cursor-pointer">All</Badge>
-        </Link>
-        {statuses.map((s) => (
-          <Link key={s} href={`/service-agreements?status=${s}`}>
-            <Badge variant={status === s ? 'default' : 'outline'} className="cursor-pointer">{s}</Badge>
+        {/* Status filter */}
+        <div className="flex gap-2 flex-wrap">
+          <Link href="/service-agreements">
+            <Badge variant={!status ? 'default' : 'outline'} className="cursor-pointer">All</Badge>
           </Link>
-        ))}
-      </div>
+          {statuses.map((s) => (
+            <Link key={s} href={`/service-agreements?status=${s}`}>
+              <Badge variant={status === s ? 'default' : 'outline'} className="cursor-pointer">{s}</Badge>
+            </Link>
+          ))}
+        </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Reference</TableHead>
-              <TableHead>Participant</TableHead>
-              <TableHead>Provider</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Start</TableHead>
-              <TableHead>End</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {agreements.length === 0 && (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                  No service agreements found.
-                </TableCell>
+                <TableHead>Reference</TableHead>
+                <TableHead>Participant</TableHead>
+                <TableHead>Provider</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Start</TableHead>
+                <TableHead>End</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            )}
-            {agreements.map((a) => (
-              <TableRow key={a.id}>
-                <TableCell className="font-mono text-sm font-medium">{a.agreementRef}</TableCell>
-                <TableCell>
-                  {a.participant?.firstName} {a.participant?.lastName}
-                </TableCell>
-                <TableCell>{a.provider?.name}</TableCell>
-                <TableCell>
-                  <Badge variant={statusVariant(a.status)}>{a.status}</Badge>
-                </TableCell>
-                <TableCell>{new Date(a.startDate).toLocaleDateString('en-AU')}</TableCell>
-                <TableCell>{new Date(a.endDate).toLocaleDateString('en-AU')}</TableCell>
-                <TableCell className="text-right">
-                  <Button asChild size="sm" variant="ghost">
-                    <Link href={`/service-agreements/${a.id}`}>View</Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {agreements.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    No service agreements found.
+                  </TableCell>
+                </TableRow>
+              )}
+              {agreements.map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell className="font-mono text-sm font-medium">{a.agreementRef}</TableCell>
+                  <TableCell>
+                    {a.participant?.firstName} {a.participant?.lastName}
+                  </TableCell>
+                  <TableCell>{a.provider?.name}</TableCell>
+                  <TableCell>
+                    <Badge variant={statusVariant(a.status)}>{a.status}</Badge>
+                  </TableCell>
+                  <TableCell>{new Date(a.startDate).toLocaleDateString('en-AU')}</TableCell>
+                  <TableCell>{new Date(a.endDate).toLocaleDateString('en-AU')}</TableCell>
+                  <TableCell className="text-right">
+                    <Button asChild size="sm" variant="ghost">
+                      <Link href={`/service-agreements/${a.id}`}>View</Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
-    </div>
+    </DashboardShell>
   )
 }

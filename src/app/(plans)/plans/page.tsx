@@ -6,8 +6,10 @@ import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Plus, Search } from 'lucide-react'
 import { formatAUD } from '@/lib/shared/currency'
 import { formatDateAU } from '@/lib/shared/dates'
 
@@ -39,6 +41,8 @@ function statusVariant(status: string): 'default' | 'secondary' | 'destructive' 
 export default function PlansPage(): React.JSX.Element {
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
 
   useEffect(() => {
     async function load(): Promise<void> {
@@ -55,6 +59,15 @@ export default function PlansPage(): React.JSX.Element {
     void load()
   }, [])
 
+  const q = searchQuery.toLowerCase()
+  const filteredPlans = plans.filter((plan) => {
+    const matchesSearch = !searchQuery || 
+      `${plan.participant.firstName} ${plan.participant.lastName}`.toLowerCase().includes(q) ||
+      plan.participant.ndisNumber.includes(q)
+    const matchesStatus = statusFilter === 'all' || plan.status === statusFilter
+    return matchesSearch && matchesStatus
+  })
+
   return (
     <DashboardShell>
       <div className="space-y-4">
@@ -67,6 +80,26 @@ export default function PlansPage(): React.JSX.Element {
             </Button>
           }
         />
+
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by participant or NDIS number..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="ACTIVE">Active</TabsTrigger>
+            <TabsTrigger value="EXPIRED">Expired</TabsTrigger>
+            <TabsTrigger value="DRAFT">Draft</TabsTrigger>
+            <TabsTrigger value="UNDER_REVIEW">Under Review</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         <div className="rounded-md border">
           <Table>
@@ -84,12 +117,14 @@ export default function PlansPage(): React.JSX.Element {
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground">Loading...</TableCell>
                 </TableRow>
-              ) : plans.length === 0 ? (
+              ) : filteredPlans.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">No plans found.</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    {searchQuery || statusFilter !== 'all' ? 'No plans match your filters.' : 'No plans found.'}
+                  </TableCell>
                 </TableRow>
               ) : (
-                plans.map((plan) => {
+                filteredPlans.map((plan) => {
                   const totalBudget = plan.budgetLines.reduce((sum, l) => sum + l.allocatedCents, 0)
                   const totalSpent = plan.budgetLines.reduce((sum, l) => sum + l.spentCents + l.reservedCents, 0)
                   return (

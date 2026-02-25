@@ -18,6 +18,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -82,6 +83,9 @@ export default function AutomationPage(): React.JSX.Element {
   const [form, setForm] = useState<NewRuleForm>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [testResults, setTestResults] = useState<Record<string, string>>({})
+
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   useEffect(() => {
     void loadRules()
@@ -162,9 +166,16 @@ export default function AutomationPage(): React.JSX.Element {
     void loadRules()
   }
 
-  async function handleDelete(id: string): Promise<void> {
-    if (!confirm('Delete this rule? This cannot be undone.')) return
-    await fetch(`/api/automation/rules/${id}`, { method: 'DELETE' })
+  function openDeleteDialog(id: string): void {
+    setDeleteTarget(id)
+    setShowDeleteDialog(true)
+  }
+
+  async function handleDelete(): Promise<void> {
+    if (!deleteTarget) return
+    setShowDeleteDialog(false)
+    await fetch(`/api/automation/rules/${deleteTarget}`, { method: 'DELETE' })
+    setDeleteTarget(null)
     void loadRules()
   }
 
@@ -317,7 +328,7 @@ export default function AutomationPage(): React.JSX.Element {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => void handleDelete(rule.id)}
+                          onClick={() => openDeleteDialog(rule.id)}
                           title="Delete rule"
                           className="text-destructive hover:text-destructive"
                         >
@@ -331,6 +342,22 @@ export default function AutomationPage(): React.JSX.Element {
             </TableBody>
           </Table>
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Rule</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this automation rule? This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => void handleDelete()}>Delete Rule</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Create Rule Dialog */}
         <Dialog open={showCreate} onOpenChange={setShowCreate}>

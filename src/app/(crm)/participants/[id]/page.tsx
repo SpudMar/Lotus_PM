@@ -904,12 +904,12 @@ export default function ParticipantDetailPage({
               <CardContent>
                 <div className="space-y-2">
                   {participant.plans.map((plan) => (
-                    <div key={plan.id} className="flex items-center justify-between text-sm">
+                    <Link key={plan.id} href={`/plans/${plan.id}`} className="flex items-center justify-between text-sm rounded-md px-2 py-1 -mx-2 hover:bg-muted transition-colors">
                       <span>
                         {formatDateAU(new Date(plan.startDate))} – {formatDateAU(new Date(plan.endDate))}
                       </span>
                       <Badge variant="outline" className="text-xs">{plan.status}</Badge>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </CardContent>

@@ -6,9 +6,10 @@ import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Upload } from 'lucide-react'
+import { Upload, Search } from 'lucide-react'
 import { formatAUD } from '@/lib/shared/currency'
 import { formatDateAU } from '@/lib/shared/dates'
 
@@ -37,6 +38,7 @@ export default function InvoicesPage(): React.JSX.Element {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     async function load(): Promise<void> {
@@ -56,6 +58,16 @@ export default function InvoicesPage(): React.JSX.Element {
     void load()
   }, [statusFilter])
 
+  const q = searchQuery.toLowerCase()
+  const filteredInvoices = searchQuery
+    ? invoices.filter(
+        (inv) =>
+          inv.invoiceNumber.toLowerCase().includes(q) ||
+          inv.provider.name.toLowerCase().includes(q) ||
+          `${inv.participant.firstName} ${inv.participant.lastName}`.toLowerCase().includes(q)
+      )
+    : invoices
+
   return (
     <DashboardShell>
       <div className="space-y-4">
@@ -68,6 +80,16 @@ export default function InvoicesPage(): React.JSX.Element {
             </Button>
           }
         />
+
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search invoices..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
 
         <Tabs value={statusFilter} onValueChange={setStatusFilter}>
           <TabsList>
@@ -96,12 +118,14 @@ export default function InvoicesPage(): React.JSX.Element {
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground">Loading...</TableCell>
                 </TableRow>
-              ) : invoices.length === 0 ? (
+              ) : filteredInvoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">No invoices found.</TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    {searchQuery ? 'No invoices match your search.' : 'No invoices found.'}
+                  </TableCell>
                 </TableRow>
               ) : (
-                invoices.map((inv) => (
+                filteredInvoices.map((inv) => (
                   <TableRow key={inv.id}>
                     <TableCell>
                       <Link href={`/invoices/${inv.id}`} className="font-medium hover:underline">
