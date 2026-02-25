@@ -36,8 +36,10 @@ import {
   Plus,
   Users,
   UserCheck,
+  Send,
 } from 'lucide-react'
 import { formatDateTimeAU } from '@/lib/shared/dates'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -159,6 +161,7 @@ export default function CoordinatorDetailPage({
   const [noteParticipantId, setNoteParticipantId] = useState('')
   const [noteProviderId, setNoteProviderId] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
 
   // ── Load coordinator info ─────────────────────────────────────────────────
 
@@ -441,10 +444,16 @@ export default function CoordinatorDetailPage({
                 <SelectItem value="NOTE">Note</SelectItem>
               </SelectContent>
             </Select>
-            <Button size="sm" onClick={openNoteDialog}>
-              <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Add note
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={openNoteDialog}>
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Add note
+              </Button>
+              <Button size="sm" onClick={() => setShowEmailModal(true)}>
+                <Send className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Send Email
+              </Button>
+            </div>
           </div>
 
           {corrLoading ? (
@@ -532,6 +541,16 @@ export default function CoordinatorDetailPage({
           )}
         </TabsContent>
       </Tabs>
+
+      {/* ── Email compose modal ──────────────────────────────────────────────── */}
+      <EmailComposeModal
+        open={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        onSent={() => loadCorrespondence(typeFilter)}
+        recipientEmail={coordinator.email}
+        recipientName={coordinator.name}
+        coordinatorId={id}
+      />
 
       {/* ── Add note dialog ────────────────────────────────────────────────── */}
       <Dialog open={showNoteDialog} onOpenChange={setShowNoteDialog}>

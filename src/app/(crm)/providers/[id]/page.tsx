@@ -35,9 +35,11 @@ import {
   Plus,
   Receipt,
   Building2,
+  Send,
 } from 'lucide-react'
 import { formatDateAU, formatDateTimeAU } from '@/lib/shared/dates'
 import { formatAUD } from '@/lib/shared/currency'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -138,6 +140,7 @@ export default function ProviderDetailPage({
   const [noteSubject, setNoteSubject] = useState('')
   const [noteBody, setNoteBody] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
 
   // ── Load data ─────────────────────────────────────────────────────────────
 
@@ -322,10 +325,18 @@ export default function ProviderDetailPage({
                 <SelectItem value="NOTE">Note</SelectItem>
               </SelectContent>
             </Select>
-            <Button size="sm" onClick={() => setShowNoteDialog(true)}>
-              <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Add note
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setShowNoteDialog(true)}>
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Add note
+              </Button>
+              {provider.email && (
+                <Button size="sm" onClick={() => setShowEmailModal(true)}>
+                  <Send className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  Send Email
+                </Button>
+              )}
+            </div>
           </div>
 
           {corrLoading ? (
@@ -478,6 +489,16 @@ export default function ProviderDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Email compose modal ──────────────────────────────────────────────── */}
+      <EmailComposeModal
+        open={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        onSent={() => loadCorrespondence(typeFilter)}
+        recipientEmail={provider.email ?? ''}
+        recipientName={provider.name}
+        providerId={id}
+      />
     </DashboardShell>
   )
 }
