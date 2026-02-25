@@ -176,9 +176,9 @@ ${extractedText.slice(0, 4000)}
     )
 
     const textBlock = response.output?.message?.content?.find((b) => 'text' in b)
-    if (!textBlock || !('text' in textBlock)) return null
+    if (!textBlock || !('text' in textBlock) || !(textBlock as { text?: string }).text) return null
 
-    const raw = textBlock.text.trim()
+    const raw = ((textBlock as { text: string }).text).trim()
     // Strip any markdown code fences if the model adds them
     const jsonStr = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
 
