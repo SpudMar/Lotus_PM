@@ -37,6 +37,7 @@ export interface SesAttachment {
 
 export interface SendSesEmailParams {
   to: string
+  cc?: string[]
   subject: string
   htmlBody: string
   textBody?: string
@@ -68,6 +69,7 @@ export async function sendSesEmail(params: SendSesEmailParams): Promise<SendSesE
     FromEmailAddress: from,
     Destination: {
       ToAddresses: [params.to],
+      ...(params.cc && params.cc.length > 0 ? { CcAddresses: params.cc } : {}),
     },
     Content: {
       Simple: {
@@ -107,6 +109,9 @@ async function sendSesEmailWithAttachments(
 
   lines.push(`From: ${params.fromAddress}`)
   lines.push(`To: ${params.to}`)
+  if (params.cc && params.cc.length > 0) {
+    lines.push(`Cc: ${params.cc.join(', ')}`)
+  }
   lines.push(`Subject: ${params.subject}`)
   lines.push('MIME-Version: 1.0')
   lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`)

@@ -37,11 +37,13 @@ import {
   AlertTriangle,
   Flag,
   CheckCircle2,
+  Send,
 } from 'lucide-react'
 import { formatDateAU, formatDateTimeAU } from '@/lib/shared/dates'
 import { formatNdisNumber } from '@/lib/shared/ndis'
 import { formatAUD } from '@/lib/shared/currency'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -160,6 +162,7 @@ export default function ParticipantDetailPage({
   const [noteBody, setNoteBody] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
   const [activatingOnboarding, setActivatingOnboarding] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
 
   // -- Invoice approval preferences --
   const [approvalEnabled, setApprovalEnabled] = useState(false)
@@ -567,10 +570,18 @@ export default function ParticipantDetailPage({
                 </SelectContent>
               </Select>
             </div>
-            <Button size="sm" onClick={() => setShowNoteDialog(true)}>
-              <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Add note
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setShowNoteDialog(true)}>
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Add note
+              </Button>
+              {participant.email && (
+                <Button size="sm" onClick={() => setShowEmailModal(true)}>
+                  <Send className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  Send Email
+                </Button>
+              )}
+            </div>
           </div>
 
           {corrLoading ? (
@@ -916,6 +927,16 @@ export default function ParticipantDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Email compose modal ──────────────────────────────────────────────── */}
+      <EmailComposeModal
+        open={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        onSent={() => loadCorrespondence(typeFilter)}
+        recipientEmail={participant.email ?? ''}
+        recipientName={`${participant.firstName} ${participant.lastName}`}
+        participantId={id}
+      />
     </DashboardShell>
   )
 }
