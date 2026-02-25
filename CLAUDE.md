@@ -122,7 +122,7 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 
 ## CURRENT STATE
 
-- **1051/1051 tests** (64 suites) | **36 migrations** | Last merged: PR #62
+- **1099/1099 tests** (65 suites) | **36 migrations** | Last merged: PR #64
 - All CareSquare Tier 1 + Tier 2 gaps cleared — Lotus PM matches/exceeds CareSquare on all operational workflows
 - Provider Portal complete (PRs #49-53) — magic-link auth, premium redesign, full provider self-service
 - Analytics data infrastructure complete (PR #51) — status history tracking instrumented across all 9 transitions
@@ -219,5 +219,5 @@ gh run view <id> --log-failed
 
 ---
 
-*Last updated: 25 February 2026 — 1051/1051 tests, 36 migrations, 64 suites. PRs #34–62 merged. All major features + comprehensive seed data complete. Next: PACE B2B when PRODA approved.*
+*Last updated: 25 February 2026 — 1099/1099 tests, 36 migrations, 65 suites. PRs #34–64 merged. All major features + comprehensive seed data + statement test coverage complete. Next: WCAG remediation, then PACE B2B when PRODA approved.*
 *All decisions in this file were made deliberately. Update with care.*
