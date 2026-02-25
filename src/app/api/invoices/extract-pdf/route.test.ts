@@ -6,8 +6,9 @@
  *   - 403 wrong role / missing permission
  *   - 400 no file attached
  *   - 415 non-PDF file
- *   - 200 success with mocked Textract + AI response
- *   - 422 when AI returns null (nothing extracted)
+ *   - 200 success with mocked Textract + AI response (includes s3Key/s3Bucket)
+ *   - 200 fallback success when full AI returns null but fallback succeeds
+ *   - 422 when both AI paths return null
  *   - 500 on Textract AWS error
  */
 
@@ -21,13 +22,28 @@ jest.mock('@/lib/modules/invoices/ai-processor', () => ({
   processWithAI: jest.fn(),
 }))
 
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn().mockImplementation(() => ({})),
+  PutObjectCommand: jest.fn().mockImplementation((input) => ({ ...input })),
+}))
+
 // ── Imports ────────────────────────────────────────────────────────────────────
 
 import { NextRequest } from 'next/server'
 import { TextractClient } from '@aws-sdk/client-textract'
+import { S3Client } from '@aws-sdk/client-s3'
+import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
 import { requirePermission } from '@/lib/auth/session'
 import { processWithAI } from '@/lib/modules/invoices/ai-processor'
-import { POST, _setTextractClientForTest, _resetTextractClient } from './route'
+import {
+  POST,
+  _setTextractClientForTest,
+  _resetTextractClient,
+  _setS3ClientForTest,
+  _resetS3Client,
+  _setBedrockFallbackClientForTest,
+  _resetBedrockFallbackClient,
+} from './route'
 
 const mockRequirePermission = requirePermission as jest.MockedFunction<typeof requirePermission>
 const mockProcessWithAI = processWithAI as jest.MockedFunction<typeof processWithAI>
@@ -138,6 +154,34 @@ function mockTextractClientWith(blocks: unknown[], shouldThrow?: Error): Textrac
   return { send: mockSend } as unknown as TextractClient
 }
 
+/** Create a mock S3Client that succeeds on PutObject */
+function mockS3Client(shouldThrow?: Error): S3Client {
+  const mockSend = jest.fn()
+  if (shouldThrow) {
+    mockSend.mockRejectedValue(shouldThrow)
+  } else {
+    mockSend.mockResolvedValue({})
+  }
+  return { send: mockSend } as unknown as S3Client
+}
+
+/** Create a mock BedrockRuntimeClient that returns the given JSON text */
+function mockBedrockFallbackClient(jsonText: string | null): BedrockRuntimeClient {
+  const mockSend = jest.fn()
+  if (jsonText === null) {
+    mockSend.mockResolvedValue({ output: { message: { content: [] } } })
+  } else {
+    mockSend.mockResolvedValue({
+      output: {
+        message: {
+          content: [{ text: jsonText }],
+        },
+      },
+    })
+  }
+  return { send: mockSend } as unknown as BedrockRuntimeClient
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('POST /api/invoices/extract-pdf', () => {
@@ -145,10 +189,17 @@ describe('POST /api/invoices/extract-pdf', () => {
     jest.clearAllMocks()
     mockRequirePermission.mockResolvedValue(pmSession as never)
     _resetTextractClient()
+    _resetS3Client()
+    _resetBedrockFallbackClient()
+    // Set S3_BUCKET_INVOICES so S3 upload is attempted
+    process.env['S3_BUCKET_INVOICES'] = 'lotus-pm-invoices-test'
   })
 
   afterEach(() => {
     _resetTextractClient()
+    _resetS3Client()
+    _resetBedrockFallbackClient()
+    delete process.env['S3_BUCKET_INVOICES']
   })
 
   // ── Auth ────────────────────────────────────────────────────────────────────
@@ -203,10 +254,11 @@ describe('POST /api/invoices/extract-pdf', () => {
     expect(body.error).toContain('10 MB')
   })
 
-  // ── Success ─────────────────────────────────────────────────────────────────
+  // ── Success (full AI path) ──────────────────────────────────────────────────
 
-  it('returns 200 with extracted data on success', async () => {
+  it('returns 200 with extracted data and s3Key/s3Bucket on success', async () => {
     _setTextractClientForTest(mockTextractClientWith(mockTextractBlocks))
+    _setS3ClientForTest(mockS3Client())
     mockProcessWithAI.mockResolvedValue(mockAiResult)
 
     const res = await POST(makeMultipartRequest(makePdfFile()))
@@ -219,6 +271,9 @@ describe('POST /api/invoices/extract-pdf', () => {
     expect(body.data.providerName).toBe('Test Provider Pty Ltd')
     expect(body.data.providerAbn).toBe('12345678901')
     expect(body.data.totalAmountCents).toBe(30000)
+    // S3 fields should be present
+    expect(typeof body.data.s3Key).toBe('string')
+    expect(body.data.s3Bucket).toBe('lotus-pm-invoices-test')
     expect(Array.isArray(body.data.lineItems)).toBe(true)
     const items = body.data.lineItems as Array<Record<string, unknown>>
     expect(items).toHaveLength(1)
@@ -230,8 +285,20 @@ describe('POST /api/invoices/extract-pdf', () => {
     expect(items[0]?.serviceDate).toBe('2026-02-15')
   })
 
+  it('returns s3Key with uploads/manual/ prefix', async () => {
+    _setTextractClientForTest(mockTextractClientWith(mockTextractBlocks))
+    _setS3ClientForTest(mockS3Client())
+    mockProcessWithAI.mockResolvedValue(mockAiResult)
+
+    const res = await POST(makeMultipartRequest(makePdfFile()))
+    const body = await res.json() as { data: { s3Key: string } }
+
+    expect(body.data.s3Key).toMatch(/^uploads\/manual\/\d+-[a-f0-9-]+\.pdf$/)
+  })
+
   it('passes extracted text to processWithAI', async () => {
     _setTextractClientForTest(mockTextractClientWith(mockTextractBlocks))
+    _setS3ClientForTest(mockS3Client())
     mockProcessWithAI.mockResolvedValue(mockAiResult)
 
     await POST(makeMultipartRequest(makePdfFile()))
@@ -247,11 +314,58 @@ describe('POST /api/invoices/extract-pdf', () => {
     expect(callArg?.participantName).toBeNull()
   })
 
+  // ── S3 upload robustness ────────────────────────────────────────────────────
+
+  it('returns null s3Key/s3Bucket when S3 upload fails but extraction succeeds', async () => {
+    _setTextractClientForTest(mockTextractClientWith(mockTextractBlocks))
+    _setS3ClientForTest(mockS3Client(new Error('S3 network error')))
+    mockProcessWithAI.mockResolvedValue(mockAiResult)
+
+    const res = await POST(makeMultipartRequest(makePdfFile()))
+
+    // Should still return 200 — extraction succeeds even if S3 fails
+    expect(res.status).toBe(200)
+    const body = await res.json() as { data: { s3Key: unknown; s3Bucket: unknown } }
+    expect(body.data.s3Key).toBeNull()
+    expect(body.data.s3Bucket).toBeNull()
+  })
+
+  // ── Fallback extraction path ────────────────────────────────────────────────
+
+  it('returns 200 with fallback data when full AI returns null but fallback succeeds', async () => {
+    _setTextractClientForTest(mockTextractClientWith(mockTextractBlocks))
+    _setS3ClientForTest(mockS3Client())
+    mockProcessWithAI.mockResolvedValue(null)
+
+    const fallbackJson = JSON.stringify({
+      providerName: 'Fallback Provider',
+      providerAbn: '12345678901',
+      invoiceNumber: 'INV-FB-001',
+      invoiceDate: '2026-02-15',
+      totalAmountCents: 30000,
+    })
+    _setBedrockFallbackClientForTest(mockBedrockFallbackClient(fallbackJson))
+
+    const res = await POST(makeMultipartRequest(makePdfFile()))
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as { data: Record<string, unknown> }
+    expect(body.data.providerName).toBe('Fallback Provider')
+    expect(body.data.invoiceNumber).toBe('INV-FB-001')
+    expect(body.data.totalAmountCents).toBe(30000)
+    // Fallback returns empty line items
+    expect(body.data.lineItems).toEqual([])
+    // S3 key should still be returned
+    expect(typeof body.data.s3Key).toBe('string')
+  })
+
   // ── AI failure paths ────────────────────────────────────────────────────────
 
-  it('returns 422 when AI returns null (nothing extracted)', async () => {
+  it('returns 422 when both AI and fallback return null', async () => {
     _setTextractClientForTest(mockTextractClientWith(mockTextractBlocks))
+    _setS3ClientForTest(mockS3Client())
     mockProcessWithAI.mockResolvedValue(null)
+    _setBedrockFallbackClientForTest(mockBedrockFallbackClient(null))
 
     const res = await POST(makeMultipartRequest(makePdfFile()))
 

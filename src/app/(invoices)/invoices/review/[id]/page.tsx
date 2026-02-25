@@ -38,6 +38,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, Save, CheckCircle, XCircle, Flag, Plus, Trash2, FileWarning, AlertCircle, AlertTriangle, ShieldAlert, Mail, Upload, Zap, Building2 } from 'lucide-react'
 import { formatDateAU } from '@/lib/shared/dates'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
+import { PdfViewer } from '@/components/invoices/PdfViewer'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -384,10 +385,6 @@ export default function InvoiceReviewDetailPage({
   const [saving, setSaving] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
-  // PDF preview
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
-  const [pdfLoading, setPdfLoading] = useState(false)
-
   // Form state (editable)
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState('')
@@ -413,7 +410,6 @@ export default function InvoiceReviewDetailPage({
   const [showFlagDialog, setShowFlagDialog] = useState(false)
   const [flagNote, setFlagNote] = useState('')
   const [showCreateProviderModal, setShowCreateProviderModal] = useState(false)
-  const [creatingProvider, setCreatingProvider] = useState(false)
 
   // Validation & flags
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
@@ -461,26 +457,9 @@ export default function InvoiceReviewDetailPage({
     }
   }, [id])
 
-  const loadPdfUrl = useCallback(async (): Promise<void> => {
-    setPdfLoading(true)
-    try {
-      const res = await fetch(`/api/invoices/${id}/presigned-url`)
-      if (res.ok) {
-        const json = await res.json() as { data: { downloadUrl: string } }
-        setPdfUrl(json.data.downloadUrl)
-      }
-    } finally {
-      setPdfLoading(false)
-    }
-  }, [id])
-
   useEffect(() => {
     void loadInvoice()
   }, [loadInvoice])
-
-  useEffect(() => {
-    void loadPdfUrl()
-  }, [loadPdfUrl])
 
   // Load participants and providers for dropdowns
   useEffect(() => {
@@ -1142,29 +1121,11 @@ export default function InvoiceReviewDetailPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* ── Left: PDF Preview ──────────────────────────────────────────── */}
-        <div className="space-y-2">
+        <div className="space-y-2 lg:sticky lg:top-4 lg:self-start">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Invoice Document
           </h2>
-          <div className="rounded-lg border bg-muted/30 overflow-hidden" style={{ height: '70vh' }}>
-            {pdfLoading ? (
-              <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-                Loading PDF...
-              </div>
-            ) : pdfUrl ? (
-              <iframe
-                src={pdfUrl}
-                title="Invoice PDF"
-                className="h-full w-full"
-                aria-label="Invoice PDF preview"
-              />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground text-sm">
-                <FileWarning className="h-8 w-8 opacity-40" aria-hidden="true" />
-                <span>No document attached</span>
-              </div>
-            )}
-          </div>
+          <PdfViewer invoiceId={id} height="80vh" />
         </div>
 
         {/* ── Right: Edit Form ───────────────────────────────────────────── */}

@@ -30,6 +30,7 @@ import { Progress } from '@/components/ui/progress'
 import { ArrowLeft, Plus, Trash2, Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles } from 'lucide-react'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
 import { formatDateAU } from '@/lib/shared/dates'
+import { PdfViewer } from '@/components/invoices/PdfViewer'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,8 @@ interface ExtractedLineItem {
 }
 
 interface ExtractedInvoiceFields {
+  s3Key: string | null
+  s3Bucket: string | null
   providerName: string | null
   providerAbn: string | null
   invoiceNumber: string | null
@@ -305,6 +308,12 @@ export default function InvoiceUploadPage(): React.JSX.Element {
 
       const json = (await res.json()) as { data: ExtractedInvoiceFields }
       const extracted = json.data
+
+      // Capture S3 location returned by the extraction endpoint
+      if (extracted.s3Key && extracted.s3Bucket) {
+        setUploadedS3Key(extracted.s3Key)
+        setUploadedS3Bucket(extracted.s3Bucket)
+      }
 
       // Auto-populate invoice header fields
       if (extracted.invoiceNumber) {
@@ -672,9 +681,23 @@ export default function InvoiceUploadPage(): React.JSX.Element {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* ── Left column: form (2/3 width) ───────────────────────────── */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className={`grid grid-cols-1 gap-6 ${uploadedS3Key && uploadedS3Bucket ? 'lg:grid-cols-2' : ''}`}>
+          {/* ── Left column: PDF viewer (shown after extraction) ────────── */}
+          {uploadedS3Key && uploadedS3Bucket && (
+            <div className="space-y-2 lg:sticky lg:top-4 lg:self-start">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Invoice Document
+              </h2>
+              <PdfViewer
+                s3Key={uploadedS3Key}
+                s3Bucket={uploadedS3Bucket}
+                height="80vh"
+              />
+            </div>
+          )}
+
+          {/* ── Form column ──────────────────────────────────────────────── */}
+          <div className="space-y-6">
             {/* PDF attach + extract — shown at top to trigger auto-populate */}
             <Card>
               <CardHeader className="pb-3">
@@ -1115,10 +1138,7 @@ export default function InvoiceUploadPage(): React.JSX.Element {
                 </p>
               </CardContent>
             </Card>
-          </div>
 
-          {/* ── Right column: PDF status + actions (1/3 width) ─────────── */}
-          <div className="space-y-6">
             {/* PDF status (shown only when a file is selected) */}
             {pdfFile && (
               <Card>
@@ -1171,9 +1191,8 @@ export default function InvoiceUploadPage(): React.JSX.Element {
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-semibold">Actions</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="flex flex-wrap gap-3">
                 <Button
-                  className="w-full"
                   variant="outline"
                   onClick={() => void handleSubmit('RECEIVED')}
                   disabled={saving}
@@ -1181,14 +1200,12 @@ export default function InvoiceUploadPage(): React.JSX.Element {
                   {saving ? 'Saving...' : 'Save as Draft'}
                 </Button>
                 <Button
-                  className="w-full"
                   onClick={() => void handleSubmit('PENDING_REVIEW')}
                   disabled={saving}
                 >
                   {saving ? 'Saving...' : 'Save for Review'}
                 </Button>
                 <Button
-                  className="w-full"
                   variant="ghost"
                   asChild
                 >
