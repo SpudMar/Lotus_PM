@@ -1,0 +1,4 @@
+-- Fix: ClmClaimLine.status field was typed as ClmStatus in schema.prisma
+-- but the DB column is actually ClmLineStatus (created by 20260221000000).
+-- This migration adds the ClmLineStatus enum to schema.prisma and corrects
+-- the field type. No SQL changes needed — the DB already has the right type.
