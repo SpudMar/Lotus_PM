@@ -45,10 +45,12 @@ import {
   FileSpreadsheet,
   ChevronLeft,
   ChevronRight,
+  Eye,
 } from 'lucide-react'
 import { formatDateAU } from '@/lib/shared/dates'
 import { hasPermission } from '@/lib/auth/rbac'
 import type { Role } from '@/lib/auth/rbac'
+import { PdfViewer } from '@/components/shared/PdfViewer'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -168,6 +170,12 @@ function stageProgress(stage: UploadStage): number {
   }
 }
 
+function isPdfPreviewable(mimeType: string, name: string): boolean {
+  if (mimeType === 'application/pdf') return true
+  if (name.toLowerCase().endsWith('.pdf')) return true
+  return false
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DocumentsPage(): React.JSX.Element {
@@ -190,6 +198,10 @@ export default function DocumentsPage(): React.JSX.Element {
   const [categoryFilter, setCategoryFilter] = useState<DocCategory | 'all'>('all')
   const [downloading, setDownloading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Preview state
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null)
+  const previewDoc = previewDocId ? documents.find((d) => d.id === previewDocId) : null
 
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<DocDocument | null>(null)
@@ -561,7 +573,7 @@ export default function DocumentsPage(): React.JSX.Element {
                 <TableHead>Uploaded by</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Size</TableHead>
-                <TableHead className="w-[100px]">
+                <TableHead className="w-[130px]">
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
@@ -626,6 +638,16 @@ export default function DocumentsPage(): React.JSX.Element {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        {isPdfPreviewable(doc.mimeType, doc.name) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setPreviewDocId(doc.id)}
+                            aria-label={`Preview ${doc.name}`}
+                          >
+                            <Eye className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -910,6 +932,27 @@ export default function DocumentsPage(): React.JSX.Element {
               </Button>
             )}
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Document preview dialog */}
+      <Dialog open={!!previewDocId} onOpenChange={(open) => { if (!open) setPreviewDocId(null) }}>
+        <DialogContent className="max-w-4xl h-[80vh]" aria-describedby="preview-dialog-desc">
+          <DialogHeader>
+            <DialogTitle>
+              {previewDoc ? previewDoc.name : 'Document Preview'}
+            </DialogTitle>
+            <p id="preview-dialog-desc" className="text-sm text-muted-foreground">
+              {previewDoc?.description ?? 'Viewing document PDF'}
+            </p>
+          </DialogHeader>
+          {previewDocId && (
+            <PdfViewer
+              documentId={previewDocId}
+              height="calc(80vh - 120px)"
+              title={previewDoc ? `Preview of ${previewDoc.name}` : 'Document preview'}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </DashboardShell>

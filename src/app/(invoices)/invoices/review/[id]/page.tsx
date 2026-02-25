@@ -38,7 +38,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, Save, CheckCircle, XCircle, Flag, Plus, Trash2, FileWarning, AlertCircle, AlertTriangle, ShieldAlert, Mail, Upload, Zap, Building2 } from 'lucide-react'
 import { formatDateAU } from '@/lib/shared/dates'
 import { formatAUD, centsToDollars, dollarsToCents } from '@/lib/shared/currency'
-import { PdfViewer } from '@/components/invoices/PdfViewer'
+import { PdfViewer } from '@/components/shared/PdfViewer'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
