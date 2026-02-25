@@ -146,7 +146,7 @@ export function InvoicesScreen(): React.JSX.Element {
       }
       ListEmptyComponent={
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📄</Text>
+          <Text style={styles.emptyIcon} accessibilityElementsHidden importantForAccessibility="no">📄</Text>
           <Text style={styles.emptyTitle}>No invoices yet</Text>
           <Text style={styles.emptyText}>
             Your invoices will appear here once your providers submit them.
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, marginRight: 12 },
   invoiceNumber: { fontSize: 14, fontWeight: '700', color: '#111827' },
   providerName: { fontSize: 13, color: '#374151', marginTop: 2 },
-  invoiceDate: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  invoiceDate: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   rowRight: { alignItems: 'flex-end', justifyContent: 'space-between' },
   amount: { fontSize: 15, fontWeight: '700', color: '#111827' },
   statusBadge: {

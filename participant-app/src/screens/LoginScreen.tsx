@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
   },
   helpText: {
     fontSize: 13,
-    color: '#9ca3af',
+    color: '#6b7280',
     textAlign: 'center',
     marginTop: 8,
   },

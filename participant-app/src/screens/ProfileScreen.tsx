@@ -204,9 +204,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#9ca3af',
+    color: '#6b7280',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     paddingHorizontal: 16,
@@ -244,5 +244,5 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   signOutText: { color: '#dc2626', fontSize: 15, fontWeight: '700' },
-  version: { textAlign: 'center', fontSize: 11, color: '#d1d5db' },
+  version: { textAlign: 'center', fontSize: 12, color: '#6b7280' },
 })

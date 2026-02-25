@@ -158,7 +158,7 @@ export function MessagesScreen(): React.JSX.Element {
       }
       ListEmptyComponent={
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>💬</Text>
+          <Text style={styles.emptyIcon} accessibilityElementsHidden importantForAccessibility="no">💬</Text>
           <Text style={styles.emptyTitle}>No messages yet</Text>
           <Text style={styles.emptyText}>
             Your correspondence with your plan manager will appear here.

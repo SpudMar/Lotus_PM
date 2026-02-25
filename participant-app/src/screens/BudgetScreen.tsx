@@ -344,8 +344,8 @@ const styles = StyleSheet.create({
   },
   categoryName: { fontSize: 14, fontWeight: '600', color: '#111827', flex: 1, marginRight: 8 },
   categoryCode: {
-    fontSize: 11,
-    color: '#9ca3af',
+    fontSize: 12,
+    color: '#6b7280',
     backgroundColor: '#f3f4f6',
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -363,5 +363,5 @@ const styles = StyleSheet.create({
   spentLabel: { fontSize: 13, color: '#374151' },
   spentValue: { fontWeight: '600' },
   availableLabel: { fontSize: 13, color: EMERALD, fontWeight: '600' },
-  allocatedLabel: { fontSize: 11, color: '#9ca3af' },
+  allocatedLabel: { fontSize: 12, color: '#6b7280' },
 })
