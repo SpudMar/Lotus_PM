@@ -11,6 +11,12 @@ import { PrismaClient, Prisma } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
+/**
+ * Well-known ID for the system service account.
+ * Mirrors the constant in src/lib/modules/invoices/email-ingest.ts.
+ */
+const SYSTEM_USER_ID = 'clsystem0000000000000001'
+
 async function findOrCreateInvoice(
   data: Parameters<typeof prisma.invInvoice.create>[0]['data'],
 ): Promise<Prisma.InvInvoiceGetPayload<object>> {
@@ -1940,7 +1946,99 @@ async function main(): Promise<void> {
     })
   }
 
-  console.log('  ✓ 7 email templates created')
+  // Upsert the provider-facing invoice receipt acknowledgment template.
+  // Idempotent — update: {} ensures customised versions are never overwritten.
+  const ackBodyHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Invoice Received — {companyName}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#fafaf9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#fafaf9;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background-color:#ffffff;border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#292524;padding:32px 40px;">
+              <p style="margin:0;color:#ffffff;font-size:22px;font-weight:600;letter-spacing:-0.3px;">{companyName}</p>
+              <p style="margin:4px 0 0;color:#a8a29e;font-size:13px;">NDIS Plan Management</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px;">
+              <h1 style="margin:0 0 16px;color:#292524;font-size:24px;font-weight:600;">Invoice Received</h1>
+              <p style="margin:0 0 16px;color:#78716c;font-size:15px;line-height:1.6;">
+                Thank you for submitting your invoice. We have received it and it is now being processed.
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#fafaf9;border:1px solid #e7e5e4;border-radius:6px;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0 0 4px;color:#78716c;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Your Reference Number</p>
+                    <p style="margin:0;color:#292524;font-size:15px;font-weight:600;font-family:monospace;">{invoiceNumber}</p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 24px;color:#78716c;font-size:15px;line-height:1.6;">
+                You can track the status of your invoice through the {companyName} provider portal.
+              </p>
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px;">
+                <tr>
+                  <td style="background-color:#292524;border-radius:6px;">
+                    <a href="{invoicePortalLink}" target="_blank" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;">Track My Invoice</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;color:#78716c;font-size:14px;line-height:1.6;">
+                Processing typically takes up to 10 business days. We will contact you if we need any additional information.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 40px;border-top:1px solid #e7e5e4;background-color:#fafaf9;">
+              <p style="margin:0 0 4px;color:#78716c;font-size:13px;font-weight:600;">{companyName}</p>
+              <p style="margin:0;color:#a8a29e;font-size:13px;">Phone: {companyPhone}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+
+  const ackBodyText = `Invoice Received — {companyName}
+
+Thank you for submitting your invoice. We have received it and it is now being processed.
+
+Your reference number is: {invoiceNumber}
+
+You can track the status of your invoice through the {companyName} provider portal:
+{invoicePortalLink}
+
+Processing typically takes up to 10 business days. We will contact you if we need any additional information.
+
+{companyName}
+Phone: {companyPhone}`
+
+  await prisma.notifEmailTemplate.upsert({
+    where: { name: 'Invoice Received — Acknowledgment' },
+    update: {},
+    create: {
+      name: 'Invoice Received — Acknowledgment',
+      type: 'INVOICE_NOTIFICATION',
+      subject: "We've received your invoice — {companyName}",
+      bodyHtml: ackBodyHtml,
+      bodyText: ackBodyText,
+      mergeFields: ['invoiceNumber', 'invoicePortalLink', 'companyName', 'companyPhone', 'today'] as unknown as Prisma.InputJsonValue,
+      isActive: true,
+      supportsVariableAttachment: false,
+      createdById: SYSTEM_USER_ID,
+    },
+  })
+
+  console.log('  ✓ 8 email templates created')
 
   // ─── 18. AUTOMATION RULES ─────────────────────────────────────────────────
   console.log('  Creating automation rules...')
@@ -2134,7 +2232,7 @@ async function main(): Promise<void> {
   console.log('   15 invoices | 8 claims | 8 payments | 5 service agreements')
   console.log('   4 fund quarantines | 8 documents | 15 notifications | 20 comm logs')
   console.log('   10 correspondence | 6 flags | 3 coordinator assignments')
-  console.log('   2 fee schedules | 4 participant statements | 7 email templates')
+  console.log('   2 fee schedules | 4 participant statements | 8 email templates')
   console.log('   4 automation rules | 8 item patterns | 1 NDIS price guide (15 items)')
 }
 

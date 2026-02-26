@@ -122,6 +122,12 @@ export const AVAILABLE_MERGE_FIELDS: MergeFieldDefinition[] = [
     description: 'Lotus Assist contact phone',
     example: '1300 XXX XXX',
   },
+  {
+    key: 'invoicePortalLink',
+    label: 'Invoice Portal Link',
+    description: 'URL to the provider portal invoices tracking page',
+    example: 'https://planmanager.lotusassist.com.au/provider-portal/invoices',
+  },
 ]
 
 // ─── Types ────────────────────────────────────────────────────────────────

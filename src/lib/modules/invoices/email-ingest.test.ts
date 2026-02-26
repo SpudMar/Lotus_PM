@@ -31,11 +31,23 @@ jest.mock('@/lib/db', () => ({
     invInvoice: {
       create: jest.fn(),
     },
+    notifEmailTemplate: {
+      findFirst: jest.fn(),
+    },
   },
 }))
 
 jest.mock('@/lib/modules/core/audit', () => ({
   createAuditLog: jest.fn(),
+}))
+
+jest.mock('@/lib/modules/crm/correspondence', () => ({
+  createFromEmailIngest: jest.fn().mockResolvedValue(undefined),
+}))
+
+jest.mock('@/lib/modules/notifications/email-send', () => ({
+  sendTemplatedEmail: jest.fn().mockResolvedValue({ id: 'sent-email-001' }),
+  sendRawEmail: jest.fn().mockResolvedValue({ id: 'sent-email-002' }),
 }))
 
 jest.mock('./processing-engine', () => ({
@@ -50,6 +62,7 @@ import { EventBridgeClient } from '@aws-sdk/client-eventbridge'
 import { simpleParser } from 'mailparser'
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
+import { sendTemplatedEmail, sendRawEmail } from '@/lib/modules/notifications/email-send'
 
 import {
   parseEmailFromS3,
@@ -57,6 +70,7 @@ import {
   uploadPdfToS3,
   startTextractJob,
   createEmailInvoiceDraft,
+  sendInvoiceAcknowledgment,
   sqsMessageSchema,
   SYSTEM_USER_ID,
 } from './email-ingest'
@@ -386,6 +400,25 @@ describe('createEmailInvoiceDraft', () => {
     expect(createCall?.data).not.toHaveProperty('participantId')
     expect(createCall?.data).not.toHaveProperty('providerId')
   })
+
+  test('fires acknowledgment email to sourceEmail after EventBridge emit', async () => {
+    ;(prisma.invInvoice.create as jest.Mock).mockResolvedValueOnce({ id: 'inv-006' })
+    ;(createAuditLog as jest.Mock).mockResolvedValueOnce(undefined)
+    ;(prisma.notifEmailTemplate.findFirst as jest.Mock).mockResolvedValueOnce(null)
+    mockEventBridgeSend()
+
+    await createEmailInvoiceDraft(draftData)
+
+    // Allow the fire-and-forget promise to settle
+    await Promise.resolve()
+
+    // Verify acknowledgment was attempted (raw email path — no template)
+    expect(sendRawEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: draftData.sourceEmail,
+      })
+    )
+  })
 })
 
 // ── uploadPdfToS3 key format ──────────────────────────────────────────────────
@@ -418,5 +451,108 @@ describe('uploadPdfToS3', () => {
         ContentType: 'application/pdf',
       })
     )
+  })
+})
+
+// ── sendInvoiceAcknowledgment ─────────────────────────────────────────────────
+
+describe('sendInvoiceAcknowledgment', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  test('sends raw email when no active INVOICE_NOTIFICATION template exists', async () => {
+    ;(prisma.notifEmailTemplate.findFirst as jest.Mock).mockResolvedValueOnce(null)
+
+    await sendInvoiceAcknowledgment('inv-001', 'provider@example.com')
+
+    expect(sendRawEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'provider@example.com',
+        subject: expect.stringContaining('invoice'),
+        htmlBody: expect.stringContaining('inv-001'),
+        triggeredById: SYSTEM_USER_ID,
+      })
+    )
+    expect(sendTemplatedEmail).not.toHaveBeenCalled()
+  })
+
+  test('sends templated email when an active INVOICE_NOTIFICATION template exists', async () => {
+    const fakeTemplate = { id: 'tmpl-ack-001', type: 'INVOICE_NOTIFICATION', isActive: true }
+    ;(prisma.notifEmailTemplate.findFirst as jest.Mock).mockResolvedValueOnce(fakeTemplate)
+
+    await sendInvoiceAcknowledgment('inv-002', 'billing@provider.com.au')
+
+    expect(sendTemplatedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateId: 'tmpl-ack-001',
+        recipientEmail: 'billing@provider.com.au',
+        mergeFieldValues: expect.objectContaining({
+          invoiceNumber: 'inv-002',
+          companyName: 'Lotus Assist',
+          companyPhone: '1800 645 809',
+        }),
+        triggeredById: SYSTEM_USER_ID,
+      })
+    )
+    expect(sendRawEmail).not.toHaveBeenCalled()
+  })
+
+  test('merge fields include invoicePortalLink pointing to provider portal', async () => {
+    ;(prisma.notifEmailTemplate.findFirst as jest.Mock).mockResolvedValueOnce({
+      id: 'tmpl-ack-002',
+      type: 'INVOICE_NOTIFICATION',
+      isActive: true,
+    })
+
+    await sendInvoiceAcknowledgment('inv-003', 'accounts@provider.com')
+
+    expect(sendTemplatedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mergeFieldValues: expect.objectContaining({
+          invoicePortalLink: expect.stringContaining('/provider-portal/invoices'),
+        }),
+      })
+    )
+  })
+
+  test('template lookup queries for INVOICE_NOTIFICATION type and isActive=true', async () => {
+    ;(prisma.notifEmailTemplate.findFirst as jest.Mock).mockResolvedValueOnce(null)
+
+    await sendInvoiceAcknowledgment('inv-004', 'test@provider.com')
+
+    expect(prisma.notifEmailTemplate.findFirst).toHaveBeenCalledWith({
+      where: { type: 'INVOICE_NOTIFICATION', isActive: true },
+    })
+  })
+
+  test('never throws even if sendRawEmail fails', async () => {
+    ;(prisma.notifEmailTemplate.findFirst as jest.Mock).mockResolvedValueOnce(null)
+    ;(sendRawEmail as jest.Mock).mockRejectedValueOnce(new Error('SES network error'))
+
+    await expect(
+      sendInvoiceAcknowledgment('inv-005', 'provider@example.com')
+    ).resolves.toBeUndefined()
+  })
+
+  test('never throws even if sendTemplatedEmail fails', async () => {
+    ;(prisma.notifEmailTemplate.findFirst as jest.Mock).mockResolvedValueOnce({
+      id: 'tmpl-ack-003',
+      type: 'INVOICE_NOTIFICATION',
+      isActive: true,
+    })
+    ;(sendTemplatedEmail as jest.Mock).mockRejectedValueOnce(new Error('Template render error'))
+
+    await expect(
+      sendInvoiceAcknowledgment('inv-006', 'provider@example.com')
+    ).resolves.toBeUndefined()
+  })
+
+  test('never throws even if prisma.findFirst fails', async () => {
+    ;(prisma.notifEmailTemplate.findFirst as jest.Mock).mockRejectedValueOnce(
+      new Error('DB connection lost')
+    )
+
+    await expect(
+      sendInvoiceAcknowledgment('inv-007', 'provider@example.com')
+    ).resolves.toBeUndefined()
   })
 })

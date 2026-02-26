@@ -28,6 +28,7 @@ import { randomUUID } from 'crypto'
 import { prisma } from '@/lib/db'
 import { createAuditLog } from '@/lib/modules/core/audit'
 import { createFromEmailIngest } from '@/lib/modules/crm/correspondence'
+import { sendTemplatedEmail, sendRawEmail } from '@/lib/modules/notifications/email-send'
 import { autoMatchInvoice } from './auto-match'
 import type { ExtractedInvoiceData } from './textract-extraction'
 import { processInvoice } from './processing-engine'
@@ -293,7 +294,126 @@ export async function createEmailInvoiceDraft(
     })
   )
 
+  // Send acknowledgment to provider — best-effort, never blocks ingest
+  sendInvoiceAcknowledgment(invoice.id, data.sourceEmail).catch((err) => {
+    console.error('[email-ingest] acknowledgment send failed:', err)
+  })
+
   return invoice
+}
+
+/**
+ * Send an automated acknowledgment email to the provider when their invoice
+ * is received. Best-effort — never throws (errors are logged, not propagated).
+ *
+ * Looks up the first active INVOICE_NOTIFICATION template. If none exists,
+ * falls back to a hardcoded default HTML email.
+ */
+export async function sendInvoiceAcknowledgment(
+  invoiceId: string,
+  senderEmail: string
+): Promise<void> {
+  try {
+    const portalUrl = `${process.env.NEXTAUTH_URL ?? 'https://planmanager.lotusassist.com.au'}/provider-portal/invoices`
+
+    const template = await prisma.notifEmailTemplate.findFirst({
+      where: { type: 'INVOICE_NOTIFICATION', isActive: true },
+    })
+
+    if (template) {
+      await sendTemplatedEmail({
+        templateId: template.id,
+        recipientEmail: senderEmail,
+        mergeFieldValues: {
+          invoiceNumber: invoiceId,
+          invoicePortalLink: portalUrl,
+          companyName: 'Lotus Assist',
+          companyPhone: '1800 645 809',
+          today: new Date().toLocaleDateString('en-AU'),
+        },
+        triggeredById: SYSTEM_USER_ID,
+      })
+    } else {
+      await sendRawEmail({
+        to: senderEmail,
+        subject: "We've received your invoice — Lotus Assist",
+        htmlBody: buildAcknowledgmentHtml(invoiceId, portalUrl),
+        triggeredById: SYSTEM_USER_ID,
+      })
+    }
+  } catch (err) {
+    console.error('[email-ingest] sendInvoiceAcknowledgment failed:', err)
+  }
+}
+
+/**
+ * Build the hardcoded fallback HTML body for the invoice acknowledgment email.
+ * Used when no active INVOICE_NOTIFICATION template exists in the database.
+ */
+function buildAcknowledgmentHtml(invoiceId: string, portalUrl: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Invoice Received — Lotus Assist</title>
+</head>
+<body style="margin:0;padding:0;background-color:#fafaf9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#fafaf9;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background-color:#ffffff;border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#292524;padding:32px 40px;">
+              <p style="margin:0;color:#ffffff;font-size:22px;font-weight:600;letter-spacing:-0.3px;">Lotus Assist</p>
+              <p style="margin:4px 0 0;color:#a8a29e;font-size:13px;">NDIS Plan Management</p>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+              <h1 style="margin:0 0 16px;color:#292524;font-size:24px;font-weight:600;">Invoice Received</h1>
+              <p style="margin:0 0 16px;color:#78716c;font-size:15px;line-height:1.6;">
+                Thank you for submitting your invoice. We have received it and it is now being processed.
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#fafaf9;border:1px solid #e7e5e4;border-radius:6px;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0 0 4px;color:#78716c;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Your Reference Number</p>
+                    <p style="margin:0;color:#292524;font-size:15px;font-weight:600;font-family:monospace;">${invoiceId}</p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 24px;color:#78716c;font-size:15px;line-height:1.6;">
+                You can track the status of your invoice through the Lotus Assist provider portal.
+              </p>
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px;">
+                <tr>
+                  <td style="background-color:#292524;border-radius:6px;">
+                    <a href="${portalUrl}" target="_blank" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;">Track My Invoice</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;color:#78716c;font-size:14px;line-height:1.6;">
+                Processing typically takes up to 10 business days. We will contact you if we need any additional information.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 40px;border-top:1px solid #e7e5e4;background-color:#fafaf9;">
+              <p style="margin:0 0 4px;color:#78716c;font-size:13px;font-weight:600;">Lotus Assist</p>
+              <p style="margin:0;color:#a8a29e;font-size:13px;">Phone: 1800 645 809</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }
 
 // ── Textract result polling ────────────────────────────────────────────────────
