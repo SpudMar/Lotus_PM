@@ -66,6 +66,12 @@ model CoreUser {
   paymentBatches       BnkPaymentBatch[]        @relation("BatchCreatedBy")
   saBudgetAllocations  SaBudgetAllocation[]
 
+  // PM session feedback
+  approvalRulesCreated     ParticipantApprovalRule[]  @relation("ApprovalRuleCreatedBy")
+  blocksCreated            ProviderParticipantBlock[] @relation("BlockCreatedBy")
+  blocksResolved           ProviderParticipantBlock[] @relation("BlockResolvedBy")
+  approvedSupportsCreated  ParticipantApprovedSupport[] @relation("ApprovedSupportCreatedBy")
+
   @@map("core_users")
 }
 
@@ -228,9 +234,64 @@ model CrmParticipant {
   statementEmail      String?              // override email for statements
   statementPhone      String?              // override phone for SMS statements
 
+  // PM session feedback — approval rules, provider blocks, approved supports
+  approvalRules      ParticipantApprovalRule[]
+  providerBlocks     ProviderParticipantBlock[]
+  approvedSupports   ParticipantApprovedSupport[]
+
   @@index([ndisNumber])
   @@index([assignedToId])
   @@map("crm_participants")
+}
+
+model ParticipantApprovalRule {
+  id              String          @id @default(cuid())
+  participantId   String
+  participant     CrmParticipant  @relation(fields: [participantId], references: [id])
+  providerId      String?
+  provider        CrmProvider?    @relation("ApprovalRuleProvider", fields: [providerId], references: [id])
+  requireApproval Boolean
+  createdById     String
+  createdBy       CoreUser        @relation("ApprovalRuleCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime        @default(now())
+
+  @@unique([participantId, providerId])
+  @@map("participant_approval_rules")
+}
+
+model ProviderParticipantBlock {
+  id               String          @id @default(cuid())
+  participantId    String
+  participant      CrmParticipant  @relation(fields: [participantId], references: [id])
+  providerId       String
+  provider         CrmProvider     @relation("BlockProvider", fields: [providerId], references: [id])
+  blockAllLines    Boolean         @default(true)
+  blockedLineItems String[]
+  reason           String
+  createdById      String
+  createdBy        CoreUser        @relation("BlockCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime        @default(now())
+  resolvedAt       DateTime?
+  resolvedById     String?
+  resolvedBy       CoreUser?       @relation("BlockResolvedBy", fields: [resolvedById], references: [id])
+  resolveNote      String?
+
+  @@map("provider_participant_blocks")
+}
+
+model ParticipantApprovedSupport {
+  id               String          @id @default(cuid())
+  participantId    String
+  participant      CrmParticipant  @relation(fields: [participantId], references: [id])
+  categoryCode     String
+  restrictedMode   Boolean         @default(false)
+  allowedItemCodes String[]
+  createdById      String
+  createdBy        CoreUser        @relation("ApprovedSupportCreatedBy", fields: [createdById], references: [id])
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([participantId, categoryCode])
+  @@map("participant_approved_supports")
 }
 
 model CrmProvider {
@@ -275,6 +336,10 @@ model CrmProvider {
   quarantines       FqQuarantine[]
   flags             CrmFlag[]
   itemPatterns      InvItemPattern[]
+
+  // PM session feedback
+  approvalRules     ParticipantApprovalRule[] @relation("ApprovalRuleProvider")
+  participantBlocks ProviderParticipantBlock[] @relation("BlockProvider")
 
   @@index([abn])
   @@map("crm_providers")
@@ -371,6 +436,12 @@ model CrmCorrespondence {
 
   documentId    String?              // Link to DocDocument (no FK — optional future use)
 
+  // PM session feedback — entity linking
+  planId             String?
+  plan               PlanPlan?           @relation(fields: [planId], references: [id])
+  saId               String?
+  serviceAgreement   SaServiceAgreement? @relation(fields: [saId], references: [id])
+
   createdById   String?              // Staff user who created this (null = system/automation)
   createdBy     CoreUser?            @relation("CreatedCorrespondence", fields: [createdById], references: [id])
 
@@ -442,6 +513,10 @@ model PlanPlan {
   budgetLines     PlanBudgetLine[]
   invoices        InvInvoice[]
   fundingPeriods  PlanFundingPeriod[]
+
+  // PM session feedback — entity linking
+  correspondence  CrmCorrespondence[]
+  documents       DocDocument[]
 
   @@index([participantId])
   @@index([status])
@@ -564,6 +639,14 @@ model InvInvoice {
   rejectedById    String?
   rejectedAt      DateTime?
   rejectionReason String?
+  rejectionSource    RejectionSource?
+
+  // Invoice versioning — PM session feedback
+  version            Int              @default(1)
+  supersededById     String?          @unique
+  supersededBy       InvInvoice?      @relation("InvoiceVersion", fields: [supersededById], references: [id])
+  supersedes         InvInvoice?      @relation("InvoiceVersion")
+  supersededAt       DateTime?
 
   approvedBy      CoreUser?     @relation("ApprovedBy", fields: [approvedById], references: [id])
   rejectedBy      CoreUser?     @relation("RejectedBy", fields: [rejectedById], references: [id])
@@ -580,6 +663,8 @@ model InvInvoice {
   approvalTokenExpiresAt     DateTime?
   approvalSentAt             DateTime?
   approvalSkippedAt          DateTime?
+  approvalClarificationNote  String?
+  approvalRequestCount       Int              @default(0)
 
   // Xero sync — REQ-019/REQ-023
   xeroInvoiceId   String?       // Xero Invoice GUID after sync
@@ -621,6 +706,13 @@ enum InvStatus {
   REJECTED
   CLAIMED
   PAID
+  SUPERSEDED
+}
+
+enum RejectionSource {
+  PM_REJECTED
+  PARTICIPANT_DECLINED
+  NDIA_REJECTED
 }
 
 enum InvHoldCategory {
@@ -742,6 +834,10 @@ model ClmClaim {
   outcomeBy       CoreUser?      @relation("ClaimOutcomeBy", fields: [outcomeById], references: [id])
   outcomeNotes    String?
 
+  // PM session feedback — claim type and manual enquiry
+  claimType          ClmClaimType     @default(STANDARD)
+  manualEnquiryNote  String?
+
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -821,6 +917,11 @@ enum ClmStatus {
   PARTIAL
   PAID
   CANCELLED
+}
+
+enum ClmClaimType {
+  STANDARD
+  MANUAL_ENQUIRY
 }
 
 enum ClmLineStatus {
@@ -956,6 +1057,10 @@ model DocDocument {
 
   serviceAgreementId String?
   serviceAgreement   SaServiceAgreement? @relation(fields: [serviceAgreementId], references: [id])
+
+  // PM session feedback — plan linking
+  planId             String?
+  plan               PlanPlan?           @relation(fields: [planId], references: [id])
 
   @@index([participantId])
   @@index([uploadedById])
@@ -1154,6 +1259,9 @@ model SaServiceAgreement {
   documents      DocDocument[]
   quarantines    FqQuarantine[]
   budgetAllocations SaBudgetAllocation[]
+
+  // PM session feedback — correspondence linking
+  correspondence CrmCorrespondence[]
 
   @@index([participantId])
   @@index([providerId])
