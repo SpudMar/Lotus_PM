@@ -58,6 +58,11 @@ const sendEmailSchema = z.object({
   participantId: z.string().optional(),
   providerId: z.string().optional(),
   coordinatorId: z.string().optional(),
+  // Entity linking — PM session feedback
+  invoiceId: z.string().optional(),
+  documentId: z.string().optional(),
+  planId: z.string().optional(),
+  serviceAgreementId: z.string().optional(),
 })
 
 type SendEmailInput = z.infer<typeof sendEmailSchema>
@@ -149,6 +154,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         participantId: input.participantId ?? null,
         providerId: input.providerId ?? null,
         coordinatorId: input.coordinatorId ?? null,
+        invoiceId: input.invoiceId ?? null,
+        documentId: input.documentId ?? null,
+        planId: input.planId ?? null,
+        saId: input.serviceAgreementId ?? null,
         createdById: session.user.id,
         metadata: metadata as Prisma.InputJsonValue,
       },
