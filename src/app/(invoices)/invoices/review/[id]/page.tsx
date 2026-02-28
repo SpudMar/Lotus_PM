@@ -103,6 +103,19 @@ interface Invoice {
   processingCategory: string | null
   aiProcessingResult: Record<string, unknown> | null
   processedAt: string | null
+  // Versioning fields (Wave 6)
+  version?: number
+  supersededById?: string | null
+  supersededAt?: string | null
+  supersedes?: { id: string; invoiceNumber: string; version: number } | null
+  supersededBy?: { id: string; invoiceNumber: string; version: number } | null
+  // Rejection source (Wave 6)
+  rejectionSource?: string | null
+  rejectionReason?: string | null
+  // Approval fields (Wave 6)
+  approvalExpiresAt?: string | null
+  approvalRequestCount?: number
+  approvalClarificationNote?: string | null
 }
 
 // ── Validation types ─────────────────────────────────────────────────────────
@@ -178,6 +191,48 @@ function getMatchTierLabel(tier: MatchTier): string {
     case 'needs-verify': return 'Verify'
     case 'no-match': return 'Assign'
   }
+}
+
+// ── Wave 6: Approval Timer ────────────────────────────────────────────────────
+
+function ApprovalTimer({ expiresAt }: { expiresAt: string }): React.JSX.Element {
+  const [remaining, setRemaining] = useState('')
+  const [color, setColor] = useState('text-green-600')
+
+  useEffect(() => {
+    function update() {
+      const diff = new Date(expiresAt).getTime() - Date.now()
+      if (diff <= 0) {
+        setRemaining('Expired — returned to review')
+        setColor('text-red-600')
+        return
+      }
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      setRemaining(`Expires in ${hours}h ${mins}m`)
+      if (hours < 6) setColor('text-red-600')
+      else if (hours < 24) setColor('text-amber-600')
+      else setColor('text-green-600')
+    }
+    update()
+    const interval = setInterval(update, 60000)
+    return () => clearInterval(interval)
+  }, [expiresAt])
+
+  return <span className={`text-sm font-medium ${color}`}>{remaining}</span>
+}
+
+// ── Wave 6: Rejection Source Badge ────────────────────────────────────────────
+
+function RejectionSourceBadge({ source }: { source: string }): React.JSX.Element | null {
+  const config: Record<string, { label: string; variant: 'destructive' | 'secondary' }> = {
+    PM_REJECTED: { label: 'Rejected by PM', variant: 'destructive' },
+    PARTICIPANT_DECLINED: { label: 'Declined by Participant', variant: 'secondary' },
+    NDIA_REJECTED: { label: 'NDIA Rejected', variant: 'destructive' },
+  }
+  const c = config[source]
+  if (!c) return null
+  return <Badge variant={c.variant}>{c.label}</Badge>
 }
 
 // ── Empty line template ────────────────────────────────────────────────────────
@@ -389,6 +444,14 @@ export default function InvoiceReviewDetailPage({
   const [showFlagDialog, setShowFlagDialog] = useState(false)
   const [flagNote, setFlagNote] = useState('')
   const [showCreateProviderModal, setShowCreateProviderModal] = useState(false)
+
+  // Wave 6: Re-request approval dialog
+  const [showReRequestDialog, setShowReRequestDialog] = useState(false)
+  const [reRequestNote, setReRequestNote] = useState('')
+
+  // Wave 6: Manual enquiry dialog
+  const [showManualEnquiryDialog, setShowManualEnquiryDialog] = useState(false)
+  const [manualEnquiryNote, setManualEnquiryNote] = useState('')
 
   // Validation & flags
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
@@ -612,6 +675,64 @@ export default function InvoiceReviewDetailPage({
     }
   }
 
+  // ── Wave 6: Create New Version ─────────────────────────────────────────────
+
+  async function handleCreateNewVersion(): Promise<void> {
+    setActionLoading('new-version')
+    try {
+      const res = await fetch(`/api/invoices/${id}/version`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        const json = await res.json() as { data: { id: string } }
+        router.push(`/invoices/review/${json.data.id}`)
+      }
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // ── Wave 6: Re-request Approval ──────────────────────────────────────────
+
+  async function handleReRequestApproval(): Promise<void> {
+    setActionLoading('re-request')
+    try {
+      const res = await fetch(`/api/invoices/${id}/re-request-approval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clarificationNote: reRequestNote }),
+      })
+      if (res.ok) {
+        setShowReRequestDialog(false)
+        setReRequestNote('')
+        await loadInvoice()
+      }
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // ── Wave 6: Manual Enquiry ───────────────────────────────────────────────
+
+  async function handleManualEnquiry(): Promise<void> {
+    if (!manualEnquiryNote.trim()) return
+    setActionLoading('manual-enquiry')
+    try {
+      const res = await fetch('/api/claims/manual-enquiry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceId: id, note: manualEnquiryNote }),
+      })
+      if (res.ok) {
+        setShowManualEnquiryDialog(false)
+        setManualEnquiryNote('')
+        await loadInvoice()
+      }
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   // ── Line item helpers ───────────────────────────────────────────────────────
 
   function updateLine(idx: number, field: keyof FormLine, value: string | number | null): void {
@@ -772,14 +893,95 @@ export default function InvoiceReviewDetailPage({
                 </Button>
               </>
             )}
+            {isEditable && invoice.approvalRequestCount !== undefined && invoice.approvalRequestCount > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => setShowReRequestDialog(true)}
+                className="text-blue-600 border-blue-300 hover:bg-blue-50"
+              >
+                <Mail className="mr-2 h-4 w-4" aria-hidden="true" />
+                Re-request Approval
+              </Button>
+            )}
+            {(invoice.status === 'PENDING_REVIEW' || invoice.status === 'REJECTED') && (
+              <Button
+                variant="outline"
+                onClick={() => void handleCreateNewVersion()}
+                disabled={actionLoading === 'new-version'}
+              >
+                <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                {actionLoading === 'new-version' ? 'Creating...' : 'New Version'}
+              </Button>
+            )}
             {!isEditable && (
-              <Badge variant={invoice.status === 'APPROVED' ? 'default' : 'secondary'}>
-                {invoice.status}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={invoice.status === 'APPROVED' ? 'default' : 'secondary'}>
+                  {invoice.status}
+                </Badge>
+                {invoice.version && invoice.version > 1 && (
+                  <Badge variant="outline">v{invoice.version}</Badge>
+                )}
+                {invoice.rejectionSource && (
+                  <RejectionSourceBadge source={invoice.rejectionSource} />
+                )}
+              </div>
             )}
           </div>
         }
       />
+
+      {/* ── Wave 6: Approval timer ───────────────────────────────────────── */}
+      {invoice.status === 'PENDING_PARTICIPANT_APPROVAL' && invoice.approvalExpiresAt && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertTitle>Awaiting Participant Approval</AlertTitle>
+          <AlertDescription className="flex items-center gap-2">
+            <ApprovalTimer expiresAt={invoice.approvalExpiresAt} />
+            {invoice.approvalClarificationNote && (
+              <span className="text-sm text-muted-foreground">— Note: {invoice.approvalClarificationNote}</span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* ── Wave 6: Version history ──────────────────────────────────────── */}
+      {(invoice.supersedes || invoice.supersededBy) && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertTitle>Invoice Version {invoice.version ?? 1}</AlertTitle>
+          <AlertDescription>
+            {invoice.supersedes && (
+              <span>
+                Replaces{' '}
+                <Link href={`/invoices/review/${invoice.supersedes.id}`} className="font-medium underline">
+                  {invoice.supersedes.invoiceNumber} (v{invoice.supersedes.version})
+                </Link>
+              </span>
+            )}
+            {invoice.supersededBy && (
+              <span>
+                Superseded by{' '}
+                <Link href={`/invoices/review/${invoice.supersededBy.id}`} className="font-medium underline">
+                  {invoice.supersededBy.invoiceNumber} (v{invoice.supersededBy.version})
+                </Link>
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* ── Wave 6: Rejection info ───────────────────────────────────────── */}
+      {invoice.status === 'REJECTED' && invoice.rejectionSource && (
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" aria-hidden="true" />
+          <AlertTitle>
+            <RejectionSourceBadge source={invoice.rejectionSource} />
+          </AlertTitle>
+          {invoice.rejectionReason && (
+            <AlertDescription>{invoice.rejectionReason}</AlertDescription>
+          )}
+        </Alert>
+      )}
 
       {/* ── BLOCKING flag banners ────────────────────────────────────────── */}
       {blockingFlags.length > 0 && (
@@ -1057,7 +1259,7 @@ export default function InvoiceReviewDetailPage({
                     </li>
                   ))}
                 </ul>
-                <div className="mt-3">
+                <div className="mt-3 flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1067,6 +1269,15 @@ export default function InvoiceReviewDetailPage({
                   >
                     Force Approve Anyway (override warnings)
                   </Button>
+                  {validationResult.errors.some((e) => e.code === 'INSUFFICIENT_BUDGET' || e.code === 'PERIOD_BUDGET_EXCEEDED') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowManualEnquiryDialog(true)}
+                    >
+                      Lodge Manual Enquiry
+                    </Button>
+                  )}
                 </div>
               </AlertDescription>
             </Alert>
@@ -1588,6 +1799,68 @@ export default function InvoiceReviewDetailPage({
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
               {actionLoading === 'flag' ? 'Saving...' : 'Save & Flag'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Wave 6: Re-request approval dialog ─────────────────────────────── */}
+      <Dialog open={showReRequestDialog} onOpenChange={setShowReRequestDialog}>
+        <DialogContent aria-describedby="re-request-desc">
+          <DialogHeader>
+            <DialogTitle>Re-request Participant Approval</DialogTitle>
+            <p id="re-request-desc" className="text-sm text-muted-foreground">
+              Send a new approval request to the participant with an optional clarification note.
+            </p>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="re-request-note">Clarification note (optional)</Label>
+            <Textarea
+              id="re-request-note"
+              value={reRequestNote}
+              onChange={(e) => setReRequestNote(e.target.value)}
+              rows={3}
+              placeholder="e.g. Invoice amount has been adjusted, please review again..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReRequestDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => void handleReRequestApproval()}
+              disabled={actionLoading === 're-request'}
+            >
+              {actionLoading === 're-request' ? 'Sending...' : 'Send Approval Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Wave 6: Manual enquiry dialog ──────────────────────────────────── */}
+      <Dialog open={showManualEnquiryDialog} onOpenChange={setShowManualEnquiryDialog}>
+        <DialogContent aria-describedby="manual-enquiry-desc">
+          <DialogHeader>
+            <DialogTitle>Lodge Manual Enquiry</DialogTitle>
+            <p id="manual-enquiry-desc" className="text-sm text-muted-foreground">
+              Create a manual enquiry claim for this invoice when the budget is insufficient. This will be tracked separately in the claims list.
+            </p>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="manual-enquiry-note">Enquiry note *</Label>
+            <Textarea
+              id="manual-enquiry-note"
+              value={manualEnquiryNote}
+              onChange={(e) => setManualEnquiryNote(e.target.value)}
+              rows={3}
+              placeholder="e.g. Budget exhausted for Core Supports — requesting NDIA review..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowManualEnquiryDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => void handleManualEnquiry()}
+              disabled={actionLoading === 'manual-enquiry' || !manualEnquiryNote.trim()}
+            >
+              {actionLoading === 'manual-enquiry' ? 'Creating...' : 'Lodge Enquiry'}
             </Button>
           </DialogFooter>
         </DialogContent>

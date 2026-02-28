@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Upload, Search } from 'lucide-react'
 import { formatAUD } from '@/lib/shared/currency'
 import { formatDateAU } from '@/lib/shared/dates'
+import { ContextActionMenu, emailAction, navigateAction } from '@/components/shared/ContextActionMenu'
+import { useContextEmail, invoiceToProviderEmail, invoiceToParticipantEmail } from '@/hooks/useContextEmail'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 interface Invoice {
   id: string
@@ -35,6 +39,8 @@ function statusVariant(status: string): 'default' | 'secondary' | 'destructive' 
 }
 
 export default function InvoicesPage(): React.JSX.Element {
+  const router = useRouter()
+  const { emailState, openEmail, closeEmail } = useContextEmail()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [loading, setLoading] = useState(true)
@@ -111,16 +117,17 @@ export default function InvoicesPage(): React.JSX.Element {
                 <TableHead>Date</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">Loading...</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">Loading...</TableCell>
                 </TableRow>
               ) : filteredInvoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     {searchQuery ? 'No invoices match your search.' : 'No invoices found.'}
                   </TableCell>
                 </TableRow>
@@ -141,6 +148,35 @@ export default function InvoicesPage(): React.JSX.Element {
                         {inv.status.replace(/_/g, ' ')}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <ContextActionMenu
+                        groups={[
+                          {
+                            label: 'Email',
+                            items: [
+                              emailAction('Email Provider', () => openEmail({
+                                ...invoiceToProviderEmail(inv),
+                                invoiceId: inv.id,
+                                participantId: inv.participant.id,
+                                providerId: inv.provider.id,
+                              })),
+                              emailAction('Email Participant', () => openEmail({
+                                ...invoiceToParticipantEmail(inv),
+                                invoiceId: inv.id,
+                                participantId: inv.participant.id,
+                              })),
+                            ],
+                          },
+                          {
+                            label: 'Navigate',
+                            items: [
+                              navigateAction('View Participant', () => router.push(`/participants/${inv.participant.id}`)),
+                              navigateAction('View Provider', () => router.push(`/providers/${inv.provider.id}`)),
+                            ],
+                          },
+                        ]}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -148,6 +184,18 @@ export default function InvoicesPage(): React.JSX.Element {
           </Table>
         </div>
       </div>
+      <EmailComposeModal
+        open={emailState.open}
+        onClose={closeEmail}
+        onSent={closeEmail}
+        recipientEmail={emailState.recipientEmail}
+        recipientName={emailState.recipientName}
+        subject={emailState.subject}
+        body={emailState.body}
+        participantId={emailState.participantId}
+        providerId={emailState.providerId}
+        invoiceId={emailState.invoiceId}
+      />
     </DashboardShell>
   )
 }

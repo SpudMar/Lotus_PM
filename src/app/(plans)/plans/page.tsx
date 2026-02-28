@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Plus, Search } from 'lucide-react'
 import { formatAUD } from '@/lib/shared/currency'
 import { formatDateAU } from '@/lib/shared/dates'
+import { ContextActionMenu, emailAction, navigateAction, createAction } from '@/components/shared/ContextActionMenu'
+import { useContextEmail, planToParticipantEmail } from '@/hooks/useContextEmail'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 interface BudgetLine {
   allocatedCents: number
@@ -39,6 +43,8 @@ function statusVariant(status: string): 'default' | 'secondary' | 'destructive' 
 }
 
 export default function PlansPage(): React.JSX.Element {
+  const router = useRouter()
+  const { emailState, openEmail, closeEmail } = useContextEmail()
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -110,16 +116,17 @@ export default function PlansPage(): React.JSX.Element {
                 <TableHead>Total Budget</TableHead>
                 <TableHead>Spent</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">Loading...</TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">Loading...</TableCell>
                 </TableRow>
               ) : filteredPlans.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     {searchQuery || statusFilter !== 'all' ? 'No plans match your filters.' : 'No plans found.'}
                   </TableCell>
                 </TableRow>
@@ -144,6 +151,39 @@ export default function PlansPage(): React.JSX.Element {
                           {plan.status.replace(/_/g, ' ')}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <ContextActionMenu
+                          groups={[
+                            {
+                              label: 'Email',
+                              items: [
+                                emailAction('Email Participant', () => openEmail({
+                                  ...planToParticipantEmail({
+                                    startDate: formatDateAU(new Date(plan.startDate)),
+                                    endDate: formatDateAU(new Date(plan.endDate)),
+                                    status: plan.status,
+                                    participant: plan.participant,
+                                  }),
+                                  participantId: plan.participant.id,
+                                  planId: plan.id,
+                                })),
+                              ],
+                            },
+                            {
+                              label: 'Navigate',
+                              items: [
+                                navigateAction('View Participant', () => router.push(`/participants/${plan.participant.id}`)),
+                              ],
+                            },
+                            {
+                              label: 'Create',
+                              items: [
+                                createAction('New Service Agreement', () => router.push(`/service-agreements/new?participantId=${plan.participant.id}`)),
+                              ],
+                            },
+                          ]}
+                        />
+                      </TableCell>
                     </TableRow>
                   )
                 })
@@ -152,6 +192,17 @@ export default function PlansPage(): React.JSX.Element {
           </Table>
         </div>
       </div>
+      <EmailComposeModal
+        open={emailState.open}
+        onClose={closeEmail}
+        onSent={closeEmail}
+        recipientEmail={emailState.recipientEmail}
+        recipientName={emailState.recipientName}
+        subject={emailState.subject}
+        body={emailState.body}
+        participantId={emailState.participantId}
+        planId={emailState.planId}
+      />
     </DashboardShell>
   )
 }

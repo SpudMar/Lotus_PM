@@ -165,6 +165,11 @@ export default function CoordinatorDetailPage({
   const [noteSaving, setNoteSaving] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
 
+  // Link participant state
+  const [showLinkDialog, setShowLinkDialog] = useState(false)
+  const [linkParticipantId, setLinkParticipantId] = useState('')
+  const [linkSaving, setLinkSaving] = useState(false)
+
   // ── Load coordinator info ─────────────────────────────────────────────────
 
   useEffect(() => {
@@ -288,6 +293,10 @@ export default function CoordinatorDetailPage({
                 <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
                 Coordinators
               </Link>
+            </Button>
+            <Button variant="outline" onClick={() => setShowLinkDialog(true)}>
+              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+              Link Participant
             </Button>
             <Badge variant="secondary">Support Coordinator</Badge>
           </div>
@@ -673,6 +682,53 @@ export default function CoordinatorDetailPage({
               disabled={!noteBody.trim() || noteSaving}
             >
               {noteSaving ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Link Participant Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showLinkDialog} onOpenChange={setShowLinkDialog}>
+        <DialogContent aria-describedby="link-desc">
+          <DialogHeader>
+            <DialogTitle>Link Participant</DialogTitle>
+            <p id="link-desc" className="text-sm text-muted-foreground">
+              Assign a participant to this support coordinator.
+            </p>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Participant</Label>
+            <ParticipantCombobox value={linkParticipantId} onValueChange={setLinkParticipantId} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLinkDialog(false)}>Cancel</Button>
+            <Button
+              disabled={!linkParticipantId || linkSaving}
+              onClick={async () => {
+                setLinkSaving(true)
+                try {
+                  const res = await fetch(`/api/coordinators/${id}/assignments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ participantId: linkParticipantId }),
+                  })
+                  if (res.ok) {
+                    setShowLinkDialog(false)
+                    setLinkParticipantId('')
+                    // Reload assignments
+                    setAssignmentsLoading(true)
+                    void fetch(`/api/coordinators/${id}/assignments`)
+                      .then((r) => r.json())
+                      .then((j: Assignment[]) => setAssignments(j))
+                      .catch(() => null)
+                      .finally(() => setAssignmentsLoading(false))
+                  }
+                } finally {
+                  setLinkSaving(false)
+                }
+              }}
+            >
+              {linkSaving ? 'Linking...' : 'Link Participant'}
             </Button>
           </DialogFooter>
         </DialogContent>

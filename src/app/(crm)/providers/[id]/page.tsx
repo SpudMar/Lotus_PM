@@ -158,6 +158,9 @@ export default function ProviderDetailPage({
   const [noteSaving, setNoteSaving] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
 
+  // Blocked participants
+  const [blockedParticipants, setBlockedParticipants] = useState<{ id: string; reason: string; resolvedAt: string | null; participant: { id: string; firstName: string; lastName: string } | null }[]>([])
+
   // -- Inline editing state --
   const [editingSection, setEditingSection] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
@@ -180,6 +183,10 @@ export default function ProviderDetailPage({
 
   useEffect(() => {
     loadProvider()
+    void fetch(`/api/crm/provider-participant-blocks?providerId=${id}`)
+      .then((r) => r.json())
+      .then((j: { data: typeof blockedParticipants }) => setBlockedParticipants(j.data ?? []))
+      .catch(() => null)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -503,6 +510,30 @@ export default function ProviderDetailPage({
               </div>
             </CardContent>
           </Card>
+
+          {/* Blocked Participants */}
+          {blockedParticipants.filter((b) => !b.resolvedAt).length > 0 && (
+            <Card className="border-destructive/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold text-destructive">Blocked Participants</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {blockedParticipants.filter((b) => !b.resolvedAt).map((block) => (
+                    <div key={block.id} className="flex items-center justify-between text-sm rounded-md border border-destructive/20 px-3 py-2">
+                      <div>
+                        <span className="font-medium">
+                          {block.participant ? `${block.participant.firstName} ${block.participant.lastName}` : 'Unknown'}
+                        </span>
+                        <p className="text-xs text-muted-foreground">{block.reason}</p>
+                      </div>
+                      <Badge variant="destructive" className="text-xs">Blocked</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ── Correspondence ─────────────────────────────────────────────────── */}
