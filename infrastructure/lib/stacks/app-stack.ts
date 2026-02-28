@@ -100,13 +100,17 @@ export class LotusPmAppStack extends cdk.Stack {
     }))
 
     // Bedrock: AI invoice processing via AU-only inference profiles (data never leaves Australia)
+    // AU inference profiles route to ap-southeast-4 (Melbourne) — IAM must allow both regions
     taskRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         'bedrock:InvokeModel',
         'bedrock:InvokeModelWithResponseStream',
       ],
       resources: [
-        'arn:aws:bedrock:ap-southeast-2::foundation-model/anthropic.claude-haiku-*',
+        // Foundation model in Sydney and Melbourne (AU inference profile routes to Melbourne)
+        'arn:aws:bedrock:ap-southeast-2::foundation-model/anthropic.claude-*',
+        'arn:aws:bedrock:ap-southeast-4::foundation-model/anthropic.claude-*',
+        // AU inference profile resource
         'arn:aws:bedrock:ap-southeast-2:*:inference-profile/au.anthropic.*',
       ],
     }))

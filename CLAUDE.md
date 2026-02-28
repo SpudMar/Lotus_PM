@@ -111,18 +111,23 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | Global Search | ✅ | **PR #48** — Command palette; participants, providers, invoices search |
 | Onboarding Queue | ✅ | **PR #48** — WordPress webhook DRAFT participant activation page |
 | Provider Portal | ✅ | **PRs #49-53** — Onboarding, dashboard, invoices, payments, profile, magic-link auth, premium redesign |
+| PM Session Feedback | 📋 PLANNED | `docs/plans/2026-02-28-pm-session-feedback.md` — 12 features: per-provider approval rules, rejection sources, invoice versioning, re-request, timer, provider-participant blocks, approved supports (Holly), bulk CSV export, PRODA remittance import, manual enquiry, contextual action menus (14 pages), Plans & Agreements unified tab. 7 waves, 3 new models, 2 new enums, 13 validation checks. |
 | Analytics Data Infra | ✅ | **PR #51** — InvStatusHistory, phase timing, hold categorisation, disability categories |
 | Analytics Dashboard | ✅ | **PR #56** — Recharts dashboard (5th tab on /reports), 4 KPI cards, 5 charts, phase timing, hold categories |
 | Data Retention | ✅ | **PR #57** — REQ-010 purge mechanism, audit log (7yr), financial (5yr), data retention settings UI |
 | Documents UI | ✅ | **PR #55** — Upload (presigned S3), download, delete, category badges, participant linking, pagination |
 | Participant API | ✅ | **PR #58** — Expo scaffold, NDIS+DOB auth, JWT scoping, /plans /invoices /profile endpoints |
 | EventBridge Wiring | ✅ | **PR #59** — 5 missing event emissions wired (invoices.received, budget-alert, emails.sent), naming fixes |
+| Email Compose | ✅ | **PR #68** — SES send with CC, CrmCorrespondence + NotifSentEmail logging, EmailComposeModal on participant/provider/coordinator pages |
+| M365 Email Ingest | ✅ | **PR #69** — Power Automate webhook endpoint for M365 shared mailbox → invoice pipeline |
+| PDF Extraction | ✅ | **PRs #72, #76** — "Run AI Analysis" button, Textract→Bedrock extraction on manual upload, auto-populate line items |
+| UX Polish | ✅ | **PRs #77-82** — PDF viewer (expand/zoom), inline editing, dialog→sheet migrations, combobox entity selectors, search API tests, Bedrock prompt caching |
 
 ---
 
 ## CURRENT STATE
 
-- **1099/1099 tests** (65 suites) | **36 migrations** | Last merged: PR #64
+- **1172/1172 tests** (73 suites) | **39 migrations** | Last merged: PR #82
 - All CareSquare Tier 1 + Tier 2 gaps cleared — Lotus PM matches/exceeds CareSquare on all operational workflows
 - Provider Portal complete (PRs #49-53) — magic-link auth, premium redesign, full provider self-service
 - Analytics data infrastructure complete (PR #51) — status history tracking instrumented across all 9 transitions
@@ -166,7 +171,16 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 | `src/app/api/automation/cron/route.ts` | Cron runner — CRON_SECRET auth |
 | `src/lib/modules/billing/fee-generation.ts` | PM fee auto-billing — monthly charge generation |
 | `src/lib/modules/statements/statement-generation.ts` | Participant financial statement generation |
-| `src/lib/modules/invoices/invoice-validation.ts` | 11-check invoice validation engine |
+| `src/lib/modules/invoices/invoice-validation.ts` | Invoice validation engine (11 checks → 13 after PM session feedback plan) |
+| `src/lib/modules/invoices/ai-processor.ts` | Bedrock AI invoice extraction — prompt caching enabled, NDIS catalogue cached in-memory (30 min TTL) |
+| `src/components/comboboxes/` | `ParticipantCombobox`, `ProviderCombobox`, `PlanCombobox`, `CoordinatorCombobox` — use instead of UUID text inputs |
+| `src/lib/modules/crm/provider-participant-blocks.ts` | Provider-participant blacklist module (planned — PM session feedback) |
+| `src/lib/modules/crm/approved-supports.ts` | Holly's approved supports per category (planned — PM session feedback) |
+| `src/lib/modules/claims/bulk-csv-export.ts` | NDIS 16-column bulk claim CSV export (planned — PM session feedback) |
+| `src/lib/modules/claims/proda-remittance-import.ts` | PRODA remittance CSV import (planned — PM session feedback) |
+| `src/components/shared/ContextActionMenu.tsx` | Reusable right-click / dropdown action menu (planned — PM session feedback) |
+| `src/hooks/useContextEmail.ts` | Pre-filled email compose from any entity context (planned — PM session feedback) |
+| `docs/plans/2026-02-28-pm-session-feedback.md` | Full implementation plan — 7 waves, task-level detail |
 | `src/lib/modules/plans/funding-periods.ts` | S33/PACE funding period management + budget queries |
 | `.github/workflows/cron.yml` | GH Actions schedule — POSTs to staging every 5 min |
 | `.github/workflows/ci.yml` | CI pipeline (lint, type-check, test, build) |
@@ -186,6 +200,13 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 - **Model field names**: `CrmProvider.name` (not `businessName`), `PlanStatus.ACTIVE`, `BnkPaymentStatus.CLEARED` (not COMPLETED), `ParticipantOnboardingStatus.COMPLETE` (not ACTIVE). Always check schema before field access.
 - **Env var sync**: When adding new `process.env` references, also update `.env.example`. Known alias traps: code uses `SES_FROM_EMAIL` and `AWS_S3_BUCKET`, not the old names.
 - **WCAG scope**: REQ-012 applies to participant-facing app (Expo) ONLY, not the main PM dashboard or provider portal. Minimum contrast: never use `#9ca3af` / gray-400 on white (~2.8:1) — use `#6b7280` / gray-500 (~4.6:1).
+- **Next.js 16 async params**: Route handlers need `params: Promise<{ id: string }>` + `const { id } = await params`. Old `params: { id: string }` fails build.
+- **Next.js 16 Suspense**: `useSearchParams()` requires Suspense boundary for static page generation. Extract into inner component + wrap in `<Suspense>`.
+- **PageHeader title type**: `title` prop is `string`, not `ReactNode`. Put badges/buttons in `actions` prop.
+- **Bedrock model access**: `ValidationException: Access to Bedrock models is not allowed` = account not yet allowlisted for Bedrock. Support case #177209607200952 filed (Account Activation → Bedrock Allowlisting). Not a code bug.
+- **Bedrock AU inference profile routing**: AU inference profiles (`au.anthropic.*`) route to **ap-southeast-4** (Melbourne), not ap-southeast-2. IAM policy must allow both regions for `foundation-model` ARNs.
+- **Bedrock prompt caching**: Add `{ cachePoint: { type: 'default' } }` after system prompt in `ConverseCommand.system[]`. Min 2048 tokens for cache eligibility. 5-min TTL.
+- **Combobox not UUID input**: Always use `ParticipantCombobox`/`ProviderCombobox`/`PlanCombobox`/`CoordinatorCombobox` from `src/components/comboboxes/` for entity linking — never raw UUID text inputs.
 
 ---
 
@@ -196,6 +217,8 @@ For coding conventions, patterns, depth control, and what-not-to-do: read `docs/
 - AWS free tier blocks RDS entirely — account must exit free tier first
 - RDS secret keys from CDK: `host`, `port`, `username`, `password`, `dbname` (not `dbUrl`)
 - Scaffold: use nginx on port 80; disable circuit breaker; no secrets for placeholder container
+- **ECR import needed**: `cdk deploy` fails — ECR repo `lotus-pm-staging` exists outside CloudFormation state. Workaround: apply IAM/other changes via AWS CLI directly. TODO: import ECR into stack or recreate.
+- **Bedrock IAM regions**: `app-stack.ts` Bedrock policy must include `ap-southeast-2` AND `ap-southeast-4` (AU inference profiles route to Melbourne). Widened to `claude-*` not `claude-haiku-*`.
 
 ---
 
@@ -223,5 +246,5 @@ gh run view <id> --log-failed
 
 ---
 
-*Last updated: 25 February 2026 — 1099/1099 tests, 36 migrations, 65 suites. PRs #34–64 merged. All major features + comprehensive seed data + statement test coverage complete. Next: WCAG remediation, then PACE B2B when PRODA approved.*
+*Last updated: 28 February 2026 — 1172/1172 tests, 39 migrations, 73 suites. PRs #34–82 merged. All major features complete. PM Session Feedback plan written (12 features, 7 waves). Bedrock allowlisting case #177209607200952 pending. Next: execute PM session feedback plan, test AI invoices once allowlisted, PACE B2B when PRODA approved.*
 *All decisions in this file were made deliberately. Update with care.*
