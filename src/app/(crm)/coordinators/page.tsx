@@ -19,6 +19,9 @@ import {
 } from '@/components/ui/dialog'
 import Link from 'next/link'
 import { UserCheck, Plus, Pencil, UserX, Search } from 'lucide-react'
+import { ContextActionMenu, emailAction, navigateAction } from '@/components/shared/ContextActionMenu'
+import { useContextEmail } from '@/hooks/useContextEmail'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 interface CoordinatorRow {
   id: string
@@ -37,6 +40,7 @@ function canWrite(role: string | undefined): boolean {
 
 export default function CoordinatorsPage(): React.JSX.Element {
   const { data: session } = useSession()
+  const { emailState, openEmail, closeEmail } = useContextEmail()
   const [coordinators, setCoordinators] = useState<CoordinatorRow[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -270,6 +274,26 @@ export default function CoordinatorsPage(): React.JSX.Element {
                     {hasWriteAccess && (
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <ContextActionMenu
+                            groups={[
+                              {
+                                label: 'Email',
+                                items: [
+                                  emailAction('Email Coordinator', () => openEmail({
+                                    recipientEmail: coordinator.email,
+                                    recipientName: coordinator.name,
+                                    coordinatorId: coordinator.id,
+                                  })),
+                                ],
+                              },
+                              {
+                                label: 'Navigate',
+                                items: [
+                                  navigateAction('View Participants', () => window.location.assign(`/coordinators/${coordinator.id}`)),
+                                ],
+                              },
+                            ]}
+                          />
                           <Button
                             variant="ghost"
                             size="sm"
@@ -452,6 +476,16 @@ export default function CoordinatorsPage(): React.JSX.Element {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <EmailComposeModal
+        open={emailState.open}
+        onClose={closeEmail}
+        onSent={closeEmail}
+        recipientEmail={emailState.recipientEmail}
+        recipientName={emailState.recipientName}
+        subject={emailState.subject}
+        body={emailState.body}
+        coordinatorId={emailState.coordinatorId}
+      />
     </DashboardShell>
   )
 }

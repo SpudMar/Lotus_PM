@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, type DragEvent } from 'react'
 import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -51,6 +52,9 @@ import { formatDateAU } from '@/lib/shared/dates'
 import { hasPermission } from '@/lib/auth/rbac'
 import type { Role } from '@/lib/auth/rbac'
 import { PdfViewer } from '@/components/shared/PdfViewer'
+import { ContextActionMenu, emailAction, navigateAction } from '@/components/shared/ContextActionMenu'
+import { useContextEmail } from '@/hooks/useContextEmail'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -180,6 +184,8 @@ function isPdfPreviewable(mimeType: string, name: string): boolean {
 
 export default function DocumentsPage(): React.JSX.Element {
   const { data: session } = useSession()
+  const router = useRouter()
+  const { emailState, openEmail, closeEmail } = useContextEmail()
   const userRole = session?.user?.role as Role | undefined
 
   const canWrite = userRole ? hasPermission(userRole, 'documents:write') : false
@@ -638,6 +644,27 @@ export default function DocumentsPage(): React.JSX.Element {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <ContextActionMenu
+                          groups={[
+                            {
+                              label: 'Email',
+                              items: doc.participant ? [
+                                emailAction('Email Participant', () => openEmail({
+                                  recipientName: `${doc.participant!.firstName} ${doc.participant!.lastName}`,
+                                  subject: `Document: ${doc.name}`,
+                                  participantId: doc.participantId ?? undefined,
+                                  documentId: doc.id,
+                                })),
+                              ] : [],
+                            },
+                            {
+                              label: 'Navigate',
+                              items: doc.participant ? [
+                                navigateAction('View Participant', () => router.push(`/participants/${doc.participantId}`)),
+                              ] : [],
+                            },
+                          ].filter((g) => g.items.length > 0)}
+                        />
                         {isPdfPreviewable(doc.mimeType, doc.name) && (
                           <Button
                             variant="ghost"
@@ -955,6 +982,17 @@ export default function DocumentsPage(): React.JSX.Element {
           )}
         </DialogContent>
       </Dialog>
+      <EmailComposeModal
+        open={emailState.open}
+        onClose={closeEmail}
+        onSent={closeEmail}
+        recipientEmail={emailState.recipientEmail}
+        recipientName={emailState.recipientName}
+        subject={emailState.subject}
+        body={emailState.body}
+        participantId={emailState.participantId}
+        documentId={emailState.documentId}
+      />
     </DashboardShell>
   )
 }
