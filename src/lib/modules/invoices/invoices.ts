@@ -294,6 +294,7 @@ export async function approveInvoice(
           rejectedById: userId,
           rejectedAt: new Date(),
           rejectionReason: 'All line items rejected',
+          rejectionSource: 'PM_REJECTED',
           planId: planId ?? undefined,
         },
         include: {
@@ -532,6 +533,7 @@ export async function rejectInvoice(id: string, userId: string, reason: string) 
       rejectedById: userId,
       rejectedAt: new Date(),
       rejectionReason: reason,
+      rejectionSource: 'PM_REJECTED',
     },
   })
 

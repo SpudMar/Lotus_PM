@@ -61,6 +61,14 @@ jest.mock('@/lib/modules/crm/flags', () => ({
   },
 }))
 
+jest.mock('@/lib/modules/crm/provider-participant-blocks', () => ({
+  checkProviderBlocked: jest.fn().mockResolvedValue({ blocked: false }),
+}))
+
+jest.mock('@/lib/modules/crm/approved-supports', () => ({
+  checkSupportApproved: jest.fn().mockResolvedValue({ approved: true }),
+}))
+
 // ── Imports (after mocks) ─────────────────────────────────────────────────────
 
 import { prisma } from '@/lib/db'
