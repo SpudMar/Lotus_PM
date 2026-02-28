@@ -448,7 +448,7 @@ export async function getApprovalStatus(token: string): Promise<{
 export async function reRequestApproval(
   invoiceId: string,
   requestedById: string,
-  clarificationNote: string
+  clarificationNote?: string
 ): Promise<{ token: string; invoice: object }> {
   const invoice = await prisma.invInvoice.findFirst({
     where: { id: invoiceId, deletedAt: null },
@@ -528,7 +528,7 @@ export async function reRequestApproval(
           provider_name: providerName,
           amount: amountFormatted,
           approval_url: approvalUrl,
-          clarification_note: clarificationNote,
+          clarification_note: clarificationNote ?? '',
         },
         participantId: participant.id,
         triggeredById: requestedById,

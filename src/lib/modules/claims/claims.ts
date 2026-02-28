@@ -581,6 +581,7 @@ export async function createManualEnquiryClaim(
           invoiceLineId: line.id,
           sourceInvoiceId: invoiceId,
           supportItemCode: line.supportItemCode ?? '',
+          supportItemName: line.supportItemName ?? '',
           categoryCode: line.categoryCode,
           serviceDate: line.serviceDate,
           quantity: line.quantity,

@@ -41,6 +41,8 @@ function makeEntry(overrides: Record<string, unknown> = {}) {
     coordinatorId: null,
     invoiceId: 'inv-001',
     documentId: null,
+    planId: null,
+    saId: null,
     createdById: null,
     metadata: null,
     createdAt: new Date('2026-02-21T10:00:00Z'),
