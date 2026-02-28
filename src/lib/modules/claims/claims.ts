@@ -548,3 +548,58 @@ export async function getClaimsReadyForPayment() {
     orderBy: { outcomeAt: 'asc' },
   })
 }
+
+/**
+ * Create a manual enquiry claim for PRODA.
+ * Used when INSUFFICIENT_BUDGET blocks automatic claims.
+ * NOT included in bulk CSV exports.
+ */
+export async function createManualEnquiryClaim(
+  invoiceId: string,
+  userId: string,
+  note: string
+) {
+  const invoice = await prisma.invInvoice.findUnique({
+    where: { id: invoiceId },
+    include: { lines: true, participant: true },
+  })
+  if (!invoice) throw new Error('Invoice not found')
+
+  const reference = await nextClaimReference()
+
+  const claim = await prisma.clmClaim.create({
+    data: {
+      claimReference: reference,
+      invoiceId,
+      participantId: invoice.participantId,
+      claimedCents: invoice.totalCents,
+      status: 'PENDING',
+      claimType: 'MANUAL_ENQUIRY',
+      manualEnquiryNote: note,
+      lines: {
+        create: invoice.lines.map((line) => ({
+          invoiceLineId: line.id,
+          sourceInvoiceId: invoiceId,
+          supportItemCode: line.supportItemCode ?? '',
+          supportItemName: line.supportItemName ?? '',
+          categoryCode: line.categoryCode,
+          serviceDate: line.serviceDate,
+          quantity: line.quantity,
+          unitPriceCents: line.unitPriceCents,
+          totalCents: line.totalCents,
+          gstCents: line.gstCents,
+        })),
+      },
+    },
+  })
+
+  await createAuditLog({
+    userId,
+    action: 'MANUAL_ENQUIRY_CLAIM_CREATED',
+    resource: 'claim',
+    resourceId: claim.id,
+    after: { invoiceId, note },
+  })
+
+  return claim
+}

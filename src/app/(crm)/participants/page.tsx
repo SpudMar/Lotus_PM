@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,9 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, Search } from 'lucide-react'
 import { formatNdisNumber } from '@/lib/shared/ndis'
+import { ContextActionMenu, emailAction, navigateAction, createAction } from '@/components/shared/ContextActionMenu'
+import { useContextEmail } from '@/hooks/useContextEmail'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 interface Participant {
   id: string
@@ -25,6 +29,8 @@ interface Participant {
 }
 
 export default function ParticipantsPage(): React.JSX.Element {
+  const router = useRouter()
+  const { emailState, openEmail, closeEmail } = useContextEmail()
   const [participants, setParticipants] = useState<Participant[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -82,16 +88,17 @@ export default function ParticipantsPage(): React.JSX.Element {
                 <TableHead>Plan Manager</TableHead>
                 <TableHead>Plans</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">Loading...</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">Loading...</TableCell>
                 </TableRow>
               ) : participants.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">No participants found.</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">No participants found.</TableCell>
                 </TableRow>
               ) : (
                 participants.map((p) => (
@@ -117,6 +124,35 @@ export default function ParticipantsPage(): React.JSX.Element {
                         {p.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <ContextActionMenu
+                        groups={[
+                          {
+                            label: 'Email',
+                            items: p.email ? [
+                              emailAction('Email Participant', () => openEmail({
+                                recipientEmail: p.email ?? undefined,
+                                recipientName: `${p.firstName} ${p.lastName}`,
+                                participantId: p.id,
+                              })),
+                            ] : [],
+                          },
+                          {
+                            label: 'Navigate',
+                            items: [
+                              navigateAction('View Invoices', () => router.push(`/invoices?participantId=${p.id}`)),
+                              navigateAction('View Plans', () => router.push(`/plans?participantId=${p.id}`)),
+                            ],
+                          },
+                          {
+                            label: 'Create',
+                            items: [
+                              createAction('Create Plan', () => router.push(`/plans/new?participantId=${p.id}`)),
+                            ],
+                          },
+                        ].filter((g) => g.items.length > 0)}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -124,6 +160,16 @@ export default function ParticipantsPage(): React.JSX.Element {
           </Table>
         </div>
       </div>
+      <EmailComposeModal
+        open={emailState.open}
+        onClose={closeEmail}
+        onSent={closeEmail}
+        recipientEmail={emailState.recipientEmail}
+        recipientName={emailState.recipientName}
+        subject={emailState.subject}
+        body={emailState.body}
+        participantId={emailState.participantId}
+      />
     </DashboardShell>
   )
 }

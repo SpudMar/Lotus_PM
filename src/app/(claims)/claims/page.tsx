@@ -29,6 +29,9 @@ import {
 } from '@/components/ui/select'
 import { CreditCard, Send, CheckCircle, FolderPlus, AlertCircle, Search } from 'lucide-react'
 import { formatAUD } from '@/lib/shared/currency'
+import { ContextActionMenu, emailAction, navigateAction } from '@/components/shared/ContextActionMenu'
+import { useContextEmail, claimToProviderEmail } from '@/hooks/useContextEmail'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 interface Claim {
   id: string
@@ -60,6 +63,7 @@ function statusVariant(status: string): 'default' | 'secondary' | 'destructive' 
 }
 
 export default function ClaimsPage(): React.JSX.Element {
+  const { emailState, openEmail, closeEmail } = useContextEmail()
   const [claims, setClaims] = useState<Claim[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [loading, setLoading] = useState(true)
@@ -413,6 +417,31 @@ export default function ClaimsPage(): React.JSX.Element {
                             <CheckCircle className="h-3 w-3" />
                           </Button>
                         )}
+                        <ContextActionMenu
+                          groups={[
+                            {
+                              label: 'Email',
+                              items: [
+                                emailAction('Email Provider', () => openEmail({
+                                  ...claimToProviderEmail({
+                                    claimReference: claim.claimReference,
+                                    status: claim.status,
+                                    claimedCents: claim.claimedCents,
+                                    provider: claim.invoice.provider,
+                                  }),
+                                  participantId: claim.participant.id,
+                                  providerId: claim.invoice.provider.id,
+                                })),
+                              ],
+                            },
+                            {
+                              label: 'Navigate',
+                              items: [
+                                navigateAction('View Invoice', () => window.location.assign(`/invoices/${claim.invoice.id}`)),
+                              ],
+                            },
+                          ]}
+                        />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -505,6 +534,17 @@ export default function ClaimsPage(): React.JSX.Element {
           </DialogContent>
         </Dialog>
       </div>
+      <EmailComposeModal
+        open={emailState.open}
+        onClose={closeEmail}
+        onSent={closeEmail}
+        recipientEmail={emailState.recipientEmail}
+        recipientName={emailState.recipientName}
+        subject={emailState.subject}
+        body={emailState.body}
+        participantId={emailState.participantId}
+        providerId={emailState.providerId}
+      />
     </DashboardShell>
   )
 }

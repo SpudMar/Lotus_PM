@@ -17,12 +17,16 @@
  *   9. SA_COMPLIANCE         -- advisory: ITEM_NOT_IN_SA, PRICE_ABOVE_SA_RATE, SA_BUDGET_EXCEEDED (warn only)
  *  10. TOTAL_MISMATCH        -- advisory: invoice total != sum of line item totals (warn only)
  *  11. PERIOD_BUDGET_EXCEEDED -- advisory: line total exceeds funding period budget (warn only)
+ *  12. PROVIDER_PARTICIPANT_BLOCKED -- provider blocked for this participant (error)
+ *  13. SUPPORT_NOT_APPROVED         -- support item not in participant's approved list (error)
  */
 
 import { prisma } from '@/lib/db'
 import { validateLineItemPrice } from '@/lib/modules/price-guide/price-guide'
 import { getActiveFlags, FlagSeverity } from '@/lib/modules/crm/flags'
 import { getActivePeriodBudget } from '@/lib/modules/plans/funding-periods'
+import { checkProviderBlocked } from '@/lib/modules/crm/provider-participant-blocks'
+import { checkSupportApproved } from '@/lib/modules/crm/approved-supports'
 
 // -- Public Types -----------------------------------------------------------
 
@@ -206,7 +210,7 @@ export async function validateInvoiceForApproval(
         id: { not: invoiceId },
         invoiceNumber: invoice.invoiceNumber,
         providerId: invoice.providerId,
-        status: { not: 'REJECTED' },
+        status: { notIn: ['REJECTED', 'SUPERSEDED'] },
         deletedAt: null,
       },
       select: { id: true, status: true },
@@ -337,6 +341,43 @@ export async function validateInvoiceForApproval(
         warnings.push({
           code: 'PERIOD_BUDGET_EXCEEDED',
           message: `Unable to check funding period budget for category ${line.categoryCode} -- manual review recommended`,
+          lineId: line.id,
+        })
+      }
+    }
+  }
+
+  // -- Check 12: Provider-Participant Block -----------------------------------
+  if (invoice.participantId && invoice.providerId) {
+    const lineItemCodes = invoice.lines
+      .map((l) => l.supportItemCode)
+      .filter((code): code is string => Boolean(code))
+    const blockResult = await checkProviderBlocked(
+      invoice.participantId,
+      invoice.providerId,
+      lineItemCodes
+    )
+    if (blockResult.blocked) {
+      errors.push({
+        code: 'PROVIDER_PARTICIPANT_BLOCKED',
+        message: `Provider is blocked for this participant: ${blockResult.reason}`,
+      })
+    }
+  }
+
+  // -- Check 13: Approved Supports (Holly's feature) --------------------------
+  if (invoice.participantId) {
+    for (const line of invoice.lines) {
+      if (!line.categoryCode || !line.supportItemCode) continue
+      const supportResult = await checkSupportApproved(
+        invoice.participantId,
+        line.categoryCode,
+        line.supportItemCode
+      )
+      if (!supportResult.approved) {
+        errors.push({
+          code: 'SUPPORT_NOT_APPROVED',
+          message: supportResult.reason ?? `Support item ${line.supportItemCode} not approved`,
           lineId: line.id,
         })
       }

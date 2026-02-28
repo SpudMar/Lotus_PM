@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Send } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Send, Download, Upload } from 'lucide-react'
 import { formatAUD } from '@/lib/shared/currency'
 import { formatDateTimeAU } from '@/lib/shared/dates'
 
@@ -53,6 +54,12 @@ export default function BatchesPage(): React.JSX.Element {
   const [submitProdaRef, setSubmitProdaRef] = useState('')
   const [submitLoading, setSubmitLoading] = useState(false)
 
+  // PRODA import dialog
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importCsvContent, setImportCsvContent] = useState('')
+  const [importLoading, setImportLoading] = useState(false)
+  const [importResult, setImportResult] = useState<{ matched: number; notFound: number; errors: string[] } | null>(null)
+
   const loadBatches = useCallback(async () => {
     setLoading(true)
     try {
@@ -69,6 +76,25 @@ export default function BatchesPage(): React.JSX.Element {
   useEffect(() => {
     void loadBatches()
   }, [loadBatches])
+
+  const handleImportRemittance = async () => {
+    if (!importCsvContent.trim()) return
+    setImportLoading(true)
+    try {
+      const res = await fetch('/api/claims/import-remittance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csvContent: importCsvContent }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setImportResult(json.data)
+        void loadBatches()
+      }
+    } finally {
+      setImportLoading(false)
+    }
+  }
 
   const handleSubmitBatch = async () => {
     setSubmitLoading(true)
@@ -98,9 +124,15 @@ export default function BatchesPage(): React.JSX.Element {
           title="Claim Batches"
           description="Group claims into batches for bulk submission to NDIA."
           actions={
-            <Button asChild variant="outline">
-              <Link href="/claims">Back to Claims</Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Import PRODA Results
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/claims">Back to Claims</Link>
+              </Button>
+            </div>
           }
         />
 
@@ -150,19 +182,31 @@ export default function BatchesPage(): React.JSX.Element {
                       {batch.notes ?? '—'}
                     </TableCell>
                     <TableCell>
-                      {batch.status === 'DRAFT' && (
+                      <div className="flex items-center gap-1">
+                        {batch.status === 'DRAFT' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSubmitBatchId(batch.id)
+                              setSubmitDialogOpen(true)
+                            }}
+                          >
+                            <Send className="mr-1 h-3 w-3" />
+                            Submit
+                          </Button>
+                        )}
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onClick={() => {
-                            setSubmitBatchId(batch.id)
-                            setSubmitDialogOpen(true)
+                            window.open(`/api/claims/batches/${batch.id}/export-csv`, '_blank')
                           }}
+                          title="Download PRODA CSV"
                         >
-                          <Send className="mr-1 h-3 w-3" />
-                          Submit
+                          <Download className="h-3 w-3" />
                         </Button>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -196,6 +240,61 @@ export default function BatchesPage(): React.JSX.Element {
               <Button onClick={handleSubmitBatch} disabled={submitLoading}>
                 {submitLoading ? 'Submitting...' : 'Submit Batch'}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* PRODA Import Dialog */}
+        <Dialog open={importDialogOpen} onOpenChange={(open) => {
+          if (!open) { setImportDialogOpen(false); setImportResult(null); setImportCsvContent('') }
+          else setImportDialogOpen(true)
+        }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Import PRODA Remittance</DialogTitle>
+              <DialogDescription>
+                Paste the CSV content from your PRODA remittance download to update claim statuses.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              {!importResult ? (
+                <div>
+                  <Label htmlFor="importCsv">CSV Content</Label>
+                  <Textarea
+                    id="importCsv"
+                    value={importCsvContent}
+                    onChange={(e) => setImportCsvContent(e.target.value)}
+                    rows={8}
+                    placeholder="Paste PRODA remittance CSV here..."
+                    className="font-mono text-xs"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm"><strong>{importResult.matched}</strong> claims matched and updated</p>
+                  {importResult.notFound > 0 && (
+                    <p className="text-sm text-amber-600"><strong>{importResult.notFound}</strong> claim references not found</p>
+                  )}
+                  {importResult.errors.length > 0 && (
+                    <div>
+                      <p className="text-sm text-destructive">Errors:</p>
+                      <ul className="text-xs text-destructive list-disc list-inside">
+                        {importResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportResult(null); setImportCsvContent('') }}>
+                {importResult ? 'Close' : 'Cancel'}
+              </Button>
+              {!importResult && (
+                <Button onClick={handleImportRemittance} disabled={importLoading || !importCsvContent.trim()}>
+                  {importLoading ? 'Importing...' : 'Import'}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>

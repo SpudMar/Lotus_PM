@@ -68,9 +68,15 @@ export interface EmailComposeModalProps {
   onSent: () => void
   recipientEmail?: string
   recipientName?: string
+  subject?: string
+  body?: string
   participantId?: string
   providerId?: string
   coordinatorId?: string
+  invoiceId?: string
+  documentId?: string
+  planId?: string
+  serviceAgreementId?: string
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -81,9 +87,15 @@ export function EmailComposeModal({
   onSent,
   recipientEmail = '',
   recipientName,
+  subject: subjectProp,
+  body: bodyProp,
   participantId,
   providerId,
   coordinatorId,
+  invoiceId,
+  documentId,
+  planId,
+  serviceAgreementId,
 }: EmailComposeModalProps): React.JSX.Element {
   // Form state
   const [to, setTo] = useState(recipientEmail)
@@ -94,13 +106,13 @@ export function EmailComposeModal({
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [templateHtmlPreview, setTemplateHtmlPreview] = useState('')
-  const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
+  const [subject, setSubject] = useState(subjectProp ?? '')
+  const [body, setBody] = useState(bodyProp ?? '')
   const [sending, setSending] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
 
-  // Reset form whenever dialog opens
+  // Reset form whenever dialog opens — pre-fill from props
   useEffect(() => {
     if (open) {
       setTo(recipientEmail)
@@ -108,12 +120,12 @@ export function EmailComposeModal({
       setCategory('CUSTOM')
       setSelectedTemplateId('')
       setTemplateHtmlPreview('')
-      setSubject('')
-      setBody('')
+      setSubject(subjectProp ?? '')
+      setBody(bodyProp ?? '')
       setErrorMsg('')
       setSuccessMsg('')
     }
-  }, [open, recipientEmail])
+  }, [open, recipientEmail, subjectProp, bodyProp])
 
   // Load allowed from-addresses
   useEffect(() => {
@@ -193,6 +205,10 @@ export function EmailComposeModal({
           participantId,
           providerId,
           coordinatorId,
+          invoiceId,
+          documentId,
+          planId,
+          serviceAgreementId,
         }),
       })
 

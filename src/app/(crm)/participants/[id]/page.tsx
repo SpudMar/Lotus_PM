@@ -46,6 +46,9 @@ import { formatNdisNumber } from '@/lib/shared/ndis'
 import { formatAUD } from '@/lib/shared/currency'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmailComposeModal } from '@/components/email/EmailComposeModal'
+import PlansAgreementsTab from './plans-agreements-tab'
+import ApprovedSupportsTab from './approved-supports-tab'
+import ApprovalRulesTab from './approval-rules-tab'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -216,6 +219,9 @@ export default function ParticipantDetailPage({
   const [resolveNote, setResolveNote] = useState('')
   const [resolveLoading, setResolveLoading] = useState(false)
 
+  // Provider-participant blocks
+  const [blocks, setBlocks] = useState<{ id: string; reason: string; resolvedAt: string | null; provider: { id: string; name: string } | null; createdBy: { name: string } | null }[]>([])
+
   // -- Inline editing state --
   const [editingSection, setEditingSection] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
@@ -283,8 +289,16 @@ export default function ParticipantDetailPage({
       .finally(() => setFlagsLoading(false))
   }
 
+  function loadBlocks(): void {
+    void fetch(`/api/crm/provider-participant-blocks?participantId=${id}`)
+      .then((r) => r.json())
+      .then((j: { data: typeof blocks }) => setBlocks(j.data ?? []))
+      .catch(() => null)
+  }
+
   useEffect(() => {
     loadFlags()
+    loadBlocks()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -562,8 +576,9 @@ export default function ParticipantDetailPage({
       ))}
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="plans">Plans & Agreements</TabsTrigger>
           <TabsTrigger value="correspondence">
             Correspondence
             {correspondence.length > 0 && (
@@ -576,9 +591,8 @@ export default function ParticipantDetailPage({
               <Badge variant="secondary" className="ml-1.5 text-xs">{participant.invoices.length}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="approval">
-            Invoice Approval
-          </TabsTrigger>
+          <TabsTrigger value="approved-supports">Approved Supports</TabsTrigger>
+          <TabsTrigger value="approval-rules">Approval Rules</TabsTrigger>
           <TabsTrigger value="flags">
             Flags
             {flags.filter(f => !f.resolvedAt).length > 0 && (
@@ -915,6 +929,33 @@ export default function ParticipantDetailPage({
               </CardContent>
             </Card>
           )}
+
+          {/* Blocked Providers */}
+          {blocks.filter((b) => !b.resolvedAt).length > 0 && (
+            <Card className="border-destructive/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold text-destructive">Blocked Providers</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {blocks.filter((b) => !b.resolvedAt).map((block) => (
+                    <div key={block.id} className="flex items-center justify-between text-sm rounded-md border border-destructive/20 px-3 py-2">
+                      <div>
+                        <span className="font-medium">{block.provider?.name ?? 'Unknown'}</span>
+                        <p className="text-xs text-muted-foreground">{block.reason}</p>
+                      </div>
+                      <Badge variant="destructive" className="text-xs">Blocked</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── Plans & Agreements ─────────────────────────────────────────────── */}
+        <TabsContent value="plans" className="mt-4">
+          <PlansAgreementsTab participantId={id} />
         </TabsContent>
 
         {/* ── Correspondence ─────────────────────────────────────────────────── */}
@@ -1090,6 +1131,16 @@ export default function ParticipantDetailPage({
             </CardContent>
           </Card>
         </TabsContent>
+        {/* ── Approved Supports ────────────────────────────────────────────────── */}
+        <TabsContent value="approved-supports" className="mt-4">
+          <ApprovedSupportsTab participantId={id} />
+        </TabsContent>
+
+        {/* ── Approval Rules ──────────────────────────────────────────────────── */}
+        <TabsContent value="approval-rules" className="mt-4">
+          <ApprovalRulesTab participantId={id} />
+        </TabsContent>
+
         {/* ── Flags tab ──────────────────────────────────────────────────────────────── */}
         <TabsContent value="flags" className="mt-4">
           <div className="flex items-center justify-between mb-4">

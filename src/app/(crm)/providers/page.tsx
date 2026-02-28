@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,9 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, Search } from 'lucide-react'
 import { formatABN } from '@/lib/shared/ndis'
+import { ContextActionMenu, emailAction, navigateAction } from '@/components/shared/ContextActionMenu'
+import { useContextEmail } from '@/hooks/useContextEmail'
+import { EmailComposeModal } from '@/components/email/EmailComposeModal'
 
 interface Provider {
   id: string
@@ -23,6 +27,8 @@ interface Provider {
 }
 
 export default function ProvidersPage(): React.JSX.Element {
+  const router = useRouter()
+  const { emailState, openEmail, closeEmail } = useContextEmail()
   const [providers, setProviders] = useState<Provider[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -80,16 +86,17 @@ export default function ProvidersPage(): React.JSX.Element {
                 <TableHead>NDIS Registered</TableHead>
                 <TableHead>Invoices</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">Loading...</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">Loading...</TableCell>
                 </TableRow>
               ) : providers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">No providers found.</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">No providers found.</TableCell>
                 </TableRow>
               ) : (
                 providers.map((p) => (
@@ -112,6 +119,28 @@ export default function ProvidersPage(): React.JSX.Element {
                         {p.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <ContextActionMenu
+                        groups={[
+                          {
+                            label: 'Email',
+                            items: p.email ? [
+                              emailAction('Email Provider', () => openEmail({
+                                recipientEmail: p.email ?? undefined,
+                                recipientName: p.name,
+                                providerId: p.id,
+                              })),
+                            ] : [],
+                          },
+                          {
+                            label: 'Navigate',
+                            items: [
+                              navigateAction('View Invoices', () => router.push(`/invoices?providerId=${p.id}`)),
+                            ],
+                          },
+                        ].filter((g) => g.items.length > 0)}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -119,6 +148,16 @@ export default function ProvidersPage(): React.JSX.Element {
           </Table>
         </div>
       </div>
+      <EmailComposeModal
+        open={emailState.open}
+        onClose={closeEmail}
+        onSent={closeEmail}
+        recipientEmail={emailState.recipientEmail}
+        recipientName={emailState.recipientName}
+        subject={emailState.subject}
+        body={emailState.body}
+        providerId={emailState.providerId}
+      />
     </DashboardShell>
   )
 }

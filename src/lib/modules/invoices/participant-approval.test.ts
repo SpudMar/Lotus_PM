@@ -31,6 +31,9 @@ jest.mock('@/lib/db', () => ({
     notifNotification: {
       create: jest.fn(),
     },
+    participantApprovalRule: {
+      findFirst: jest.fn(),
+    },
   },
 }))
 
@@ -58,8 +61,10 @@ import {
   generateApprovalToken,
   verifyApprovalToken,
   hashToken,
+  shouldRequireApproval,
   requestParticipantApproval,
   processApprovalResponse,
+  reRequestApproval,
   skipExpiredApprovals,
   getApprovalStatus,
 } from './participant-approval'
@@ -68,6 +73,7 @@ import {
 
 const mockInvoice = prisma.invInvoice as jest.Mocked<typeof prisma.invInvoice>
 const mockEmailTemplate = prisma.notifEmailTemplate as jest.Mocked<typeof prisma.notifEmailTemplate>
+const mockApprovalRule = prisma.participantApprovalRule as jest.Mocked<typeof prisma.participantApprovalRule>
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -188,6 +194,96 @@ describe('hashToken', () => {
   it('returns a hex string', () => {
     const token = generateApprovalToken(INVOICE_ID, PARTICIPANT_ID)
     expect(hashToken(token)).toMatch(/^[0-9a-f]+$/)
+  })
+})
+
+// ── shouldRequireApproval ─────────────────────────────────────────────────────
+
+describe('shouldRequireApproval', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('returns false when no rules exist (backward compatible)', async () => {
+    mockApprovalRule.findFirst.mockResolvedValueOnce(null) // specific provider
+    mockApprovalRule.findFirst.mockResolvedValueOnce(null) // default rule
+    const result = await shouldRequireApproval('part-001', 'prov-001')
+    expect(result).toBe(false)
+  })
+
+  it('returns true when specific provider rule requires approval', async () => {
+    mockApprovalRule.findFirst.mockResolvedValueOnce({ requireApproval: true } as never)
+    const result = await shouldRequireApproval('part-001', 'prov-001')
+    expect(result).toBe(true)
+  })
+
+  it('returns false when specific provider rule skips approval', async () => {
+    mockApprovalRule.findFirst.mockResolvedValueOnce({ requireApproval: false } as never)
+    const result = await shouldRequireApproval('part-001', 'prov-001')
+    expect(result).toBe(false)
+  })
+
+  it('falls back to default rule when no specific provider rule', async () => {
+    mockApprovalRule.findFirst.mockResolvedValueOnce(null) // no specific
+    mockApprovalRule.findFirst.mockResolvedValueOnce({ requireApproval: true } as never) // default
+    const result = await shouldRequireApproval('part-001', 'prov-001')
+    expect(result).toBe(true)
+  })
+})
+
+// ── reRequestApproval ────────────────────────────────────────────────────────
+
+describe('reRequestApproval', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockEmailTemplate.findFirst.mockResolvedValue(null)
+  })
+
+  it('generates new token and stores clarification note', async () => {
+    mockInvoice.findFirst.mockResolvedValueOnce({
+      ...makeInvoice(),
+      status: 'PENDING_REVIEW',
+      approvalRequestCount: 1,
+      providerId: 'prov-1',
+      participant: makeParticipant({ invoiceApprovalMethod: 'EMAIL' }),
+    } as never)
+    mockApprovalRule.findFirst.mockResolvedValueOnce({ requireApproval: true } as never)
+    mockInvoice.update.mockResolvedValueOnce({
+      status: 'PENDING_PARTICIPANT_APPROVAL',
+      approvalRequestCount: 2,
+    } as never)
+
+    const result = await reRequestApproval('inv-001', 'user-001', 'Provider corrected line 3')
+    expect(result.token).toBeTruthy()
+    expect(mockInvoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          approvalClarificationNote: 'Provider corrected line 3',
+          approvalRequestCount: 2,
+        }),
+      })
+    )
+  })
+
+  it('throws if invoice not in PENDING_REVIEW status', async () => {
+    mockInvoice.findFirst.mockResolvedValueOnce({
+      ...makeInvoice(),
+      status: 'APPROVED',
+    } as never)
+    await expect(
+      reRequestApproval('inv-001', 'user-001', 'note')
+    ).rejects.toThrow('Invoice must be in PENDING_REVIEW status')
+  })
+
+  it('throws if approval not required for provider', async () => {
+    mockInvoice.findFirst.mockResolvedValueOnce({
+      ...makeInvoice(),
+      status: 'PENDING_REVIEW',
+      providerId: 'prov-1',
+    } as never)
+    mockApprovalRule.findFirst.mockResolvedValueOnce(null)
+    mockApprovalRule.findFirst.mockResolvedValueOnce(null)
+    await expect(
+      reRequestApproval('inv-001', 'user-001', 'note')
+    ).rejects.toThrow('Participant approval is not required')
   })
 })
 

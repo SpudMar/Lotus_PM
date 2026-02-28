@@ -87,6 +87,32 @@ export function hashToken(token: string): string {
   return createHmac('sha256', SECRET).update(token).digest('hex')
 }
 
+// ─── Per-Provider Approval Rules ─────────────────────────────────────────────
+
+/**
+ * Check per-provider approval rules.
+ * Priority: specific provider rule > default rule (providerId=null) > false (no rules = no approval)
+ */
+export async function shouldRequireApproval(
+  participantId: string,
+  providerId: string
+): Promise<boolean> {
+  // Check specific provider rule first
+  const specificRule = await prisma.participantApprovalRule.findFirst({
+    where: { participantId, providerId },
+  })
+  if (specificRule) return specificRule.requireApproval
+
+  // Fall back to default rule (providerId = null)
+  const defaultRule = await prisma.participantApprovalRule.findFirst({
+    where: { participantId, providerId: null },
+  })
+  if (defaultRule) return defaultRule.requireApproval
+
+  // No rules = no approval required (backward compatible)
+  return false
+}
+
 // ─── Request Approval ─────────────────────────────────────────────────────────
 
 /**
@@ -283,6 +309,7 @@ export async function processApprovalResponse(
       data: {
         status: 'PENDING_REVIEW',
         participantApprovalStatus: 'REJECTED',
+        rejectionSource: 'PARTICIPANT_DECLINED',
         approvalTokenHash: null,
         approvalTokenExpiresAt: null,
       },
@@ -410,4 +437,113 @@ export async function getApprovalStatus(token: string): Promise<{
     invoiceDate: invoice.invoiceDate,
     providerName: invoice.provider?.name ?? null,
   }
+}
+
+// ─── Re-Request Approval ─────────────────────────────────────────────────────
+
+/**
+ * Re-request participant approval with a clarification note.
+ * Generates a fresh 72h token and increments the request count.
+ */
+export async function reRequestApproval(
+  invoiceId: string,
+  requestedById: string,
+  clarificationNote?: string
+): Promise<{ token: string; invoice: object }> {
+  const invoice = await prisma.invInvoice.findFirst({
+    where: { id: invoiceId, deletedAt: null },
+    include: {
+      participant: true,
+      provider: { select: { id: true, name: true } },
+    },
+  })
+  if (!invoice) throw new Error('Invoice not found')
+  if (invoice.status !== 'PENDING_REVIEW') {
+    throw new Error('Invoice must be in PENDING_REVIEW status to re-request approval')
+  }
+  if (!invoice.participant || !invoice.providerId) {
+    throw new Error('Invoice must have participant and provider')
+  }
+
+  const requiresApproval = await shouldRequireApproval(
+    invoice.participantId!,
+    invoice.providerId
+  )
+  if (!requiresApproval) {
+    throw new Error('Participant approval is not required for this provider')
+  }
+
+  const token = generateApprovalToken(invoiceId, invoice.participantId!)
+  const tokenHash = hashToken(token)
+  const expiresAt = new Date(Date.now() + 72 * 3600 * 1000)
+
+  const updated = await prisma.invInvoice.update({
+    where: { id: invoiceId },
+    data: {
+      status: 'PENDING_PARTICIPANT_APPROVAL',
+      participantApprovalStatus: 'PENDING',
+      approvalTokenHash: tokenHash,
+      approvalTokenExpiresAt: expiresAt,
+      approvalSentAt: new Date(),
+      approvalClarificationNote: clarificationNote,
+      approvalRequestCount: (invoice.approvalRequestCount ?? 0) + 1,
+    },
+  })
+
+  void recordStatusTransition({
+    invoiceId,
+    fromStatus: invoice.status,
+    toStatus: 'PENDING_PARTICIPANT_APPROVAL',
+    changedBy: requestedById,
+  })
+
+  await createAuditLog({
+    userId: requestedById,
+    action: 'APPROVAL_RE_REQUESTED',
+    resource: 'invoice',
+    resourceId: invoiceId,
+    after: { clarificationNote, requestCount: updated.approvalRequestCount },
+  })
+
+  // Send notification via participant's preferred channel
+  const participant = invoice.participant
+  const method = participant.invoiceApprovalMethod ?? 'APP'
+  const baseUrl = process.env['NEXTAUTH_URL'] ?? 'http://localhost:3000'
+  const approvalUrl = `${baseUrl}/approval/${token}`
+  const providerName = invoice.provider?.name ?? 'your provider'
+  const amountFormatted = `$${(invoice.totalCents / 100).toFixed(2)}`
+
+  if (method === 'EMAIL' && participant.email) {
+    const template = await prisma.notifEmailTemplate.findFirst({
+      where: { type: 'APPROVAL_REQUEST', isActive: true },
+    })
+
+    if (template) {
+      await sendTemplatedEmail({
+        templateId: template.id,
+        recipientEmail: participant.email,
+        recipientName: `${participant.firstName} ${participant.lastName}`,
+        mergeFieldValues: {
+          first_name: participant.firstName,
+          provider_name: providerName,
+          amount: amountFormatted,
+          approval_url: approvalUrl,
+          clarification_note: clarificationNote ?? '',
+        },
+        participantId: participant.id,
+        triggeredById: requestedById,
+      })
+    } else {
+      await createNotificationRecord({
+        channel: 'EMAIL',
+        recipient: participant.email,
+        message: `Please re-review invoice from ${providerName} for ${amountFormatted}. Note: ${clarificationNote}. Visit: ${approvalUrl}`,
+        subject: 'Invoice re-approval required',
+        participantId: participant.id,
+        triggeredById: requestedById,
+      })
+    }
+  }
+
+  return { token, invoice: updated }
 }
